@@ -1,0 +1,91 @@
+<title>Tick Speed Reality Check</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single reading column, ledger-style tables, status chips per cause */
+:root{
+  --bg:#f6f7f5; --fg:#1d2320; --muted:#5d6862; --rule:#d5dbd7; --accent:#2f6b57;
+  --ok:#2f7a45; --warn:#9a6a10; --bad:#a3392f; --chip:#e7ece9;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141917; --fg:#e3e8e5; --muted:#9aa7a0; --rule:#2c3531; --accent:#7cc3a6;
+  --ok:#7bc98f; --warn:#e0b45a; --bad:#ec8a7f; --chip:#222a27; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141917; --fg:#e3e8e5; --muted:#9aa7a0; --rule:#2c3531; --accent:#7cc3a6;
+  --ok:#7bc98f; --warn:#e0b45a; --bad:#ec8a7f; --chip:#222a27; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 48px}
+main{max-width:860px;margin:0 auto;display:grid;gap:28px}
+h1{font-size:1.7rem;margin:0;text-wrap:balance}
+h2{font-size:1.1rem;margin:0 0 8px;text-wrap:balance;color:var(--accent)}
+p{margin:0 0 8px;max-width:68ch}
+.meta{color:var(--muted);font-size:.85rem}
+.verdict{border-left:4px solid var(--accent);padding:4px 0 4px 14px}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.05em}
+td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip{display:inline-block;font-size:.75rem;font-weight:600;padding:1px 8px;border-radius:3px;background:var(--chip);white-space:nowrap}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+ul{margin:0;padding-left:20px;display:grid;gap:4px}
+code{font-family:var(--mono);font-size:.85em}
+</style>
+<main>
+<header>
+  <h1>Tick speed reality check</h1>
+  <p class="meta">28 Oct 2026 · main 8f5075a · DESIGN 19.2, ADRs 0145, 0209, 0212, econ SPEC Task 19</p>
+</header>
+
+<section class="verdict">
+  <h2>Verdict</h2>
+  <p>The peace-time target (80 to 160 ms per monthly tick, 0.5 to 1 simulated year per second) is realistic, and it is not "low expectations" in either direction. It is fast because the main tick is monthly, so the economy steps 12 times a year where a Paradox game steps 365, and because the design removes most of what makes Paradox and Civ slow down late. P2 already measures 34 ms on the full globe.</p>
+  <p>Two things are not yet shown. The 19.2 per-system lines assume 45 goods and P2 runs 10, and the trade cost scales per good, so the 30 ms trade line is likely missed and headroom shrinks to near zero. And nothing yet measures tick time at year 100 against year 1, which is exactly the late-game slowdown you are worried about.</p>
+</section>
+
+<section>
+  <h2>The targets and what is measured</h2>
+  <div class="wrap"><table>
+    <tr><th>Case</th><th>Per tick</th><th>Per sim day</th><th>Sim time per second</th><th>Source</th></tr>
+    <tr><td>Peace, target</td><td class="n">80-160 ms / month</td><td class="n">2.6-5.3 ms</td><td class="n">0.5-1 year</td><td>19.2, estimate</td></tr>
+    <tr><td>Peace, P2 measured (10 goods)</td><td class="n">34 ms / month</td><td class="n">1.1 ms</td><td class="n">2.4 years</td><td>econ SPEC, M4 Pro</td></tr>
+    <tr><td>Large regional war</td><td class="n">10-15 ms / day</td><td class="n">10-15 ms</td><td class="n">2-3 months</td><td>0209, estimate</td></tr>
+    <tr><td>World war, sparse hourly</td><td class="n">50-70 ms / day</td><td class="n">50-70 ms</td><td class="n">2-3 weeks</td><td>0209, estimate</td></tr>
+  </table></div>
+  <p class="meta">War slows the game about 10 to 60 times, much as HOI does. That is accepted by design (0145) and is a P7 (2.0) cost, not a 1.0 one.</p>
+</section>
+
+<section>
+  <h2>Why Paradox and Civ slow down, and whether Ceteris shares it</h2>
+  <div class="wrap"><table>
+    <tr><th>Cause</th><th>In those games</th><th>Ceteris</th><th></th></tr>
+    <tr><td>Entity growth</td><td>Pops split by culture, religion and job (Vic2, Vic3, Stellaris; Stellaris 4.0 moved to pop groups for this reason); CK3 culls dead characters; unit counts grow</td><td>4,796 provinces fixed. Pops are cells keyed (province, group, education, status), about 100k. Firms are a closed-form Pareto mass per cell, so entry and exit change a number, not the entity count</td><td><span class="chip ok">avoids</span></td></tr>
+    <tr><td>Scripted triggers</td><td>Interpreted script evaluated per entity per day: events, decisions, AI weights, on_actions. Cost is entities times scripts</td><td>No scripted or date-triggered events (DESIGN 2.4). Systems are compiled Rust; rare events use sampled next-event times, not per-tick checks (19.4)</td><td><span class="chip ok">avoids</span></td></tr>
+    <tr><td>Modifier cascades</td><td>Stacked modifiers recomputed on invalidation</td><td>State is plain columns read once per tick; no modifier graph</td><td><span class="chip ok">avoids</span></td></tr>
+    <tr><td>AI cost</td><td>Per-unit and per-country decision trees; Civ AI turns grow with units and cities</td><td>About 195 states, one-step planner monthly; strategic layer capped at 10% of the tick budget (23.8)</td><td><span class="chip ok">avoids</span></td></tr>
+    <tr><td>Pathfinding</td><td>Army and unit paths, supply (HOI4 world wars, Civ late turns)</td><td>None in peace. War movement and supply in P7 are the 50-70 ms/day line</td><td><span class="chip warn">shares, in war</span></td></tr>
+    <tr><td>GC and allocation churn</td><td>Lua GC in Civ; allocator fragmentation in long sessions</td><td>Rust, no GC; zero allocation in hot loops, arenas, preallocated scratch (19.4)</td><td><span class="chip ok">avoids</span></td></tr>
+    <tr><td>Serial bottlenecks</td><td>Large single-threaded economy or AI passes</td><td>Parallel by province and good; but one good's dispatch (5.3 ms) is the critical path, and determinism forbids reordering reductions</td><td><span class="chip warn">partly</span></td></tr>
+    <tr><td>History growth</td><td>Save bloat, history logs, dead characters</td><td>In-memory history grows linearly: 2.35 MB per tick at 10 goods, about 10.6 MB at 45, so about 13 GB over 100 years against a 6 GB memory target. Appending costs little time; it is a memory problem. ADR 0212 (proposed) handles it</td><td><span class="chip warn">shares, memory</span></td></tr>
+    <tr><td>Tables that grow with time</td><td>Same as entity growth</td><td>Not bounded by any rule yet: financial claims (19.2 says 1M, but loans and bonds accumulate), characters (0183-0187), pop cells created by migration and identity change (0223-0226), units in war</td><td><span class="chip bad">open</span></td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>The real risk: 10 goods to 45</h2>
+  <p>The 34 ms is for 10 goods, 7 of them traded. Dispatch costs about 5.9 ms of CPU per traded good (41.3 ms for 7 in series) and runs in parallel across goods. At 45 goods with perhaps 30 to 40 traded, that is roughly 180 to 240 ms of CPU, or about 25 to 40 ms of wall time on 10 performance cores. Production with a dense 45 by 45 input-output block grows too.</p>
+  <p>My extrapolation, not a measurement: today's P2 systems at 45 goods land near 70 to 120 ms, and the systems not yet built (finance, fiscal, politics, migration, demography, accounting) add the 20 to 30 ms 19.2 gives them. That fits under 160 ms with little headroom, and the 30 ms trade line in 19.2 is already used up at 10 goods. ADR 0092's gateway rework changes the crossing count, which could move this either way.</p>
+</section>
+
+<section>
+  <h2>Proposed changes</h2>
+  <ul>
+    <li><strong>Flatness gate.</strong> A benchmark that runs 100 years and fails if tick time at year 100 exceeds year 1 by more than 25%, logging the row count of every table each decade.</li>
+    <li><strong>Re-split 19.2 from measurements.</strong> Keep the 160 ms ceiling; restate the per-system lines from the measured per-good cost, and add a goods-scaling benchmark (synthetic 45-goods pack) before the 45-goods pack exists.</li>
+    <li><strong>Bounded-table rule in 19.4.</strong> Every table is fixed-size, or has an aggregation or archival rule: claims by vintage cohort, dead characters to an archive, pop cells capped with merge below a size floor.</li>
+  </ul>
+  <p class="meta">Decisions are posted as cards in the thread.</p>
+</section>
+</main>

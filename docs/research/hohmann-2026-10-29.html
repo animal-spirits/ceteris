@@ -1,0 +1,370 @@
+<title>Hohmann Space Companion</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<style>
+/* Layout: research-page reading column (house style); mocks as dark mission-control panels, the delta-v map drawn as a transit schematic */
+:root{
+  --bg:#f4f5f7; --fg:#1a1f28; --muted:#5a6372; --rule:#d3d8e0; --accent:#3a4f86;
+  --ok:#2f7a45; --warn:#9a6a10; --bad:#a3392f; --chip:#e5e9f0;
+  --deep:#0d1320; --deepfg:#d6deec; --line:#2b3753; --sig:#f0b44c; --ice:#7fc4e8; --rust:#e07a5a; --lunar:#c8ccd6;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#11151c; --fg:#e1e6ee; --muted:#96a1b3; --rule:#29303c; --accent:#9db3ea;
+  --ok:#7bc98f; --warn:#e0b45a; --bad:#ec8a7f; --chip:#1e2531; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11151c; --fg:#e1e6ee; --muted:#96a1b3; --rule:#29303c; --accent:#9db3ea;
+  --ok:#7bc98f; --warn:#e0b45a; --bad:#ec8a7f; --chip:#1e2531; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 48px}
+main{max-width:900px;margin:0 auto;display:grid;gap:30px}
+h1{font-size:1.75rem;margin:0;text-wrap:balance}
+h2{font-size:1.1rem;margin:0 0 8px;text-wrap:balance;color:var(--accent)}
+h3{font-size:.95rem;margin:10px 0 4px}
+p{margin:0 0 8px;max-width:70ch}
+.meta{color:var(--muted);font-size:.85rem}
+.verdict{border-left:4px solid var(--accent);padding:4px 0 4px 14px}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip{display:inline-block;font-size:.72rem;font-weight:600;padding:1px 8px;border-radius:3px;background:var(--chip);white-space:nowrap}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+ul{margin:0;padding-left:20px;display:grid;gap:5px}
+code{font-family:var(--mono);font-size:.85em}
+.mock{background:var(--deep);color:var(--deepfg);border-radius:6px;padding:14px 16px;font-size:.85rem;min-width:0}
+.mock .lbl{font-family:var(--cond);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--sig)}
+.mock h3{color:#fff;margin:6px 0 2px}
+.mock table{font-size:.8rem}
+.mock th,.mock td{border-bottom-color:var(--line);color:var(--deepfg)}
+.mock th{color:#8a96ad}
+.mock .tag{font-family:var(--mono);font-size:.72rem;color:#8a96ad}
+.mock svg text{font-family:var(--mono);font-size:10.5px;fill:var(--deepfg)}
+.mocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:14px}
+.bar{height:7px;background:var(--line);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ice)}
+.kv{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center;font-family:var(--mono);font-size:.78rem}
+.future{border:1px dashed var(--warn);border-radius:6px;padding:12px 16px}
+.future h2{color:var(--warn)}
+</style>
+<main>
+<header>
+  <h1>Hohmann: a space companion game to Ceteris</h1>
+  <p class="meta">Brainstorm, 29 Oct 2026 · working title · follows the city-companion pattern (separate game, versioned interface files) · no ADRs</p>
+</header>
+
+<section class="verdict">
+  <h2>Pitch</h2>
+  <p>A hard-science game about building a real economy beyond Earth from about 2030 to 2200, where Earth is not a backdrop but a Ceteris run. You run a launch-and-settlement company (or a national agency). Every price in space is an Earth price plus the rocket equation. The question the whole game turns on is a real one: at what launch price does it pay to make anything off Earth?</p>
+  <p>Space is the friendliest genre for a no-art, AI-built game. It is black, schematic and numeric by nature; planet textures are public domain from NASA; the best-loved games in the niche (Aurora 4X, Children of a Dead Earth, High Frontier) are one-person projects or have programmer art. Today's models can write most of the code. Balance and fun still need a human playing it, and that, not code, is the bottleneck.</p>
+</section>
+
+<section>
+  <h2>What exists, and what to take</h2>
+  <div class="wrap"><table>
+    <tr><th>Game</th><th>Does well</th><th>Take</th><th>Leave</th></tr>
+    <tr><td>High Frontier (Eklund, board game)</td><td>The map is a graph of burns; real propulsion; water as the currency of space</td><td>Delta-v graph as the map; sites rated by water; aerobraking edges</td><td>Card-driven tech, board-game abstraction of time</td></tr>
+    <tr><td>Terra Invicta</td><td>Earth politics feeding a solar-system campaign; habitat modules; orbital combat from physics</td><td>Earth-to-space coupling, module habitats, mission control by delta-v</td><td>Alien invasion frame, council micromanagement, slow middle game</td></tr>
+    <tr><td>Aurora 4X (one developer, free)</td><td>Spreadsheet depth; mineral accessibility; shipyards; logistics</td><td>Proof that programmer art is fine for this audience; accessibility as a resource stat</td><td>Opaque UI, invented physics</td></tr>
+    <tr><td>Kerbal Space Program</td><td>Teaches orbital mechanics through failure</td><td>Maneuver nodes for mission planning (already cited in ADR 0161)</td><td>Vehicle construction physics, which is a whole studio's work</td></tr>
+    <tr><td>Children of a Dead Earth (one developer)</td><td>Every number derived from physics and materials</td><td>Derive costs from equations, not tables</td><td>Combat as the main loop</td></tr>
+    <tr><td>Distant Worlds 2</td><td>A private economy that runs itself while you set policy</td><td>Agent freighters and firms; you direct, not dispatch</td><td>Fantasy species and FTL</td></tr>
+    <tr><td>Mars Horizon, Buzz Aldrin's Race into Space</td><td>Agency budget, mission risk, programme milestones</td><td>Historical failure rates by vehicle maturity</td><td>Fixed historical script</td></tr>
+    <tr><td>Surviving Mars, Oxygen Not Included</td><td>Life support chains, closure, colony collapse stories</td><td>Closure ratio per resource as the colony's main health stat</td><td>Mystery plots, cartoon physics</td></tr>
+    <tr><td>Dyson Sphere Program, Factorio</td><td>Logistics you can watch</td><td>Flows on the map as moving particles</td><td>Building-by-building factories</td></tr>
+    <tr><td>Stellaris, Distant Worlds</td><td>Events and anomalies give stories</td><td>Event writing tied to state</td><td>Tech trees, FTL, planets as tile boards</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>The gap (interpolation)</h2>
+  <p>No game combines three things: an honest solar system (delta-v, windows, the rocket equation), a real Earth economy that sets the prices and the money, and the century-scale question of whether off-world industry ever pays. Terra Invicta has the first and half of the second; High Frontier has the first; Distant Worlds has a self-running economy in a fantasy setting. Ceteris already has the second, and its structural-gravity trade model extends naturally to space: trade cost between two nodes becomes a function of delta-v, transfer time and window wait.</p>
+</section>
+
+<section>
+  <h2>Core mechanics</h2>
+  <ul>
+    <li><b>Map as a delta-v graph.</b> Nodes are places where things stop: LEO, GEO, Earth-Moon L1, low lunar orbit, lunar polar sites, Mars orbit, Phobos, Mars sites, near-Earth asteroids, Ceres, Jupiter's moons. Edges carry delta-v, transfer time and an aerobrake flag. Planet positions come from JPL ephemerides, so windows open and close on their real dates.</li>
+    <li><b>Prices from the rocket equation.</b> The delivered price of a kilogram at a node is its source price times the propellant mass ratio along the cheapest path, plus vehicle amortization. One formula prices everything, and every number in the game can be traced to it.</li>
+    <li><b>Water is money.</b> Water is propellant, air and radiation shielding. Lunar polar ice, Phobos, carbonaceous asteroids and Ceres are rated by accessibility, as in Aurora.</li>
+    <li><b>Settlements by closure.</b> Each habitat has a closure ratio per resource (water, oxygen, food, spares). The remaining mass must be imported every month at the delivered price. Population, births and morale follow from that and from the habitat's volume and radiation dose.</li>
+    <li><b>Learning curves, not a tech tree.</b> Costs fall with cumulative output (Wright's law), as in Ceteris 3.0. Milestones switch on when production and investment cross thresholds. Propulsion stays grounded: chemical, nuclear thermal (NERVA test data), electric, solar sails.</li>
+    <li><b>Firms and agencies are agents.</b> As in Distant Worlds, private freighters and producers act on prices. The player sets the strategy for one company or agency.</li>
+    <li><b>Law and politics.</b> The Outer Space Treaty, US 2015 and Luxembourg 2017 resource laws, Artemis Accords against the Chinese-Russian lunar station bloc. Late in the game, settlements can ask for self-rule.</li>
+    <li><b>Risk from data.</b> Launch and landing failure rates by vehicle maturity, from the GCAT launch log. About half of all Mars missions so far have failed, and early players should feel that.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>The central number</h2>
+  <p>Water delivered to Earth-Moon L1 (hydrolox engines, exhaust speed 4.4 km/s, no tank mass, no reuse; simplified on purpose). From Earth, it costs the launch price P times the mass ratio for LEO to L1 (3.77 km/s, ratio 2.36). From the lunar surface, it costs the extraction cost c times the ratio for surface to L1 (about 2.5 km/s, ratio 1.77). Lunar water wins only when c is below about 1.33 P.</p>
+  <div class="wrap"><table>
+    <tr><th>Launch price to LEO</th><th>Earth water at L1</th><th>Lunar water must cost under</th><th>When</th></tr>
+    <tr><td class="n">$10,000/kg</td><td class="n">$23,600/kg</td><td class="n">$13,300/kg</td><td>Expendables, 2000</td></tr>
+    <tr><td class="n">$1,500/kg</td><td class="n">$3,540/kg</td><td class="n">$2,000/kg</td><td>Falcon Heavy, 2025</td></tr>
+    <tr><td class="n">$200/kg</td><td class="n">$472/kg</td><td class="n">$266/kg</td><td>Starship claim</td></tr>
+    <tr><td class="n">$50/kg</td><td class="n">$118/kg</td><td class="n">$66/kg</td><td>Speculative</td></tr>
+  </table></div>
+  <p style="margin-top:10px">Cheap launch makes off-Earth industry near Earth harder to justify, not easier. The further out you go (Mars, the Belt), the more the ratio favours local production. That tension, set by a launch price that comes from the Ceteris run, is the game's strategic spine.</p>
+</section>
+
+<section>
+  <h2>Mocks</h2>
+  <div class="mocks">
+    <div class="mock" style="grid-column:1/-1">
+      <div class="lbl">Map · delta-v (km/s, approximate, from published maps)</div>
+      <div class="wrap">
+      <svg viewBox="0 0 820 250" width="100%" style="min-width:620px" role="img" aria-label="Delta-v map from Earth surface to Moon and Mars">
+        <g stroke="#2f80c4" stroke-width="5" fill="none" stroke-linecap="round">
+          <path d="M40 125 H200"/><path d="M200 125 H330"/>
+        </g>
+        <g stroke="#c8ccd6" stroke-width="5" fill="none" stroke-linecap="round">
+          <path d="M330 125 V60 H470 H610"/>
+        </g>
+        <g stroke="#e07a5a" stroke-width="5" fill="none" stroke-linecap="round">
+          <path d="M330 125 V190 H500 H640 H780"/>
+        </g>
+        <g stroke="#7fc4e8" stroke-width="2" stroke-dasharray="4 4" fill="none">
+          <path d="M610 60 C 600 110, 520 150, 500 190"/>
+        </g>
+        <g fill="#0d1320" stroke="#d6deec" stroke-width="2">
+          <circle cx="40" cy="125" r="8"/><circle cx="200" cy="125" r="8"/><circle cx="330" cy="125" r="8"/>
+          <circle cx="470" cy="60" r="8"/><circle cx="610" cy="60" r="8"/>
+          <circle cx="500" cy="190" r="8"/><circle cx="640" cy="190" r="8"/><circle cx="780" cy="190" r="8"/>
+        </g>
+        <text x="40" y="152" text-anchor="middle">Earth</text>
+        <text x="200" y="152" text-anchor="middle">LEO</text>
+        <text x="330" y="152" text-anchor="middle" dx="34">EML1</text>
+        <text x="470" y="45" text-anchor="middle">Low lunar orbit</text>
+        <text x="610" y="45" text-anchor="middle">Shackleton (ice)</text>
+        <text x="500" y="215" text-anchor="middle">Mars transfer</text>
+        <text x="640" y="215" text-anchor="middle">Low Mars orbit</text>
+        <text x="780" y="215" text-anchor="middle">Jezero</text>
+        <g style="fill:#f0b44c">
+          <text x="120" y="115" text-anchor="middle">9.4</text>
+          <text x="265" y="115" text-anchor="middle">3.77</text>
+          <text x="400" y="52" text-anchor="middle">0.64</text>
+          <text x="540" y="52" text-anchor="middle">1.87</text>
+          <text x="415" y="182" text-anchor="middle">≈1.4 from EML1</text>
+          <text x="570" y="182" text-anchor="middle">1.4 (aerobrake)</text>
+          <text x="710" y="182" text-anchor="middle">4.1 (mostly aero)</text>
+        </g>
+        <text x="560" y="128" style="fill:#7fc4e8">lunar water to Mars stack</text>
+        <text x="40" y="240" style="fill:#8a96ad">Next Earth-Mars windows: end 2026, start 2029, early 2031 (every ~26 months, from JPL ephemerides)</text>
+      </svg>
+      </div>
+    </div>
+
+    <div class="mock">
+      <div class="lbl">Settlement · Shackleton Station · Mar 2047</div>
+      <h3>Population 48 · 3 births to date</h3>
+      <div class="tag">Volume 2,900 m³ · dose 110 mSv/yr · regolith shielding 2.1 m</div>
+      <div class="kv" style="margin-top:10px">
+        <span>Water</span><span class="bar"><i style="width:93%"></i></span><span>93%</span>
+        <span>Oxygen</span><span class="bar"><i style="width:88%"></i></span><span>88%</span>
+        <span>Food</span><span class="bar"><i style="width:22%"></i></span><span>22%</span>
+        <span>Spares</span><span class="bar"><i style="width:9%"></i></span><span>9%</span>
+      </div>
+      <table style="margin-top:10px">
+        <tr><td>Imports needed</td><td class="n">11.2 t / month</td></tr>
+        <tr><td>Delivered price, LEO→surface</td><td class="n">$1,180 / kg</td></tr>
+        <tr><td>Cost per resident-year</td><td class="n">$3.3 m</td></tr>
+        <tr><td>Water exports to EML1 depot</td><td class="n">38 t / month</td></tr>
+      </table>
+      <p class="tag" style="margin-top:8px">Closure bars per resource; illustrative numbers.</p>
+    </div>
+
+    <div class="mock">
+      <div class="lbl">Earth context · from Ceteris</div>
+      <h3>Branch main · tick 2041-03</h3>
+      <div class="tag">context hash 9f3c…a1 · extended profile</div>
+      <table style="margin-top:8px">
+        <tr><td>Launch price to LEO</td><td class="n">$340 / kg</td></tr>
+        <tr><td>Cost of capital, USD</td><td class="n">6.8%</td></tr>
+        <tr><td>Space budgets: US / CN / EU</td><td class="n">$91 / 48 / 19 bn</td></tr>
+        <tr><td>Platinum price</td><td class="n">$1,260 / oz</td></tr>
+        <tr><td>Demand: orbital tourism</td><td class="n">1,900 seats / yr</td></tr>
+        <tr><td>Blocs: Accords / ILRS</td><td class="n">71 / 17 states</td></tr>
+      </table>
+      <p class="tag" style="margin-top:8px">Frozen or a time series. Without Ceteris, a data-built 2025 context ships with the game.</p>
+    </div>
+
+    <div class="mock">
+      <div class="lbl">Mission planner · window 2031</div>
+      <h3>Ares Cargo 4 → Jezero</h3>
+      <table>
+        <tr><td>Departure</td><td class="n">EML1, 2031-02-14</td></tr>
+        <tr><td>Time of flight</td><td class="n">212 days</td></tr>
+        <tr><td>Delta-v (with aerocapture)</td><td class="n">1.4 + 0.6 km/s</td></tr>
+        <tr><td>Payload / wet mass</td><td class="n">96 t / 410 t</td></tr>
+        <tr><td>Landing risk, vehicle flight 3</td><td class="n">14% fail</td></tr>
+      </table>
+      <p class="tag" style="margin-top:8px">Drag the departure date; delta-v and risk update (Lambert solver, porkchop under the hood).</p>
+    </div>
+
+    <div class="mock">
+      <div class="lbl">Chronicle · 2058</div>
+      <h3>Ceres assembly declares fiscal autonomy</h3>
+      <p>The 1,400 residents of Occator vote to keep 60% of water revenues. Their charter firm's board objects; Earth's insurers raise premiums on Belt freight by 3 points.</p>
+      <p class="tag">Event from state; text written by the event system, not causal.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Interface with Ceteris</h2>
+  <p>Same pattern as the city companion: two versioned files, no space maths at Ceteris runtime, and a Ceteris run that imports a summary is marked extended profile.</p>
+  <div class="wrap"><table>
+    <tr><th>File</th><th>Direction</th><th>Carries</th></tr>
+    <tr><td>Earth context</td><td>Ceteris → game</td><td>Launch price, metal and energy prices, cost of capital, space budgets by state, treaty blocs, demand for space services by income, debris state (2.0 model); frozen or a time series</td></tr>
+    <tr><td>Space summary</td><td>Game → Ceteris</td><td>Exports to Earth by good (services, tourism, data, later metals or power), launch demand, capital invested by owner country, debris added, context hash</td></tr>
+  </table></div>
+  <p style="margin-top:10px">The game also ships its own data-built 2025 Earth context, so it never waits on Ceteris 2.0. Ceteris-side cost: a context exporter and a summary importer, about one FTE-month, after 2.0's space work exists.</p>
+</section>
+
+<section>
+  <h2>The realism ladder (extrapolation)</h2>
+  <div class="wrap"><table>
+    <tr><th>Tier</th><th>Examples</th><th>In the game</th></tr>
+    <tr><td><span class="chip ok">Known</span></td><td>Reusable chemical launch, propellant depots, lunar ice mining, nuclear thermal, solar electric, inflatable habitats, Mars surface outposts</td><td>Default</td></tr>
+    <tr><td><span class="chip warn">Plausible by 2150</span></td><td>Asteroid water at scale, Phobos as a fuel port, rotating habitats for gravity, space solar power, Belt settlements of thousands</td><td>Default, each labelled</td></tr>
+    <tr><td><span class="chip bad">Speculative</span></td><td>Fusion drives, O'Neill cylinders, mass drivers, metal exports large enough to move Earth prices, helium-3</td><td>Opt-in dial, every item flagged in the UI</td></tr>
+    <tr><td><span class="chip bad">Out</span></td><td>FTL, aliens, terraforming within the horizon</td><td>Never</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>No art, no team: how it looks</h2>
+  <ul>
+    <li><b>Schematic first.</b> The main screen is the delta-v map as a transit diagram, with flows as moving particles. Pure vector, procedural.</li>
+    <li><b>Orbital view.</b> Lines and dots on true ephemerides; planets from NASA imagery (public domain) and Solar System Scope textures (CC BY 4.0).</li>
+    <li><b>Habitats as blueprints.</b> Procedural cross-sections from module stacks: torus, cylinder, buried lava-tube. No characters, no portraits, the same rule as Ceteris (ADRs 0183 to 0187).</li>
+    <li><b>Mission patches.</b> Generated from a grammar (orbit glyph, body, crew count, Roman numeral). A cheap way to give missions identity.</li>
+    <li><b>Stack.</b> Reuse the Ceteris app: Tauri, the same design system, a Rust sim crate with the same determinism lints. Bevy only if a 3D orbital view grows beyond lines and textured spheres.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Feasibility on today's models</h2>
+  <div class="wrap"><table>
+    <tr><th>Tier</th><th>Scope</th><th>Owner FTE-months with AI</th></tr>
+    <tr><td>0 · Paper prototype</td><td>Delta-v graph, rocket-equation prices, one company, text UI; answers "is the central tension fun?"</td><td class="n">1-2</td></tr>
+    <tr><td>1 · Minimal game</td><td>Settlements with closure, mission planner, frozen Earth context, events, save and load, the schematic map</td><td class="n">6-9</td></tr>
+    <tr><td>2 · Coupled</td><td>Time-series context from Ceteris, summary back, politics and treaties, AI rival firms and agencies, orbital view</td><td class="n">+6-9</td></tr>
+    <tr><td>3 · Full release</td><td>Campaign balance, tutorial, onboarding, polish, localization</td><td class="n">+12 or more; balance is the bottleneck</td></tr>
+  </table></div>
+  <p style="margin-top:10px">What today's models do well here: orbital mechanics (patched conics, Lambert solvers after Izzo 2015), the economic core, UI code, data pipelines, tests, procedural vector art. What they do poorly: judge whether a decision is interesting, find dominant strategies before players do, keep a large codebase coherent without written specs (the Ceteris spec and ADR workflow already covers that), and write hundreds of events in one consistent voice without editing.</p>
+  <p>Biggest risk: this is a third project next to Ceteris and the city companion, for one person. Tier 0 is cheap enough to try any time; anything past it competes with Ceteris for the same hours.</p>
+</section>
+
+<section class="future">
+  <h2>If models get better (speculative, not planned on)</h2>
+  <ul>
+    <li><b>Playtesting agents.</b> Models that play thousands of campaigns and report dominant strategies and dead ends would remove the main bottleneck for Tier 3. Scripted bots can do part of this today.</li>
+    <li><b>Consistent generated 3D.</b> Habitat and ship meshes in one style would allow a realistic look without artists. Today it would be the stylized schematic.</li>
+    <li><b>Large codebase coherence.</b> If a model can hold a full game codebase and its specs at once, Tier 3 moves from studio scale to owner scale.</li>
+    <li><b>Narration.</b> Event text written from state, cached by state hash so runs stay deterministic. Narration only, never causal, consistent with rejecting LLM diplomacy for Ceteris.</li>
+    <li>Design rule: each improvement should upgrade the game, never be a dependency. Every tier above ships without it.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>From science fiction: mechanics</h2>
+  <p>Each work below supplies one mechanic that fits the realism ladder. These are ideas taken, not names or terms copied.</p>
+  <div class="wrap"><table>
+    <tr><th>Work</th><th>Idea</th><th>Mechanic in Hohmann</th><th>Tier</th></tr>
+    <tr><td>Andy Weir, <i>Artemis</i> (2017)</td><td>The lunar city's currency is credit for a gram of freight from Earth</td><td>Prices shown in kilograms-to-LEO as well as dollars, so the launch price is the unit of account off Earth</td><td><span class="chip ok">Known</span></td></tr>
+    <tr><td>Heinlein, <i>The Moon Is a Harsh Mistress</i> (1966)</td><td>Luna exports grain and water to Earth by catapult and runs dry</td><td>Ice deposits are finite and deplete (Hotelling pricing). An exporting colony is mining its own future. A mass driver is a cheap export route and, on the speculative dial, a weapon in bargaining</td><td><span class="chip warn">Plausible</span></td></tr>
+    <tr><td>Kim Stanley Robinson, Mars trilogy (1992-96)</td><td>Red versus Green; transnational firms; Martian revolutions</td><td>Settlement factions on how much to change a world; firms above states; self-rule as an endogenous late-game event, not a script</td><td><span class="chip warn">Plausible</span></td></tr>
+    <tr><td>Kim Stanley Robinson, <i>Aurora</i> (2015)</td><td>A closed ecology slowly fails; biology outruns engineering</td><td>Closure decays without trace imports ("closure debt"); a long-isolated habitat drifts toward collapse unless resupplied</td><td><span class="chip ok">Known</span></td></tr>
+    <tr><td><i>The Expanse</i> (Corey, 2011-21)</td><td>Belters: a people shaped by low gravity, with their own creole and grievance</td><td>Identity drift by location using Ceteris' language and identity rules (ADRs 0223, 0225): new dialects, new group boundaries, unrest about water prices</td><td><span class="chip warn">Plausible</span></td></tr>
+    <tr><td>Herbert, <i>Dune</i> (1965)</td><td>The Guild monopolizes transport; CHOAM is a company owned by the great houses</td><td>The dominant launch firm as a semi-sovereign; agencies hold shares in a consortium and vote on routes</td><td><span class="chip ok">Known</span></td></tr>
+    <tr><td>Asimov, <i>Foundation</i> (1951)</td><td>Psychohistory predicts crowds, not people; Seldon crises</td><td>Earth context comes from a Ceteris ensemble; a "crisis" fires when the ensemble fan widens past a threshold, as a forecast the player can read</td><td><span class="chip ok">Known</span></td></tr>
+    <tr><td>Krugman, "The Theory of Interstellar Trade" (1978); Stross, <i>Neptune's Brood</i> (2013)</td><td>Interest on goods in transit; money across light-lag</td><td>Cargo in transit for 7 months ties up capital at Earth's interest rate, so the cost of capital sets which routes pay. Mars at up to 22 minutes' lag cannot be run by remote control from Earth; the Moon at 2.6 seconds can. Labour must be local or autonomous past the Moon</td><td><span class="chip ok">Known</span></td></tr>
+    <tr><td>Le Guin, <i>The Dispossessed</i> (1974)</td><td>A scarce anarchist moon beside a rich market planet</td><td>Settlement governance as a choice of rules (commons, charter company, state outpost), each with costs and failure modes</td><td><span class="chip ok">Known</span></td></tr>
+    <tr><td>Stephenson, <i>Seveneves</i> (2015); <i>Planetes</i> (Yukimura, 1999-2004)</td><td>Orbit becomes a debris storm; debris collectors as working-class heroes</td><td>Ceteris' 2.0 debris model in the context file; cleanup as a business line and a seat's daily work</td><td><span class="chip ok">Known</span></td></tr>
+    <tr><td>Weir, <i>The Martian</i> (2011)</td><td>Survival by improvisation and arithmetic</td><td>Spares closure: local fabrication substitutes for imports at lower quality, with a failure-rate cost</td><td><span class="chip ok">Known</span></td></tr>
+    <tr><td><i>Alien</i> (1979), <i>Moon</i> (2009), <i>Outland</i> (1981)</td><td>Company towns, indenture, workers as cost lines</td><td>Settlement labour markets with a single employer; contract terms, return fares and scrip as policy levers</td><td><span class="chip ok">Known</span></td></tr>
+    <tr><td><i>For All Mankind</i> (2019-)</td><td>History that diverged in 1969</td><td>A branch start: fork a Ceteris run at any date and see how the space economy differs</td><td><span class="chip ok">Known</span></td></tr>
+    <tr><td>Clarke, <i>The Fountains of Paradise</i> (1979); Niven's Belters; Reynolds</td><td>Space elevator; asteroid prospectors; slow interstellar ships</td><td>Speculative dial only</td><td><span class="chip bad">Speculative</span></td></tr>
+  </table></div>
+  <p style="margin-top:10px">Left out: anything that needs aliens or FTL (<i>Three-Body</i>, <i>Rama</i>, the Culture), and post-scarcity, which removes the economics the game is about.</p>
+</section>
+
+<section>
+  <h2>From science fiction: art without artists</h2>
+  <ul>
+    <li><b>1970s NASA space colony paintings.</b> Rick Guidice and Don Davis painted the Stanford torus and O'Neill cylinders for NASA Ames. As NASA works they are public domain, so they can be loading screens with credit, at no cost.</li>
+    <li><b>NASA Graphics Standards Manual (1975).</b> Danne and Blackburn's grid, rules and type. The mission-control UI can follow it closely, and it is pure layout, so no art is needed.</li>
+    <li><b>Ron Cobb's semiotic symbols for <i>Alien</i>.</b> A geometric icon language for ship systems. Copy the idea, not the icons: a small grammar of shapes (circle = habitat, triangle = hazard, bar = flow) generates every icon procedurally.</li>
+    <li><b>Kubrick's <i>2001</i>.</b> Clean white interiors and flat screen graphics. A light theme for agencies.</li>
+    <li><b>Used future (<i>Alien</i>, <i>The Expanse</i>).</b> Scuffed panels, stencil labels, hand-painted signs. A dark theme for companies and Belt settlements, made with shaders and noise, not drawings.</li>
+    <li><b>Technical manuals and cutaways</b> (Haynes, Jane's, Bonestell's cross-sections). Habitat blueprints as the settlement view.</li>
+    <li><b>Soviet cosmonautics posters.</b> Bold diagonals and flat colour, as style reference only, since many are still under copyright.</li>
+  </ul>
+  <div class="mocks" style="margin-top:12px">
+    <div class="mock">
+      <div class="lbl">Icon grammar · procedural, after the idea of a semiotic standard</div>
+      <svg viewBox="0 0 400 110" width="100%" role="img" aria-label="Six generated icons from a shape grammar">
+        <g fill="none" stroke="#d6deec" stroke-width="3">
+          <circle cx="35" cy="40" r="22"/><circle cx="35" cy="40" r="9" fill="#d6deec"/>
+          <circle cx="100" cy="40" r="22"/><path d="M78 40 H122"/>
+          <path d="M165 18 L187 58 H143 Z"/><path d="M165 32 V46"/>
+          <rect x="208" y="18" width="44" height="44"/><path d="M208 40 H252 M230 18 V62"/>
+          <circle cx="295" cy="40" r="22"/><path d="M283 52 L307 28"/>
+          <rect x="338" y="28" width="44" height="24"/><path d="M338 40 H318 M382 40 H398" stroke="#f0b44c"/>
+        </g>
+        <g text-anchor="middle">
+          <text x="35" y="90">habitat</text><text x="100" y="90">airlock</text><text x="165" y="90">radiation</text>
+          <text x="230" y="90">life support</text><text x="295" y="90">no access</text><text x="360" y="90">propellant flow</text>
+        </g>
+      </svg>
+    </div>
+    <div class="mock">
+      <div class="lbl">Date stamp · settlement calendars</div>
+      <h3>Jezero · Sol 412 · 14 Libra 232</h3>
+      <div class="tag">Earth 2047-11-03 · light-lag 18 min 40 s · next window 2048-11</div>
+      <p style="margin-top:8px">Mars settlements switch to sols and the Darian calendar (Gangale, 1985), a real proposal, once local identity passes a threshold. Choosing a calendar is an identity marker, as with local calendars in ADR 0141.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>From science fiction: flavour</h2>
+  <ul>
+    <li><b>Encyclopedia epigraphs.</b> In the manner of <i>Foundation</i>'s Encyclopedia Galactica, each chapter of the chronicle opens with an entry written from the end of the run, built from its own state ("Occator, founded 2051, was the first...").</li>
+    <li><b>Mission patches</b> generated per mission, the way NASA crews design them: body, orbit, crew names, numerals.</li>
+    <li><b>Names from the founders' own history.</b> Settlements and ships are named by the founding firm or state from their own explorers, scientists and places, from Wikidata, by the same rule as Ceteris names.</li>
+    <li><b>Radio voice.</b> Event text in the clipped style of mission loops and capcom calls, with real light-lag before replies from Mars.</li>
+    <li><b>Mars time.</b> A sol is 24 h 39 min. Settlement clocks drift against Earth's, and shift rotas show it.</li>
+    <li><b>Water talk.</b> Prices, debts and wages quoted in tonnes of water at the outer settlements, as Belter fiction imagines, because water really is the propellant.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Data</h2>
+  <div class="wrap"><table>
+    <tr><th>Source</th><th>Use</th><th>Licence</th></tr>
+    <tr><td>JPL ephemerides (DE440), Horizons</td><td>Planet and moon positions, windows</td><td class="ok">US government, public domain</td></tr>
+    <tr><td>JPL Small-Body Database</td><td>Asteroid orbits, sizes, spectral types</td><td class="ok">Public domain</td></tr>
+    <tr><td>GCAT (McDowell)</td><td>Launch history, failure rates by vehicle</td><td class="ok">CC BY 4.0</td></tr>
+    <tr><td>NASA imagery, LRO and MRO maps</td><td>Textures, ice and terrain at landing sites</td><td class="ok">Public domain</td></tr>
+    <tr><td>Solar System Scope textures</td><td>Planet textures</td><td class="ok">CC BY 4.0</td></tr>
+    <tr><td>NASA life-support and habitat studies (ECLSS, HERA)</td><td>Closure ratios, consumables per person-day</td><td class="ok">Public domain</td></tr>
+    <tr><td>Delta-v budgets</td><td>Edge values</td><td class="warn">Computed from ephemerides; published maps for checks</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <h2>Picks (Antonio, 29 Oct 2026)</h2>
+  <ul>
+    <li>Seats: all three (company, agency, settlement governor) from the start. This roughly triples balancing work before the first playable, so Tier 1 grows from 6-9 toward 9-13 owner-months.</li>
+    <li>Realism: known and plausible by default, plus an opt-in speculative dial, every item flagged in the UI.</li>
+    <li>Timing: parked indefinitely. This page is the design note.</li>
+  </ul>
+  <p class="meta">Sources: <a href="https://en.wikipedia.org/wiki/Delta-v_budget">Delta-v budget</a> · <a href="https://planet4589.org/space/gcat/">GCAT</a> · <a href="https://ourworldindata.org/grapher/cost-space-launches-low-earth-orbit">OWID / CSIS launch costs</a> · <a href="https://claude.ai/artifact/EnynDSH2aGp7y2hVRw2bxC">Space in Ceteris</a></p>
+</section>
+</main>

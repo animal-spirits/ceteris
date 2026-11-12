@@ -1,0 +1,279 @@
+<title>Clocks, Hours and Frames</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: one reading column on the Ceteris ground, panels as floating cards, diagrams full column width. Tokens from the Ceteris Paribus design system (single dark theme). */
+:root {
+  --ground: #0f1720; --panel: #161f2a; --raised: #1c2734; --line: #2a3644; --line-strong: #3a4757;
+  --ink: #ece8e0; --muted: #a3a9b0; --gold: #c9a253; --gold-bright: #e2c27a; --on-gold: #14100a;
+  --good: #9fd3a0; --rise: #e7a86a; --fall: #8db6e3; --danger: #f0907f; --sea: #0f1c27;
+  --sans: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+body { background: var(--ground); color: var(--ink); font: 15px/1.6 var(--sans); }
+.wrap { max-width: 860px; margin: 0 auto; padding-block: 40px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+h1 { font-size: 34px; line-height: 1.15; font-weight: 600; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+h2 { font-size: 22px; line-height: 1.25; font-weight: 600; margin: 0; text-wrap: balance; }
+h3 { font-size: 15px; font-weight: 600; margin: 0; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); font-weight: 500; }
+.lede { color: var(--muted); font-size: 16px; }
+section { display: grid; gap: 14px; padding-top: 22px; border-top: 1px solid var(--line); }
+.answer { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 8px; padding: 18px 20px; display: grid; gap: 10px; }
+.answer ul, section ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 70ch; }
+.mono, code { font-family: var(--mono); font-size: 13px; }
+code { background: var(--raised); padding: 1px 5px; border-radius: 2px; }
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 620px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; background: var(--panel); }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+.rec { color: var(--on-gold); background: var(--gold); font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 2px; letter-spacing: 0.04em; white-space: nowrap; }
+.no { color: var(--danger); } .yes { color: var(--good); }
+.fig { background: var(--sea); border: 1px solid var(--line); border-radius: 8px; padding: 14px; overflow-x: auto; }
+.fig svg { display: block; width: 100%; min-width: 640px; height: auto; }
+.cap { font-size: 13px; color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.card .when { font-family: var(--mono); font-size: 11px; color: var(--gold-bright); }
+.card p { font-size: 14px; color: var(--ink); }
+.trick { display: grid; grid-template-columns: 34px 1fr; gap: 4px 12px; }
+.trick .n { font-family: var(--mono); color: var(--gold); font-size: 13px; padding-top: 2px; }
+.trick > div { display: grid; gap: 4px; min-width: 0; }
+.trick p { font-size: 14px; }
+.tricks { display: grid; gap: 14px; }
+.q { background: var(--raised); border: 1px solid var(--line-strong); border-radius: 4px; padding: 12px 16px; display: grid; gap: 4px; }
+.q b { font-weight: 600; }
+a { color: var(--gold-bright); }
+a:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 1px; }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:10px">
+    <div class="eyebrow">Ceteris Paribus · design note · 28 Oct 2026</div>
+    <h1>Clocks, hours and frames</h1>
+    <p class="lede">Can war run hour by hour like Hearts of Iron, what else can we do with time, and how do we keep the clock smooth and the frame rate stable at maximum speed. Grounded in ADRs 0088, 0097, 0132, 0145, 0148, 0149, 0188, 0196 and 0207, and the measured 34.9 ms econ tick. Numbers marked "est." are estimates; benchmarks replace them.</p>
+  </header>
+
+  <div class="answer">
+    <div class="eyebrow">Short answer</div>
+    <ul>
+      <li><b>Hourly war: yes, but sparse.</b> Keep the day as the commit step (snapshots, hashes, the supply solve, planners, intel). Inside each day, run an hourly phase only for the cheap, fast processes on engaged segments: movement, contact, combat rounds, air sorties, naval interception. Uniform hourly ticks would cost 24 times the daily war budget and drop a world war to about 1.5 simulated days per second.</li>
+      <li><b>Most of the "HOI feel" is presentation, not physics.</b> A clock that visibly moves hour by hour and units that glide come from interpolation between ticks. That works at peace too, on the monthly tick.</li>
+      <li><b>Smoothness comes from one structural choice:</b> the simulation runs ahead of what you see, on its own threads, and the screen plays back a buffer of finished ticks at a steady rate. Determinism makes this free of risk: an edit lands at the view tick (0188), and the ticks computed past it are dropped and recomputed bit for bit the same way they would have been.</li>
+      <li><b>Placement.</b> The presentation pipeline belongs to the App shell phase (1.0). Hourly war is a P7 (2.0) amendment to 0145 and 0149, both still proposed.</li>
+    </ul>
+  </div>
+
+  <section>
+    <div class="eyebrow">1 · War hour by hour</div>
+    <h2>Three clocks become four, but the fourth runs only where fighting is</h2>
+    <p>0145 already nests a daily sub-tick inside the monthly tick, active only while a war is on. HOI ticks every hour everywhere, which it can afford because its per-hour work is tiny. Ceteris's daily war step is heavier (a supply min-cost flow, delegated planners, belief updates), so hours must not multiply that work. The split below keeps the expensive layers daily and gives hours only to processes whose timing actually changes outcomes within a day.</p>
+
+    <div class="fig" role="img" aria-label="Nested clocks: a month of 30 days, one day expanded into 24 hours, with daily-only layers and hourly events on engaged segments">
+      <svg viewBox="0 0 800 300" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, system-ui, sans-serif">
+        <rect x="0" y="0" width="800" height="300" fill="#0f1c27"/>
+        <text x="20" y="28" fill="#a3a9b0" font-size="11" letter-spacing="1">MONTHLY TICK · econ, budgets, mobilization, procurement, peace · 34.9 ms</text>
+        <rect x="20" y="38" width="760" height="22" rx="2" fill="#1c2734" stroke="#3a4757"/>
+        <g fill="#c9a253">
+          <rect x="20" y="38" width="6" height="22"/>
+        </g>
+        <g stroke="#3a4757">
+          <line x1="45.3" y1="38" x2="45.3" y2="60"/><line x1="70.7" y1="38" x2="70.7" y2="60"/><line x1="96" y1="38" x2="96" y2="60"/><line x1="121.3" y1="38" x2="121.3" y2="60"/><line x1="146.7" y1="38" x2="146.7" y2="60"/><line x1="172" y1="38" x2="172" y2="60"/><line x1="197.3" y1="38" x2="197.3" y2="60"/><line x1="222.7" y1="38" x2="222.7" y2="60"/><line x1="248" y1="38" x2="248" y2="60"/><line x1="273.3" y1="38" x2="273.3" y2="60"/><line x1="298.7" y1="38" x2="298.7" y2="60"/><line x1="324" y1="38" x2="324" y2="60"/><line x1="349.3" y1="38" x2="349.3" y2="60"/><line x1="374.7" y1="38" x2="374.7" y2="60"/><line x1="400" y1="38" x2="400" y2="60"/><line x1="425.3" y1="38" x2="425.3" y2="60"/><line x1="450.7" y1="38" x2="450.7" y2="60"/><line x1="476" y1="38" x2="476" y2="60"/><line x1="501.3" y1="38" x2="501.3" y2="60"/><line x1="526.7" y1="38" x2="526.7" y2="60"/><line x1="552" y1="38" x2="552" y2="60"/><line x1="577.3" y1="38" x2="577.3" y2="60"/><line x1="602.7" y1="38" x2="602.7" y2="60"/><line x1="628" y1="38" x2="628" y2="60"/><line x1="653.3" y1="38" x2="653.3" y2="60"/><line x1="678.7" y1="38" x2="678.7" y2="60"/><line x1="704" y1="38" x2="704" y2="60"/><line x1="729.3" y1="38" x2="729.3" y2="60"/><line x1="754.7" y1="38" x2="754.7" y2="60"/>
+        </g>
+        <rect x="298.7" y="38" width="25.3" height="22" fill="#c9a253" opacity="0.35" stroke="#e2c27a"/>
+        <text x="20" y="78" fill="#a3a9b0" font-size="11">30 daily sub-ticks while any war is active (0145)</text>
+        <path d="M298.7 60 L20 104 M324 60 L780 104" stroke="#e2c27a" stroke-width="1" fill="none" stroke-dasharray="3 3"/>
+        <text x="20" y="122" fill="#a3a9b0" font-size="11" letter-spacing="1">ONE DAY · commit step: snapshot point, hash, intervention list</text>
+        <rect x="20" y="130" width="760" height="26" rx="2" fill="#1c2734" stroke="#3a4757"/>
+        <text x="30" y="148" fill="#ece8e0" font-size="12">Daily layers: orders released · planners · sensor search and beliefs · air and naval tasking · supply solve (0148)</text>
+        <text x="20" y="180" fill="#a3a9b0" font-size="11" letter-spacing="1">HOURLY PHASE · engaged segments, moving formations, sorties only</text>
+        <rect x="20" y="188" width="760" height="58" rx="2" fill="#161f2a" stroke="#3a4757"/>
+        <g stroke="#2a3644">
+          <line x1="51.7" y1="188" x2="51.7" y2="246"/><line x1="83.3" y1="188" x2="83.3" y2="246"/><line x1="115" y1="188" x2="115" y2="246"/><line x1="146.7" y1="188" x2="146.7" y2="246"/><line x1="178.3" y1="188" x2="178.3" y2="246"/><line x1="210" y1="188" x2="210" y2="246"/><line x1="241.7" y1="188" x2="241.7" y2="246"/><line x1="273.3" y1="188" x2="273.3" y2="246"/><line x1="305" y1="188" x2="305" y2="246"/><line x1="336.7" y1="188" x2="336.7" y2="246"/><line x1="368.3" y1="188" x2="368.3" y2="246"/><line x1="400" y1="188" x2="400" y2="246"/><line x1="431.7" y1="188" x2="431.7" y2="246"/><line x1="463.3" y1="188" x2="463.3" y2="246"/><line x1="495" y1="188" x2="495" y2="246"/><line x1="526.7" y1="188" x2="526.7" y2="246"/><line x1="558.3" y1="188" x2="558.3" y2="246"/><line x1="590" y1="188" x2="590" y2="246"/><line x1="621.7" y1="188" x2="621.7" y2="246"/><line x1="653.3" y1="188" x2="653.3" y2="246"/><line x1="685" y1="188" x2="685" y2="246"/><line x1="716.7" y1="188" x2="716.7" y2="246"/><line x1="748.3" y1="188" x2="748.3" y2="246"/>
+        </g>
+        <rect x="20" y="188" width="190" height="58" fill="#0c131a" opacity="0.7"/>
+        <rect x="621.7" y="188" width="158.3" height="58" fill="#0c131a" opacity="0.7"/>
+        <text x="28" y="240" fill="#a3a9b0" font-size="10">night</text>
+        <text x="740" y="240" fill="#a3a9b0" font-size="10">night</text>
+        <g fill="#8db6e3"><circle cx="99" cy="204" r="4"/><circle cx="257" cy="204" r="4"/><circle cx="447" cy="204" r="4"/></g>
+        <g fill="#e7a86a"><rect x="223" y="214" width="8" height="8"/><rect x="286" y="214" width="8" height="8"/><rect x="318" y="214" width="8" height="8"/><rect x="349" y="214" width="8" height="8"/><rect x="381" y="214" width="8" height="8"/><rect x="412" y="214" width="8" height="8"/></g>
+        <g fill="#c9a253"><path d="M282 238 l6 -10 l6 10z"/><path d="M503 238 l6 -10 l6 10z"/><path d="M566 238 l6 -10 l6 10z"/></g>
+        <text x="20" y="270" fill="#8db6e3" font-size="11">● arrival, contact, order lands (event, exact hour)</text>
+        <text x="300" y="270" fill="#e7a86a" font-size="11">■ combat round on an engaged segment</text>
+        <text x="560" y="270" fill="#c9a253" font-size="11">▲ sortie or strike resolves</text>
+        <text x="20" y="290" fill="#a3a9b0" font-size="11">Reserves, garrisons and quiet fronts do nothing hourly; they wake on an event.</text>
+      </svg>
+    </div>
+
+    <h3>What hours buy, concretely</h3>
+    <ul>
+      <li><b>Naval interception.</b> A task group at 25 knots covers about 1,100 km a day, more than most of the 725 sea zones. Daily resolution cannot tell whether two fleets met in a zone or passed through it. This is the strongest reason for hours.</li>
+      <li><b>Air sortie cycles</b> of 3 to 6 hours, day and night operations, and weather that moves through the day.</li>
+      <li><b>Order latency</b> in hours. 0147's HQ latency is naturally hours at brigade and division level; rounding to whole days overstates it.</li>
+      <li><b>Breakthrough and exploitation inside a day</b>: a pursuit state that opens at 06:00 can carry 40 km by nightfall instead of waiting for the next day.</li>
+      <li><b>Strategic strikes</b> with flight times of minutes to hours (0152) get an exact hour of impact.</li>
+    </ul>
+
+    <h3>Options for the war clock</h3>
+    <div class="tablebox"><table>
+      <thead><tr><th>Option</th><th>How it works</th><th>World war cost per sim day (est.)</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>A. Daily only</td><td>0145 and 0149 as written. One closed-form step per segment per day.</td><td class="num">25–30 ms</td><td>Fast; naval and air timing too coarse.</td></tr>
+        <tr><td>B. Daily commit, sparse hourly phase <span class="rec">REC</span></td><td>Expensive layers daily. An event queue keyed by (hour, kind, entity ID) drives arrivals, contact and sorties; engaged segments step hourly. Everything else sleeps until an event.</td><td class="num">50–70 ms</td><td>About double A in a world war, small in a regional one. Gets naval, air and latency right.</td></tr>
+        <tr><td>C. Uniform hourly, as HOI</td><td>Every war system steps 24 times a day.</td><td class="num">600–720 ms</td><td>Too slow: about 1.5 days per second in a world war.</td></tr>
+        <tr><td>D. Continuous time, integer minutes</td><td>Pure discrete-event simulation; combat integrated in closed form between events.</td><td class="num">event-bound</td><td>Most exact, hardest to make deterministic and to explain. Not worth it over B.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Determinism and replay under option B</h3>
+    <ul>
+      <li>Time inside a day is an integer hour. No floating time anywhere, so ordering never depends on rounding.</li>
+      <li>The hourly queue is a timing wheel of 24 slots (19.4 already uses one for shipments). Within a slot, events run in a fixed order: kind priority, then entity ID.</li>
+      <li>Draw keys gain an hour: (run seed, war, entity, day, hour, purpose). Untouched entities keep their streams across forks, so CRN still holds.</li>
+      <li>Snapshots stay at day boundaries during war. Hourly state is transient and always reconstructible by replaying one day from its start, which costs milliseconds.</li>
+      <li>Orders and edits carry (day, hour). The intervention list sorts by them; Tier 1a actions are unchanged.</li>
+      <li>Nesting test: a segment with constant inputs stepped 24 times hourly must match the daily closed form within a stated tolerance, so the lab profile (daily, aggregate) still nests the extended one.</li>
+      <li>A run with no war still never enters any sub-tick, and its hash still equals a build without <code>ceteris-war</code>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="eyebrow">2 · Throughput</div>
+    <h2>How fast time can flow, by situation</h2>
+    <p>Simulated days per wall second on one machine, headless. Peace uses the 34.9 ms econ tick measured today; war rows add 0145's daily budget and the hourly estimates above. Log scale.</p>
+    <div class="fig" role="img" aria-label="Bar chart of simulated days per second: peace 850, large war daily 110, large war sparse hourly 73, world war daily 35, world war sparse hourly 17, large war uniform hourly 5, world war uniform hourly 1.5">
+      <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, system-ui, sans-serif">
+        <rect width="760" height="300" fill="#0f1c27"/>
+        <g stroke="#2a3644"><line x1="240" y1="14" x2="240" y2="252"/><line x1="400" y1="14" x2="400" y2="252"/><line x1="560" y1="14" x2="560" y2="252"/><line x1="720" y1="14" x2="720" y2="252"/></g>
+        <g stroke="#c9a253" stroke-dasharray="2 4"><line x1="375" y1="14" x2="375" y2="252"/><line x1="476" y1="14" x2="476" y2="252"/><line x1="553" y1="14" x2="553" y2="252"/></g>
+        <g font-size="12" fill="#ece8e0" text-anchor="end">
+          <text x="230" y="36">Peace (monthly econ)</text>
+          <text x="230" y="68">Large war, daily</text>
+          <text x="230" y="100">Large war, sparse hourly</text>
+          <text x="230" y="132">World war, daily</text>
+          <text x="230" y="164">World war, sparse hourly</text>
+          <text x="230" y="196">Large war, uniform hourly</text>
+          <text x="230" y="228">World war, uniform hourly</text>
+        </g>
+        <g>
+          <rect x="240" y="22" width="469" height="20" fill="#9fd3a0"/>
+          <rect x="240" y="54" width="327" height="20" fill="#8db6e3"/>
+          <rect x="240" y="86" width="298" height="20" fill="#c9a253"/>
+          <rect x="240" y="118" width="247" height="20" fill="#8db6e3"/>
+          <rect x="240" y="150" width="197" height="20" fill="#c9a253"/>
+          <rect x="240" y="182" width="112" height="20" fill="#e7a86a"/>
+          <rect x="240" y="214" width="28" height="20" fill="#e7a86a"/>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="11" fill="#ece8e0">
+          <text x="715" y="36">850</text><text x="573" y="68">110</text><text x="544" y="100">73</text><text x="493" y="132">35</text><text x="443" y="164">17</text><text x="358" y="196">5</text><text x="274" y="228">1.5</text>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="11" fill="#a3a9b0" text-anchor="middle">
+          <text x="240" y="270">1</text><text x="400" y="270">10</text><text x="560" y="270">100</text><text x="720" y="270">1000 days/s</text>
+        </g>
+        <g font-size="10" fill="#e2c27a" text-anchor="middle">
+          <text x="375" y="290">1 week/s</text><text x="476" y="290">1 month/s</text><text x="553" y="290">1 quarter/s</text>
+        </g>
+      </svg>
+    </div>
+    <p class="cap">Green: measured base. Blue: 0145 estimates. Gold: option B. Orange: option C. Theatre parallelism (0145 lets theatres without a shared supply edge or front run in parallel) could cut world-war rows by 2 to 3 times on 10 to 12 cores, est. For comparison, HOI4 late in a world war is commonly reported at a few days per second at top speed (player reports, not measured).</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">3 · Other ways to play with time</div>
+    <h2>What determinism and the run log make cheap</h2>
+    <div class="grid2">
+      <div class="card"><h3>Speeds in sim time, not ticks</h3><div class="when">App shell · 1.0</div><p>Speed 1 = one day per second, 2 = a week, 3 = a month, 4 = a quarter, 5 = as fast as the machine goes. The feel stays the same at peace and at war; when war makes a speed unreachable, the clock eases down to what the simulation sustains and shows a "sim-bound" chip. 20.3 keeps five speeds and 0188's keys.</p></div>
+      <div class="card"><h3>Continuous clock at peace</h3><div class="when">App shell · 1.0</div><p>The date counts days between monthly ticks and map fills cross-fade from one month to the next. Panels always show tick values, never interpolated ones, and say which tick they show.</p></div>
+      <div class="card"><h3>Scrub the past without resimulating</h3><div class="when">P3 · 1.0</div><p>History columns already hold every map mode at every tick. Dragging the timeline back reads history, not state, so it is instant. Resuming or forking from a scrubbed tick loads the nearest snapshot and replays at most 11 ticks (about 0.4 s), or instantly from a ring of recent tick deltas kept with P3's copy-on-write chunks.</p></div>
+      <div class="card"><h3>Think ahead while paused</h3><div class="when">App shell or P3 · 1.0</div><p>While paused or reading a panel, idle cores keep computing the next ticks. Pressing play is instant. Any edit at the view tick throws away ticks past it; determinism guarantees the kept ones are exactly what a fresh run would produce.</p></div>
+      <div class="card"><h3>Auto-pace around events</h3><div class="when">1.x minor</div><p>The presented clock slows when salient events cluster (war declared, a front breaks, a bank run) and returns to speed in quiet stretches, extending 0188's watchers. In seat play it uses only what the seat can see and slows at the event, never before it, so the run-ahead buffer cannot leak the future.</p></div>
+      <div class="card"><h3>Replay the day</h3><div class="when">P7 · 2.0</div><p>With hourly events logged, any past day of a battle can be watched hour by hour as an animation, at no simulation cost. This replaces the continuous battle view that 0149 turned down.</p></div>
+      <div class="card"><h3>Run to next event, skip quiet stretches</h3><div class="when">App shell · 1.0</div><p>Run to the next alert, situation change or date with rendering throttled to a progress view, so every core but one serves the simulation. Worth roughly 10 to 15% over speed 5 (est.).</p></div>
+      <div class="card"><h3>Branches side by side</h3><div class="when">P3 to 1.x</div><p>Baseline and fork run on split core sets with one shared presented clock; a pinned window (0196) shows each. A continuous forecast cone ahead of the clock is 20.3's "ensemble from here" kept running while paused.</p></div>
+      <div class="card"><h3>Day and night, local time</h3><div class="when">P7 · 2.0</div><p>With hours, the map can draw the terminator and local times, and night penalties become visible rather than abstract. Cosmetic at peace, mechanical at war.</p></div>
+      <div class="card"><h3>Real-time crises</h3><div class="when">already in 0132</div><p>"Thirteen days" pacing for nuclear standoffs, bank runs and coups now runs on hours instead of days, so wall-clock deadlines on event cards line up with the in-game clock.</p></div>
+    </div>
+    <p class="cap">Considered and set aside: slowing one region while others run (one world has one clock; replay the day instead); overlapping a month's war days with the next month's economy (needs a one-month lag in war's effects on the economy, a model change); optimistic parallel simulation with rollback (Time Warp) and Parareal (both rejected earlier for the econ core on cost and complexity).</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">4 · Smooth time, stable frames</div>
+    <h2>The simulation never draws, and the screen never waits</h2>
+    <p>The core rule: the frame loop never calls into a tick, and a tick never waits on a frame. Everything below follows from it, and none of it touches state, so run hashes do not move.</p>
+
+    <div class="fig" role="img" aria-label="Pipeline: simulation pool writes finished ticks into a ring ahead of the presented time; presenter at display refresh interpolates between two ticks; GPU draws; an edit at the view tick discards ticks ahead">
+      <svg viewBox="0 0 800 250" xmlns="http://www.w3.org/2000/svg" font-family="IBM Plex Sans, system-ui, sans-serif">
+        <rect width="800" height="250" fill="#0f1c27"/>
+        <rect x="20" y="30" width="170" height="120" rx="8" fill="#161f2a" stroke="#3a4757"/>
+        <text x="34" y="54" fill="#c9a253" font-size="11" letter-spacing="1">SIM POOL</text>
+        <text x="34" y="76" fill="#ece8e0" font-size="12">P-cores minus one</text>
+        <text x="34" y="96" fill="#a3a9b0" font-size="12">monthly, daily, hourly</text>
+        <text x="34" y="116" fill="#a3a9b0" font-size="12">fixed step, deterministic</text>
+        <text x="34" y="136" fill="#a3a9b0" font-size="12">publishes, never blocks</text>
+        <path d="M190 90 L250 90" stroke="#e2c27a" stroke-width="1.5" marker-end="url(#ar)"/>
+        <defs><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L8 4 L0 8z" fill="#e2c27a"/></marker></defs>
+        <text x="255" y="40" fill="#c9a253" font-size="11" letter-spacing="1">RING OF FINISHED TICKS</text>
+        <g font-family="IBM Plex Mono, monospace" font-size="12">
+          <rect x="255" y="60" width="62" height="60" rx="2" fill="#1c2734" stroke="#3a4757"/><text x="268" y="95" fill="#a3a9b0">t−1</text>
+          <rect x="321" y="60" width="62" height="60" rx="2" fill="#c9a253"/><text x="342" y="95" fill="#14100a">t</text>
+          <rect x="387" y="60" width="62" height="60" rx="2" fill="#c9a253"/><text x="400" y="95" fill="#14100a">t+1</text>
+          <rect x="453" y="60" width="62" height="60" rx="2" fill="#1c2734" stroke="#e2c27a" stroke-dasharray="3 3"/><text x="466" y="95" fill="#e2c27a">t+2</text>
+          <rect x="519" y="60" width="62" height="60" rx="2" fill="#1c2734" stroke="#e2c27a" stroke-dasharray="3 3"/><text x="532" y="95" fill="#e2c27a">t+3</text>
+        </g>
+        <line x1="352" y1="130" x2="418" y2="130" stroke="#ece8e0"/>
+        <circle cx="371" cy="130" r="5" fill="#ece8e0"/>
+        <text x="300" y="152" fill="#ece8e0" font-size="11">presented time τ, lerp(t, t+1)</text>
+        <text x="455" y="152" fill="#e2c27a" font-size="11">run-ahead, dropped on edit</text>
+        <path d="M581 90 L630 90" stroke="#e2c27a" stroke-width="1.5" marker-end="url(#ar)"/>
+        <rect x="635" y="30" width="150" height="120" rx="8" fill="#161f2a" stroke="#3a4757"/>
+        <text x="649" y="54" fill="#c9a253" font-size="11" letter-spacing="1">FRAME LOOP</text>
+        <text x="649" y="76" fill="#ece8e0" font-size="12">main thread, vsync</text>
+        <text x="649" y="96" fill="#a3a9b0" font-size="12">8.3 ms at 120 Hz</text>
+        <text x="649" y="116" fill="#a3a9b0" font-size="12">upload 2 buffers + t</text>
+        <text x="649" y="136" fill="#a3a9b0" font-size="12">shader interpolates</text>
+        <text x="20" y="190" fill="#a3a9b0" font-size="12">Each finished tick publishes an immutable view: map-mode values per province (4,796 × 4 B ≈ 19 KB), changed cells, unit positions, new events.</text>
+        <text x="20" y="210" fill="#a3a9b0" font-size="12">The frame loop takes the latest pair by an atomic swap. Panels refresh when the presented tick changes, not every frame.</text>
+        <text x="20" y="230" fill="#a3a9b0" font-size="12">If the ring runs dry, τ eases down instead of stalling; if it fills, the sim waits. Either way no frame is skipped.</text>
+      </svg>
+    </div>
+
+    <div class="tricks">
+      <div class="trick"><span class="n">01</span><div><h3>Fixed step for the sim, vsync for the screen</h3><p>The simulation advances in fixed ticks on its own pool; the frame loop runs at display refresh and only reads. This is the classic "fix your timestep" pattern, with Ceteris's ticks as the fixed step. ADR 0088's map-as-texture through Slint's rendering notifier already fits it.</p></div></div>
+      <div class="trick"><span class="n">02</span><div><h3>Run-ahead ring with a rate governor</h3><p>A small ring (2 to 4 ticks, or about half a second of presented time) absorbs uneven tick costs: a 35 ms peace month next to a 900 ms world-war month. The presented clock moves at the chosen speed and is eased toward what the ring can sustain, so a slow month shows as a gentle slow-down, never a hitch.</p></div></div>
+      <div class="trick"><span class="n">03</span><div><h3>Interpolate on the GPU</h3><p>Upload the two bracketing ticks' values once per tick and a single interpolation factor per frame; the fill shader mixes them through the feature colour texture of 0010 and 0011. Per-frame CPU cost is near zero. Units move along their path between hourly or daily positions as instanced sprites from a symbol atlas (NATO symbols at operational zoom, 0166).</p></div></div>
+      <div class="trick"><span class="n">04</span><div><h3>Upload only what changed</h3><p>About 4.1 million land cells at H3 resolution 6 (est.) carry war control, but a day changes a few thousand. Send a list of (cell, value) pairs and scatter them with a compute pass. Front lines rebuild only for changed segments.</p></div></div>
+      <div class="trick"><span class="n">05</span><div><h3>Give each thread a core class</h3><p>On an M4 Pro: the frame loop at user-interactive priority on a performance core; the sim pool on the remaining performance cores, not all of them; history compression, snapshot writes and ensemble lanes at utility priority, where macOS places them on efficiency cores. Separate pools, so an ensemble can never steal the frame loop's core.</p></div></div>
+      <div class="trick"><span class="n">06</span><div><h3>Nothing slow on the frame loop</h3><p>No allocation, file I/O or locks while drawing. Shader pipelines compiled and cached at start, the glyph atlas warmed, pack files memory-mapped. Panel models diff visible rows only (0088). Frame time measured with GPU timestamps; the target is the 99th percentile under 8.3 ms, not the mean.</p></div></div>
+      <div class="trick"><span class="n">07</span><div><h3>Sleep what is quiet</h3><p>Sim side: no war means no sub-tick (0145); reserves and quiet fronts wake on events; rare events use sampled next-event times (19.4). Tick cost then tracks what is happening, not the size of the world.</p></div></div>
+      <div class="trick"><span class="n">08</span><div><h3>Overlap tick tails</h3><p>Writing history and snapshots for tick t runs on a background thread while tick t+1 computes; it only reads t's published view. The 0097 typed, compressed history makes that write small.</p></div></div>
+      <div class="trick"><span class="n">09</span><div><h3>Theatres in parallel</h3><p>0145 already allows theatres with no shared supply edge or front to run concurrently, reduced in theatre-ID order. This is the main lever for world wars, since the econ tick's parallelism across goods is spent (0097).</p></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">5 · Where it lands</div>
+    <h2>Fit with the 0207 plan</h2>
+    <div class="tablebox"><table>
+      <thead><tr><th>Piece</th><th>Phase</th><th>Size (est.)</th><th>Touches</th></tr></thead>
+      <tbody>
+        <tr><td>Sim and frame loop split, run-ahead ring, GPU interpolation, speed levels in sim time, thread classes</td><td>App shell (1.0)</td><td class="num">1–2 wks</td><td>0088 stage 1 exit criteria; 20.3</td></tr>
+        <tr><td>Think ahead while paused; run to next event</td><td>App shell or P3</td><td class="num">0.5 wk</td><td>0188 (edits at view tick)</td></tr>
+        <tr><td>Scrub from history; recent-tick delta ring</td><td>P3 (1.0)</td><td class="num">1 wk</td><td>14.3, P3 copy-on-write chunks</td></tr>
+        <tr><td>Auto-pace, branches side by side, live forecast cone</td><td>1.x minors</td><td class="num">2–3 wks</td><td>0188, 0196, 20.3</td></tr>
+        <tr><td>Sparse hourly phase, hour in draw keys, day replay, day and night</td><td>P7 (2.0)</td><td class="num">3–5 wks on top of W1–W4</td><td>Amends 0145, 0149; 0132, 0147, 0150, 0151</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Open decisions</div>
+    <h2>Posed as cards in the thread</h2>
+    <div class="q"><b>War clock resolution.</b> Recommended: daily commit with a sparse hourly phase (option B).</div>
+    <div class="q"><b>What a speed level means.</b> Recommended: simulated time per second, constant across peace and war.</div>
+    <div class="q"><b>Run-ahead and thinking while paused.</b> Recommended: both, on idle cores.</div>
+    <div class="q"><b>ADRs.</b> Recommended: one for the presentation pipeline and time controls (App shell), one amending 0145 and 0149 for the hourly phase (P7).</div>
+  </section>
+</div>

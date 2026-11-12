@@ -1,0 +1,324 @@
+<title>Ceteris Modular</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap">
+<style>
+/* Layout: a Eurorack case. A transport rail, a row of state modules (sections, drift, register), a row of voice modules, then the patch matrix and scopes. */
+:root{
+  --case:#12171B;--rail:#0B0F12;--panel:#1C252C;--panel-2:#243039;--edge:#34434E;
+  --silk:#DCE2DC;--dim:#8C9AA3;--faint:#55646E;
+  --cv:#E2A33B;--audio:#4FB3A9;--gate:#D6455D;--jump:#C2477E;--ok:#7DB46C;
+  --f-title:"Source Serif 4",Georgia,serif;--f-ui:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;--f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--case);color:var(--silk);font:14px/1.45 var(--f-ui);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
+.wrap{max-width:1240px;margin:0 auto;display:grid;gap:14px}
+h1{font:600 26px/1.1 var(--f-title);margin:0;text-wrap:balance}
+.lede{margin:4px 0 0;color:var(--dim);max-width:70ch}
+.k{font:500 10.5px var(--f-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.rail{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:end;background:var(--rail);border:1px solid var(--edge);padding:12px 14px}
+.ctl{display:grid;gap:4px;min-width:0}
+.ctl output{font:500 12px var(--f-mono);color:var(--cv)}
+input[type=range]{width:150px;accent-color:var(--cv)}
+input[type=text]{font:500 13px var(--f-mono);background:var(--panel);color:var(--silk);border:1px solid var(--edge);padding:6px 8px;width:150px}
+button{font:500 13px var(--f-ui);color:var(--silk);background:var(--panel-2);border:1px solid var(--edge);padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--dim)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--cv);outline-offset:2px}
+button.go{background:var(--cv);color:#1A1206;border-color:var(--cv);font-weight:600;min-width:84px}
+button.go.on{background:var(--gate);border-color:var(--gate);color:#fff}
+.events{display:flex;flex-wrap:wrap;gap:6px}
+.events button{font-size:12px;padding:5px 9px}
+.row{display:grid;gap:14px}
+.r3{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) minmax(0,1fr)}
+@media (max-width:900px){.r3{grid-template-columns:1fr}}
+.mod{background:var(--panel);border:1px solid var(--edge);padding:10px 12px 12px;display:grid;gap:8px;align-content:start;min-width:0;position:relative}
+.mod::before,.mod::after{content:"";position:absolute;top:5px;width:5px;height:5px;border-radius:50%;background:var(--faint)}
+.mod::before{left:5px}.mod::after{right:5px}
+.mod h2{margin:0;font:600 11px var(--f-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--silk)}
+.mod p{margin:0;font-size:12.5px;color:var(--dim)}
+canvas,svg.v{display:block;width:100%;height:auto}
+.voices{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.voice .top{display:flex;justify-content:space-between;align-items:center}
+.led{width:10px;height:10px;border-radius:50%;background:var(--faint);transition:background .06s,box-shadow .06s}
+.led.hit{background:var(--gate);box-shadow:0 0 8px var(--gate)}
+.voice input[type=range]{width:100%}
+.voice label{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--dim)}
+.steps{display:grid;grid-template-columns:repeat(16,1fr);gap:2px}
+.steps i{display:block;height:6px;background:var(--case)}
+.steps i.on{background:var(--audio)}.steps i.cur{outline:1px solid var(--silk)}
+.tm{display:grid;grid-template-columns:repeat(16,1fr);gap:3px}
+.tm i{display:block;aspect-ratio:1;border:1px solid var(--edge);border-radius:50%}
+.tm i.on{background:var(--cv);border-color:var(--cv)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px}
+.kv dt{color:var(--dim)}.kv dd{margin:0;font-family:var(--f-mono)}
+.matrix-wrap{overflow-x:auto}
+table.mx{border-collapse:collapse;font-size:12px;min-width:760px}
+.mx th{font:500 11px var(--f-ui);color:var(--dim);padding:4px 6px;text-align:left;white-space:nowrap}
+.mx thead th{writing-mode:vertical-rl;transform:rotate(180deg);height:110px;vertical-align:bottom;text-align:left}
+.mx td{padding:2px}
+.cell{width:34px;height:26px;border:1px solid var(--edge);background:var(--panel-2);position:relative;cursor:pointer;padding:0}
+.cell span{position:absolute;left:50%;top:3px;bottom:3px;width:0;background:var(--cv)}
+.cell.neg span{background:var(--audio)}
+.cell:hover{border-color:var(--silk)}
+.log{font:12px/1.5 var(--f-mono);color:var(--dim);max-height:180px;overflow:auto;margin:0;padding:0;list-style:none}
+.log li b{color:var(--silk);font-weight:500}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--dim)}
+.sw{display:inline-block;width:10px;height:3px;vertical-align:middle;margin-right:5px}
+.foot{font-size:12.5px;color:var(--dim);max-width:90ch}
+@media (prefers-reduced-motion:reduce){.led{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Ceteris Modular</h1>
+    <p class="lede">A generative patch for the score of a run. Three slow controls from the game (mood, tension, era) steer stochastic processes, and those processes play a modular synth: drifting voltages, self-exciting jumps, a Markov chain over sections, and a Turing-machine register. Same seed, same music.</p>
+  </header>
+
+  <div class="rail" aria-label="Transport and game controls">
+    <button class="go" id="go" type="button">Start</button>
+    <div class="ctl"><span class="k">Run seed</span><input type="text" id="seed" value="ES-2000-7f3a" spellcheck="false"></div>
+    <div class="ctl"><span class="k">Mood <output id="moodv"></output></span><input type="range" id="mood" min="-1" max="1" step="0.01" value="0.1"></div>
+    <div class="ctl"><span class="k">Tension <output id="tenv"></output></span><input type="range" id="ten" min="0" max="1" step="0.01" value="0.35"></div>
+    <div class="ctl"><span class="k">Era <output id="erav"></output></span><input type="range" id="era" min="2000" max="2030" step="1" value="2000"></div>
+    <div class="ctl"><span class="k">Volume</span><input type="range" id="vol" min="0" max="1" step="0.01" value="0.6"></div>
+    <div class="ctl"><span class="k">Game events</span><div class="events">
+      <button type="button" data-ev="war">War declared</button><button type="button" data-ev="crash">Market crash</button><button type="button" data-ev="win">Election won</button><button type="button" data-ev="treaty">Treaty signed</button></div></div>
+  </div>
+
+  <div class="row r3">
+    <section class="mod" aria-labelledby="h-sec"><h2 id="h-sec">Section chain</h2>
+      <svg class="v" id="graph" viewBox="0 0 300 220" aria-label="Markov chain over sections"></svg>
+      <dl class="kv"><dt>Section</dt><dd id="secv">Drift</dd><dt>Bar</dt><dd id="barv">0</dd><dt>Tempo</dt><dd id="bpmv">0</dd><dt>Scale</dt><dd id="sclv">-</dd><dt>Chord</dt><dd id="chv">-</dd></dl>
+      <p>Every 8 bars the chain draws its next section. Tension tilts it toward Build and Peak; mood toward Break and Drift; a big jump can force a move early.</p>
+    </section>
+    <section class="mod" aria-labelledby="h-drift"><h2 id="h-drift">Drift and jumps</h2>
+      <canvas id="trace" width="640" height="250" aria-label="Trace of the drift voltage and jump intensity"></canvas>
+      <div class="legend"><span><i class="sw" style="background:var(--cv)"></i>OU drift voltage</span><span><i class="sw" style="background:var(--jump)"></i>Hawkes jump intensity</span><span><i class="sw" style="background:var(--audio)"></i>S&amp;H</span><span>Bands: section</span></div>
+      <p>dX = θ(μ − X)dt + σ dW, with μ set by the section and σ by tension. Jumps arrive as a self-exciting process: each one raises the chance of the next, so crises cluster.</p>
+    </section>
+    <section class="mod" aria-labelledby="h-tm"><h2 id="h-tm">Turing register</h2>
+      <div class="tm" id="tm"></div>
+      <dl class="kv"><dt>Flip chance</dt><dd id="lockv">0</dd><dt>Value</dt><dd id="tmv">0</dd><dt>Clocks</dt><dd>lead /2, bell /3, string /5, chord /32</dd></dl>
+      <p>A 16-bit shift register loops a melody; each clock, one bit may flip. Low tension locks the loop, high tension lets it mutate. Read through a scale quantizer.</p>
+      <div class="steps" id="steps" aria-hidden="true"></div>
+    </section>
+  </div>
+
+  <section class="mod" aria-labelledby="h-voices"><h2 id="h-voices">Voices</h2>
+    <div class="voices" id="voices"></div>
+  </section>
+
+  <section class="mod" aria-labelledby="h-mx"><h2 id="h-mx">Patch matrix</h2>
+    <p>Rows are modulation sources, columns are destinations. Each lit cell is a real cable: a gain node from the source into the destination's audio parameter, so the LFO and the third oscillator modulate at audio rate. Click a cell to cycle its depth (0, +¼, +½, +1, −½).</p>
+    <div class="matrix-wrap"><table class="mx" id="mx"></table></div>
+    <div class="events"><button type="button" id="rpatch">Randomize patch from seed</button><button type="button" id="dpatch">Default patch</button><button type="button" id="cpatch">Clear</button></div>
+  </section>
+
+  <div class="row r3">
+    <section class="mod" aria-labelledby="h-scope"><h2 id="h-scope">Scope</h2><canvas id="scope" width="520" height="200" aria-label="Oscilloscope of the master output"></canvas></section>
+    <section class="mod" aria-labelledby="h-spec"><h2 id="h-spec">Spectrum</h2><canvas id="spec" width="720" height="200" aria-label="Spectrum of the master output"></canvas></section>
+    <section class="mod" aria-labelledby="h-log"><h2 id="h-log">Event log</h2><ul class="log" id="log"></ul></section>
+  </div>
+
+  <p class="foot">Engine: Web Audio in this mock; the game build would run the same patch in fundsp (ADR 0137). Effects: ping-pong dub delay with filtered feedback, seeded convolution reverb, pad chorus, wavefolder, sidechain ducking and a bus compressor. All randomness comes from a counter-based hash of the seed, the stream and the step, so the score does not depend on timing or frame rate.</p>
+</div>
+
+<script>
+(() => {
+"use strict";
+const $=id=>document.getElementById(id);
+// ---------- seeded, counter-based randomness ----------
+let SEED=0;
+const hashStr=s=>{let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;};
+const H=(a,b,c)=>{let h=Math.imul(a^0x9E3779B9,0x85EBCA6B)^Math.imul(b+0x632BE5AB,0xC2B2AE35)^Math.imul(c+SEED,0x27D4EB2F);h^=h>>>15;h=Math.imul(h,0x2C1B3C6D);h^=h>>>12;h=Math.imul(h,0x297A2D39);h^=h>>>15;return (h>>>0)/4294967296;};
+const U=(stream,step,k=0)=>H(stream*7919+k,step,stream);
+const G=(stream,step)=>{const u=Math.max(1e-9,U(stream,step,1)),v=U(stream,step,2);return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);};
+const S={OU:1,HAWK:2,MARK:3,TM:4,KICK:5,HAT:6,CLAP:7,BASS:8,LEAD:9,BELL:10,STR:11,CHORD:12,SH:13,PATCH:14,MISC:15,VEL:16};
+// ---------- musical tables ----------
+const SCALES={phrygian:[0,1,3,5,7,8,10],aeolian:[0,2,3,5,7,8,10],dorian:[0,2,3,5,7,9,10],mixolydian:[0,2,4,5,7,9,10],lydian:[0,2,4,6,7,9,11],harmonic:[0,2,3,5,7,8,11]};
+const SECTIONS=["Drift","Pulse","Build","Peak","Break","Dissolve"];
+const SEC_COL=["#3B5566","#2F5C55","#6B5A2C","#6E2F42","#4A3F66","#33404A"];
+const BASEP=[[.35,.35,.1,0,.1,.1],[.1,.35,.35,.05,.1,.05],[0,.1,.25,.55,.1,0],[0,.15,.1,.35,.3,.1],[.15,.2,.35,.1,.1,.1],[.5,.2,.05,0,.1,.15]];
+const SECDEF=[ // mu for OU, drum density, which voices, tempo offset
+ {mu:-.5,dens:0,v:{kick:0,hat:0,clap:0,bass:0,lead:.3,bell:.6,str:.5,pad:1,drone:1}},
+ {mu:0,dens:.5,v:{kick:1,hat:.6,clap:.4,bass:1,lead:.4,bell:.2,str:.3,pad:.6,drone:.6}},
+ {mu:.4,dens:.8,v:{kick:1,hat:1,clap:.8,bass:1,lead:.8,bell:.2,str:.2,pad:.8,drone:.3}},
+ {mu:.9,dens:1,v:{kick:1,hat:1,clap:1,bass:1,lead:1,bell:.4,str:.2,pad:1,drone:.2}},
+ {mu:-.2,dens:.15,v:{kick:0,hat:.4,clap:0,bass:.5,lead:.5,bell:.9,str:.7,pad:1,drone:.8}},
+ {mu:-.8,dens:0,v:{kick:0,hat:0,clap:0,bass:0,lead:0,bell:.3,str:.4,pad:.7,drone:1}}];
+const CHORDS=[0,3,4,5,2,6]; // scale degrees i iv v VI III VII
+const CHORDP=[[.1,.3,.2,.25,.05,.1],[.3,.05,.35,.1,.1,.1],[.5,.1,.05,.2,.05,.1],[.2,.35,.15,.05,.15,.1],[.15,.2,.1,.4,.05,.1],[.45,.15,.15,.15,.1,0]];
+const mtof=m=>440*2**((m-69)/12);
+// ---------- state ----------
+const st={mood:.1,ten:.35,era:2000,sec:0,bar:0,step:0,ou:0,sh:0,lam:0,hawkT:[],jumps:[],tm:0,chord:0,root:45,bpm:128,scale:"aeolian",hist:[],tmFlip:0,bassPrev:null,forced:null};
+const VOICES=["kick","hat","clap","bass","lead","bell","str","pad","drone"];
+const VNAME={kick:"Kick",hat:"Hats",clap:"Clap",bass:"Acid bass",lead:"Folded lead",bell:"FM bell",str:"Feedback string",pad:"Supersaw pad",drone:"Drone"};
+const VDESC={kick:"Pitch-swept sine, click, ducks the mix",hat:"Filtered noise, Euclidean",clap:"Triple noise burst",bass:"Two saws, 24 dB filter, slide",lead:"Square into wavefolder",bell:"2-op FM, index envelope",str:"Karplus loop in a delay feedback",pad:"8 saws, chorus, Markov chords",drone:"Root and fifth through resonant band"};
+const mix={},mute={},trig={};VOICES.forEach(v=>{mix[v]=v==="drone"?.5:.8;mute[v]=false;trig[v]=new Array(16).fill(0);});
+// ---------- audio graph ----------
+let A=null,nodes={},sources={},dests={},cables={},noiseBuf=null;
+function buildIR(ctx,secs){const n=ctx.sampleRate*secs,b=ctx.createBuffer(2,n,ctx.sampleRate);for(let c=0;c<2;c++){const d=b.getChannelData(c);for(let i=0;i<n;i++)d[i]=(H(77+c,i,3)*2-1)*Math.pow(1-i/n,2.6);}return b;}
+function foldCurve(){const n=2048,c=new Float32Array(n);for(let i=0;i<n;i++){const x=i/(n-1)*2-1;c[i]=Math.sin(x*Math.PI*1.5)*.8;}return c;}
+function init(){A=new (window.AudioContext||window.webkitAudioContext)();const t=A.currentTime;
+  noiseBuf=A.createBuffer(1,A.sampleRate*2,A.sampleRate);{const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=H(5,i,9)*2-1;}
+  const master=A.createGain();master.gain.value=+$("vol").value;const comp=A.createDynamicsCompressor();comp.threshold.value=-14;comp.ratio.value=3;comp.attack.value=.01;comp.release.value=.2;
+  const an=A.createAnalyser();an.fftSize=2048;const clip=A.createWaveShaper();{const c=new Float32Array(1025);for(let i=0;i<1025;i++){const x=i/512-1;c[i]=Math.tanh(x*1.6)/Math.tanh(1.6);}clip.curve=c;}comp.connect(master).connect(clip).connect(an).connect(A.destination);
+  const duck=A.createGain();duck.connect(comp);const dry=A.createGain();dry.connect(comp);
+  // delay (ping-pong, filtered feedback)
+  const dIn=A.createGain(),dL=A.createDelay(2),dR=A.createDelay(2),fb=A.createGain(),fbf=A.createBiquadFilter(),mg=A.createChannelMerger(2),dOut=A.createGain();
+  fbf.type="bandpass";fbf.frequency.value=1600;fbf.Q.value=.6;fb.gain.value=.45;dOut.gain.value=.55;
+  dIn.connect(dL);dL.connect(dR);dR.connect(fbf).connect(fb).connect(dL);dL.connect(mg,0,0);dR.connect(mg,0,1);mg.connect(dOut).connect(comp);
+  // reverb
+  const rIn=A.createGain(),conv=A.createConvolver(),rOut=A.createGain();conv.buffer=buildIR(A,3.4);rOut.gain.value=.5;rIn.connect(conv).connect(rOut).connect(comp);
+  nodes={master,comp,an,duck,dry,dIn,dL,dR,fb,rIn,rOut};
+  // per-voice channel strips: gain -> pan -> duck/dry + sends
+  for(const v of VOICES){const g=A.createGain(),p=A.createStereoPanner(),sd=A.createGain(),sr=A.createGain();g.gain.value=mute[v]?0:mix[v];g.connect(p);p.connect(v==="kick"?dry:duck);p.connect(sd).connect(dIn);p.connect(sr).connect(rIn);
+    sd.gain.value={lead:.35,bell:.45,str:.3,clap:.2,hat:.1,pad:.1}[v]||0;sr.gain.value={pad:.5,bell:.5,str:.45,clap:.35,lead:.25,drone:.5}[v]||.05;nodes[v]={g,p,sd,sr};}
+  // bass mono synth
+  {const o1=A.createOscillator(),o2=A.createOscillator(),sub=A.createOscillator(),f1=A.createBiquadFilter(),f2=A.createBiquadFilter(),vca=A.createGain(),sg=A.createGain();
+   o1.type=o2.type="sawtooth";o2.detune.value=9;o1.detune.value=-9;sub.type="sine";sg.gain.value=.5;f1.type=f2.type="lowpass";f1.frequency.value=f2.frequency.value=400;f1.Q.value=8;f2.Q.value=1;vca.gain.value=0;
+   o1.connect(f1);o2.connect(f1);sub.connect(sg).connect(f2);f1.connect(f2).connect(vca).connect(nodes.bass.g);[o1,o2,sub].forEach(o=>{o.frequency.value=55;o.start(t);});
+   nodes.bassS={o1,o2,sub,f1,f2,vca};}
+  // lead: square -> drive -> folder -> filter -> vca
+  {const o=A.createOscillator(),drv=A.createGain(),ws=A.createWaveShaper(),f=A.createBiquadFilter(),vca=A.createGain();o.type="square";drv.gain.value=.6;ws.curve=foldCurve();ws.oversample="4x";f.type="lowpass";f.frequency.value=2400;f.Q.value=4;vca.gain.value=0;
+   o.connect(drv).connect(ws).connect(f).connect(vca).connect(nodes.lead.g);o.start(t);nodes.leadS={o,drv,f,vca};}
+  // feedback string: exciter -> loop(delay -> damp -> fb) -> out
+  {const ex=A.createGain(),d=A.createDelay(1),damp=A.createBiquadFilter(),fbk=A.createGain(),out=A.createGain();damp.type="lowpass";damp.frequency.value=3200;damp.Q.value=-6;fbk.gain.value=.985;d.delayTime.value=1/110;out.gain.value=.9;
+   ex.connect(d);d.connect(damp).connect(fbk).connect(d);damp.connect(out).connect(nodes.str.g);nodes.strS={ex,d,damp,fbk};}
+  // pad bus: filter -> chorus
+  {const f=A.createBiquadFilter(),ch=A.createDelay(.05),lfo=A.createOscillator(),lg=A.createGain(),vca=A.createGain(),mixg=A.createGain();f.type="lowpass";f.frequency.value=1400;f.Q.value=.7;ch.delayTime.value=.014;lfo.frequency.value=.33;lg.gain.value=.004;lfo.connect(lg).connect(ch.delayTime);lfo.start(t);
+   f.connect(vca);f.connect(ch).connect(vca);vca.gain.value=1;vca.connect(nodes.pad.g);nodes.padS={f,voices:[]};}
+  // drone
+  {const o1=A.createOscillator(),o2=A.createOscillator(),n=A.createBufferSource(),bp=A.createBiquadFilter(),ng=A.createGain(),g=A.createGain();o1.type="sine";o2.type="triangle";n.buffer=noiseBuf;n.loop=true;bp.type="bandpass";bp.Q.value=14;bp.frequency.value=220;ng.gain.value=.5;g.gain.value=.12;
+   o1.connect(g);o2.connect(g);n.connect(bp).connect(ng).connect(g);g.connect(nodes.drone.g);[o1,o2,n].forEach(x=>x.start(t));nodes.droneS={o1,o2,bp,g};}
+  // FM index bus
+  {const fmBus=A.createConstantSource();fmBus.offset.value=2.5;fmBus.start(t);nodes.fmBus=fmBus;}
+  // ---------- modulation sources ----------
+  const lfo1=A.createOscillator();lfo1.frequency.value=.07;lfo1.start(t);
+  const lfo2=A.createOscillator();lfo2.type="triangle";lfo2.frequency.value=st.bpm/60/4;lfo2.start(t);
+  const vco3=A.createOscillator();vco3.type="sine";vco3.frequency.value=110*1.5;vco3.start(t);
+  const cs=()=>{const c=A.createConstantSource();c.offset.value=0;c.start(t);return c;};
+  const ou=cs(),jump=cs(),sh=cs(),tm=cs(),kenv=cs();
+  sources={lfo1:{n:lfo1,name:"LFO 1 (sine, 14 s)"},lfo2:{n:lfo2,name:"LFO 2 (triangle, 1 bar)"},vco3:{n:vco3,name:"VCO 3 (audio rate)"},ou:{n:ou,name:"OU drift"},jump:{n:jump,name:"Jump envelope"},sh:{n:sh,name:"Sample and hold"},tm:{n:tm,name:"Turing register"},kenv:{n:kenv,name:"Kick envelope"}};
+  dests={bassCut:{p:nodes.bassS.f1.frequency,r:900,name:"Bass cutoff"},bassQ:{p:nodes.bassS.f1.Q,r:7,name:"Bass resonance"},leadCut:{p:nodes.leadS.f.frequency,r:2000,name:"Lead cutoff"},fold:{p:nodes.leadS.drv.gain,r:1.4,name:"Fold drive"},
+    fm:{p:nodes.fmBus.offset,r:4,name:"FM index"},padCut:{p:nodes.padS.f.frequency,r:1300,name:"Pad cutoff"},damp:{p:nodes.strS.damp.frequency,r:2500,name:"String damping"},
+    dtime:{p:nodes.dL.delayTime,r:.06,name:"Delay time"},dfb:{p:nodes.fb.gain,r:.3,name:"Delay feedback"},rev:{p:nodes.rIn.gain,r:.6,name:"Reverb send"},pan:{p:nodes.lead.p.pan,r:.8,name:"Lead pan"},drone:{p:nodes.droneS.bp.frequency,r:500,name:"Drone band"}};
+  cables={};for(const k in patch)setCable(k,patch[k],true);
+}
+// ---------- patch matrix ----------
+const SRC=["lfo1","lfo2","vco3","ou","jump","sh","tm","kenv"],DST=["bassCut","bassQ","leadCut","fold","fm","padCut","damp","dtime","dfb","rev","pan","drone"];
+const SRCN={lfo1:"LFO 1 (sine, 14 s)",lfo2:"LFO 2 (triangle, 1 bar)",vco3:"VCO 3 (audio rate)",ou:"OU drift",jump:"Jump envelope",sh:"Sample and hold",tm:"Turing register",kenv:"Kick envelope"};
+const DSTN={bassCut:"Bass cutoff",bassQ:"Bass resonance",leadCut:"Lead cutoff",fold:"Fold drive",fm:"FM index",padCut:"Pad cutoff",damp:"String damping",dtime:"Delay time",dfb:"Delay feedback",rev:"Reverb send",pan:"Lead pan",drone:"Drone band"};
+const DEFPATCH={"ou|bassCut":.5,"kenv|bassCut":-.5,"lfo1|padCut":.5,"ou|padCut":.5,"tm|leadCut":.5,"jump|fold":1,"lfo2|fold":.25,"vco3|leadCut":.25,"jump|fm":1,"sh|pan":.5,"lfo1|dtime":.25,"jump|rev":.5,"ou|damp":.5,"lfo2|drone":.5,"jump|dfb":.5};
+let patch={...DEFPATCH};
+function setCable(k,d,silent){if(!d)delete patch[k];else patch[k]=d;if(!A)return;const [s,t]=k.split("|");if(cables[k]){cables[k].disconnect();delete cables[k];}
+  if(d){const g=A.createGain();g.gain.value=d*dests[t].r;sources[s].n.connect(g).connect(dests[t].p);cables[k]=g;}if(!silent)log(`Cable ${SRCN[s]} → ${DSTN[t]} ${d?(d>0?"+":"")+d:"removed"}`);}
+const CYC=[0,.25,.5,1,-.5];
+function drawMatrix(){$("mx").innerHTML=`<thead><tr><th></th>${DST.map(d=>`<th scope="col">${DSTN[d]}</th>`).join("")}</tr></thead><tbody>${SRC.map(s=>`<tr><th scope="row">${SRCN[s]}</th>${DST.map(d=>{const v=patch[s+"|"+d]||0;return `<td><button type="button" class="cell${v<0?" neg":""}" data-k="${s}|${d}" aria-label="${SRCN[s]} to ${DSTN[d]}, depth ${v}"><span style="width:${Math.abs(v)*30}px;margin-left:${-Math.abs(v)*15}px"></span></button></td>`;}).join("")}</tr>`).join("")}</tbody>`;}
+$("mx").addEventListener("click",e=>{const b=e.target.closest(".cell");if(!b)return;const k=b.dataset.k,v=patch[k]||0,n=CYC[(CYC.indexOf(v)+1)%CYC.length];setCable(k,n);drawMatrix();});
+$("rpatch").addEventListener("click",()=>{for(const k of Object.keys(patch))setCable(k,0,true);let i=0;for(const s of SRC)for(const d of DST){const u=U(S.PATCH,i++);if(u<.16)setCable(s+"|"+d,CYC[1+Math.floor(U(S.PATCH,i,5)*4)],true);}log("Patch randomized from the seed");drawMatrix();});
+$("dpatch").addEventListener("click",()=>{for(const k of Object.keys(patch))setCable(k,0,true);for(const k in DEFPATCH)setCable(k,DEFPATCH[k],true);log("Default patch restored");drawMatrix();});
+$("cpatch").addEventListener("click",()=>{for(const k of Object.keys(patch))setCable(k,0,true);log("All cables pulled");drawMatrix();});
+// ---------- voices ----------
+function env(p,t,a,peak,d,sus=0){p.cancelScheduledValues(t);p.setValueAtTime(p.value,t);p.linearRampToValueAtTime(peak,t+a);p.setTargetAtTime(sus,t+a,d/3);}
+function noise(t,dur,type,f,q,gain,out,pan=0){const s=A.createBufferSource();s.buffer=noiseBuf;const fl=A.createBiquadFilter();fl.type=type;fl.frequency.value=f;fl.Q.value=q;const g=A.createGain();g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(gain,t+.002);g.gain.exponentialRampToValueAtTime(.0008,t+dur);s.connect(fl).connect(g).connect(out);s.start(t,(H(9,t*1000|0,1))*1.5);s.stop(t+dur+.05);}
+function kick(t,v){const o=A.createOscillator(),g=A.createGain();o.frequency.setValueAtTime(160,t);o.frequency.exponentialRampToValueAtTime(44,t+.11);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+.003);g.gain.exponentialRampToValueAtTime(.001,t+.5);o.connect(g).connect(nodes.kick.g);o.start(t);o.stop(t+.55);
+  noise(t,.02,"highpass",3000,.7,.3*v,nodes.kick.g);const k=sources.kenv.n.offset;k.cancelScheduledValues(t);k.setValueAtTime(1,t);k.setTargetAtTime(0,t+.01,.09);
+  const d=nodes.duck.gain;d.cancelScheduledValues(t);d.setValueAtTime(.35,t);d.setTargetAtTime(1,t+.02,.08);}
+function hat(t,v,open,pan){nodes.hat.p.pan.setValueAtTime(pan,t);noise(t,open?.28:.045,"highpass",open?7000:8500,.8,.5*v,nodes.hat.g);}
+function clap(t,v){for(let i=0;i<3;i++)noise(t+i*.011,.03,"bandpass",1500,1.2,.6*v,nodes.clap.g);noise(t+.033,.22,"bandpass",1300,.9,.4*v,nodes.clap.g);}
+function bass(t,m,acc,slide,len){const b=nodes.bassS,f=mtof(m);[b.o1,b.o2].forEach(o=>slide?o.frequency.setTargetAtTime(f,t,.03):o.frequency.setValueAtTime(f,t));slide?b.sub.frequency.setTargetAtTime(f/2,t,.03):b.sub.frequency.setValueAtTime(f/2,t);
+  if(!slide){env(b.vca.gain,t,.004,acc?.55:.4,.18+len,0);}const base=220+ (st.ten*500);const p=b.f1.frequency;p.cancelScheduledValues(t);p.setValueAtTime(base+(acc?2600:1300)*(.5+.5*st.mood*.4+.5),t);p.setTargetAtTime(base,t+.005,acc?.09:.06);b.f2.frequency.setValueAtTime(Math.min(8000,base*3),t);b.f1.Q.setValueAtTime(4+st.ten*12,t);}
+function lead(t,m,v,len){const l=nodes.leadS;l.o.frequency.setTargetAtTime(mtof(m),t,.006);env(l.vca.gain,t,.005,.22*v,len,0);l.f.frequency.setValueAtTime(1200+st.ten*2200,t);}
+function bell(t,m,v){const f=mtof(m),ratio=[1,1.41,2,3.5,0.5][Math.floor(U(S.BELL,st.step,4)*5)],c=A.createOscillator(),mo=A.createOscillator(),ge=A.createGain(),gi=A.createGain(),gh=A.createGain(),vca=A.createGain();
+  c.frequency.value=f;mo.frequency.value=f*ratio;ge.gain.setValueAtTime(1,t);ge.gain.setTargetAtTime(.15,t,.25);gi.gain.value=0;nodes.fmBus.connect(gi.gain);gh.gain.value=f*ratio;
+  mo.connect(ge).connect(gi).connect(gh).connect(c.frequency);vca.gain.setValueAtTime(0,t);vca.gain.linearRampToValueAtTime(.18*v,t+.003);vca.gain.exponentialRampToValueAtTime(.0008,t+2.4);c.connect(vca).connect(nodes.bell.g);
+  [c,mo].forEach(o=>{o.start(t);o.stop(t+2.5);});setTimeout(()=>{try{nodes.fmBus.disconnect(gi.gain);}catch(e){}},(t-A.currentTime+2.6)*1000);}
+function string(t,m,v){const s=nodes.strS,f=Math.min(330,mtof(m));s.d.delayTime.setValueAtTime(1/f,t);const src=A.createBufferSource();src.buffer=noiseBuf;const g=A.createGain();g.gain.setValueAtTime(.5*v,t);g.gain.setValueAtTime(0,t+1/f*1.2);src.connect(g).connect(s.ex);src.start(t,H(11,st.step,2));src.stop(t+.05);}
+function padChord(t,notes,dur){const P=nodes.padS;for(const pv of P.voices){pv.g.gain.cancelScheduledValues(t);pv.g.gain.setValueAtTime(pv.g.gain.value,t);pv.g.gain.setTargetAtTime(0,t,.6);pv.os.forEach(o=>o.stop(t+3));}P.voices=[];
+  for(const m of notes){const g=A.createGain();g.gain.setValueAtTime(0,t);g.gain.setTargetAtTime(.045,t,.5);const os=[-14,-5,5,14].slice(0,st.era<2015?4:2).map(dt=>{const o=A.createOscillator();o.type=st.era<2018?"sawtooth":"triangle";o.frequency.value=mtof(m);o.detune.value=dt;o.connect(g);o.start(t);return o;});g.connect(P.f);P.voices.push({g,os});}}
+// ---------- stochastic core ----------
+function scaleFor(){const m=st.mood;return m<-.55?"phrygian":m<-.15?(st.ten>.6?"harmonic":"aeolian"):m<.25?"dorian":m<.6?"mixolydian":"lydian";}
+function q(deg,oct=0){const sc=SCALES[st.scale],n=sc.length,o=Math.floor(deg/n);return st.root+12*(o+oct)+sc[((deg%n)+n)%n];}
+function transRow(i){const t=st.ten,m=st.mood;const tilt=[-.6*t+.4*(1-Math.abs(m)),0,1.2*t,1.6*t-.4,.5*(-m)+.3,-.8*t+.3*(-m)];const r=BASEP[i].map((p,j)=>p*Math.exp(tilt[j]));const s=r.reduce((a,b)=>a+b,0);return r.map(x=>x/s);}
+function pick(row,u){let a=0;for(let j=0;j<row.length;j++){a+=row[j];if(u<a)return j;}return row.length-1;}
+function hawkesLambda(T){const mu=.004+.03*st.ten;return mu+st.hawkT.reduce((a,t0)=>a+.07*Math.exp(-(T-t0)/7),0);}
+let Tsim=0,quiet=false;
+function addJump(size,label){const t=A?A.currentTime:0;st.jumps.push({T:Tsim,size});st.hawkT.push(Tsim);if(st.hawkT.length>40)st.hawkT.shift();
+  if(A){const j=sources.jump.n.offset;j.cancelScheduledValues(t);j.setValueAtTime(Math.max(-1,Math.min(1,size)),t);j.setTargetAtTime(0,t+.05,2.5);}
+  st.ou+=size*.8;if(label&&!quiet)log(`<b>Jump</b> ${label} (${size>0?"+":""}${size.toFixed(2)})`);if(Math.abs(size)>.7)st.forced=size>0?(st.sec===3?4:3):4;}
+function stepProcesses(dt){const st_=st.step;
+  const th=.5,sig=.12+.5*st.ten,mu=SECDEF[st.sec].mu*.8+st.mood*.2;st.ou+=th*(mu-st.ou)*dt+sig*Math.sqrt(dt)*G(S.OU,st_);st.ou=Math.max(-1.5,Math.min(1.5,st.ou));
+  Tsim+=dt;st.lam=hawkesLambda(Tsim);if(U(S.HAWK,st_)<st.lam*dt){const sz=(U(S.HAWK,st_,7)<.5?-1:1)*(.3+.9*U(S.HAWK,st_,8))*(.6+st.ten);addJump(sz,"spontaneous");}
+  if(st_%4===0){st.sh=U(S.SH,st_)*2-1;}
+  if(A){const t=A.currentTime;sources.ou.n.offset.setTargetAtTime(Math.tanh(st.ou),t,.05);sources.sh.n.offset.setValueAtTime(st.sh,t);}
+  if(st_%2===0)st.hist.push({ou:st.ou,lam:st.lam,sh:st.sh,sec:st.sec});if(st.hist.length>640)st.hist.shift();}
+function bjork(k,n,rot=0){const p=[];for(let i=0;i<n;i++)p.push(Math.floor((i+rot)*k/n)!==Math.floor((i+rot-1)*k/n)?1:0);return p;}
+// ---------- sequencer ----------
+let next=0,timer=null;
+function schedule(){const spb=60/st.bpm/4;while(next<A.currentTime+.12){playStep(next,spb);const sw=st.step%2?(st.era<2010?.0:.04):0;next+=spb*(1+(st.step%2?-sw:sw));st.step++;}}
+function playStep(t,spb){const s=st.step,i=s%16,sec=SECDEF[st.sec],act=v=>!mute[v]&&U(S.MISC,s,VOICES.indexOf(v))<sec.v[v]+.001&&sec.v[v]>0;
+  stepProcesses(spb);
+  if(i===0){st.bar++;if(st.bar%8===0||st.forced!=null){const prev=st.sec;st.sec=st.forced!=null?st.forced:pick(transRow(st.sec),U(S.MARK,st.bar));st.forced=null;if(st.sec!==prev)log(`<b>${SECTIONS[st.sec]}</b> from ${SECTIONS[prev]} at bar ${st.bar}`);}
+    const eraBpm=st.era<2010?138:st.era<2020?124:128;st.bpm=Math.round(eraBpm+[-14,-2,2,4,-8,-18][st.sec]+st.ten*6+st.mood*3);if(sources.lfo2)sources.lfo2.n.frequency.setValueAtTime(st.bpm/60/4,t);
+    st.scale=scaleFor();
+    if(st.bar%2===0||st.bar===1){st.chord=pick(CHORDP[st.chord],U(S.CHORD,st.bar));const d=CHORDS[st.chord];if(!mute.pad)padChord(t,[q(d,1),q(d+2,1),q(d+4,1),q(d+6,0)],spb*32);
+      nodes.droneS.o1.frequency.setTargetAtTime(mtof(q(d,-1)),t,.8);nodes.droneS.o2.frequency.setTargetAtTime(mtof(q(d+4,-1)),t,.8);nodes.droneS.g.gain.setTargetAtTime(mute.drone?0:.06+.08*sec.v.drone*(1-Math.tanh(st.ou)*.5),t,1);}
+    if(sources.vco3)sources.vco3.n.frequency.setValueAtTime(mtof(q(CHORDS[st.chord],0))*1.5,t);}
+  VOICES.forEach(v=>trig[v][i]=0);
+  const dens=sec.dens*(.6+.4*Math.tanh(st.ou+.5))+st.ten*.2;
+  if(act("kick")&&(bjork(4,16)[i]||(dens>.85&&i===14&&U(S.KICK,s)<.3))){kick(t,.9);hit("kick",i);}
+  if(act("hat")){const pat=bjork(Math.round(4+dens*9),16,2);if(pat[i]&&U(S.HAT,s)<.5+dens*.5){const open=i%4===2&&dens>.5;hat(t,.4+.5*U(S.VEL,s),open,(U(S.HAT,s,3)-.5)*.6);hit("hat",i);if(dens>.9&&U(S.HAT,s,4)<.15){hat(t+spb/2,.3,false,0);}}}
+  if(act("clap")&&(i===4||i===12)&&dens>.3){clap(t,.8);hit("clap",i);}
+  if(act("bass")){const g=bjork(st.ten>.6?11:7,16,st.bar%3)[i];if(g&&U(S.BASS,s)<.85){const deg=[0,0,2,4,-3,0,5,1][(st.tm>>(i%8))&7],acc=U(S.BASS,s,2)<.25+st.ten*.3,sl=st.bassPrev===i-1&&U(S.BASS,s,3)<.25+st.ten*.35;bass(t,q(CHORDS[st.chord]+deg,-2)+(U(S.BASS,s,4)<.1?12:0),acc,sl,spb);st.bassPrev=i;hit("bass",i);}}
+  if(i%2===0){const flipP=.02+st.ten*.4;st.tmFlip=flipP;const out=(st.tm>>15)&1;let nb=out;if(U(S.TM,s)<flipP)nb^=1;st.tm=((st.tm<<1)|nb)&0xFFFF;if(sources.tm)sources.tm.n.offset.setValueAtTime(((st.tm&0xFF)/255)*2-1,t);
+    if(act("lead")&&U(S.LEAD,s)<.55+dens*.4){const deg=Math.round(((st.tm&0xFF)/255)*10)-2;const rat=dens>.85&&U(S.LEAD,s,2)<.2?3:1;for(let r=0;r<rat;r++)lead(t+r*spb*2/rat,q(CHORDS[st.chord]+deg,0),.8,spb*1.6/rat);hit("lead",i);}}
+  if(s%3===0&&act("bell")&&U(S.BELL,s)<.35+.3*(1-dens)){bell(t,q(CHORDS[st.chord]+[0,2,4,7,9][Math.floor(U(S.BELL,s,2)*5)],1),.7+.3*U(S.VEL,s,1));hit("bell",i);}
+  if(s%5===0&&act("str")&&U(S.STR,s)<.7){string(t,q(CHORDS[st.chord]+Math.floor(U(S.STR,s,2)*5),-1),.8);hit("str",i);}
+  if(st.sec===2&&i===0&&!mute.pad){noise(t,spb*16,"bandpass",400+st.bar%8*500,6,.08,nodes.pad.g);}
+  const delay=Math.max(0,(t-A.currentTime)*1000);setTimeout(()=>ui(i),delay);}
+function hit(v,i){trig[v][i]=1;}
+// ---------- UI ----------
+function log(html){const li=document.createElement("li");const T=A?A.currentTime:0;li.innerHTML=`<span>${String(Math.floor(T/60)).padStart(2,"0")}:${String(Math.floor(T%60)).padStart(2,"0")}</span> ${html}`;const L=$("log");L.prepend(li);while(L.children.length>60)L.lastChild.remove();}
+function buildVoices(){$("voices").innerHTML=VOICES.map(v=>`<div class="mod voice" style="background:var(--panel-2)"><div class="top"><h2>${VNAME[v]}</h2><i class="led" id="led-${v}"></i></div><p>${VDESC[v]}</p><input type="range" id="lv-${v}" min="0" max="1" step="0.01" value="${mix[v]}" aria-label="${VNAME[v]} level"><label><input type="checkbox" id="mu-${v}"> Mute</label><div class="steps" id="st-${v}">${"<i></i>".repeat(16)}</div></div>`).join("");
+  VOICES.forEach(v=>{$("lv-"+v).addEventListener("input",e=>{mix[v]=+e.target.value;if(A)nodes[v].g.gain.setTargetAtTime(mute[v]?0:mix[v],A.currentTime,.02);});$("mu-"+v).addEventListener("change",e=>{mute[v]=e.target.checked;if(A)nodes[v].g.gain.setTargetAtTime(mute[v]?0:mix[v],A.currentTime,.02);});});}
+function ui(i){VOICES.forEach(v=>{const led=$("led-"+v);if(trig[v][i]){led.classList.add("hit");setTimeout(()=>led.classList.remove("hit"),90);}const cells=$("st-"+v).children;cells[i].className=trig[v][i]?"on cur":"cur";const pc=cells[(i+15)%16];pc.classList.remove("cur");});
+  const tmEls=$("tm").children;for(let b=0;b<16;b++)tmEls[b].className=(st.tm>>(15-b))&1?"on":"";
+  $("secv").textContent=SECTIONS[st.sec];$("barv").textContent=st.bar;$("bpmv").textContent=st.bpm+" bpm";$("sclv").textContent=NOTE[st.root%12]+" "+st.scale;$("chv").textContent=["i","iv","v","VI","III","VII"][st.chord];$("lockv").textContent=(st.tmFlip*100).toFixed(0)+"% per clock";$("tmv").textContent=st.tm.toString(16).toUpperCase().padStart(4,"0");
+  if(i%4===0)drawGraph();}
+const NOTE=["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
+function drawGraph(){const cx=150,cy=108,R=78,pos=SECTIONS.map((_,k)=>[cx+R*Math.cos(k/6*2*Math.PI-Math.PI/2),cy+R*Math.sin(k/6*2*Math.PI-Math.PI/2)]),row=transRow(st.sec);let s="";
+  row.forEach((p,j)=>{if(j===st.sec||p<.01)return;const [x0,y0]=pos[st.sec],[x1,y1]=pos[j],mx=(x0+x1)/2+(y1-y0)*.15,my=(y0+y1)/2-(x1-x0)*.15;s+=`<path d="M${x0} ${y0} Q${mx} ${my} ${x1} ${y1}" fill="none" stroke="var(--cv)" stroke-opacity="${.25+p}" stroke-width="${.6+p*9}"/><text x="${mx}" y="${my}" fill="var(--dim)" font-size="9" font-family="IBM Plex Mono,monospace" text-anchor="middle">${(p*100).toFixed(0)}</text>`;});
+  SECTIONS.forEach((n,k)=>{const [x,y]=pos[k],on=k===st.sec;s+=`<circle cx="${x}" cy="${y}" r="${on?20:16}" fill="${SEC_COL[k]}" stroke="${on?"var(--silk)":"var(--edge)"}" stroke-width="${on?2:1}"/><text x="${x}" y="${y+3.5}" fill="var(--silk)" font-size="${on?10:9}" font-family="IBM Plex Sans Condensed,sans-serif" text-anchor="middle" font-weight="${on?600:400}">${n}</text>`;});
+  s+=`<text x="${cx}" y="${cy+4}" fill="var(--dim)" font-size="9" text-anchor="middle" font-family="IBM Plex Mono,monospace">stay ${(row[st.sec]*100).toFixed(0)}%</text>`;$("graph").innerHTML=s;}
+function drawTrace(){const c=$("trace"),g=c.getContext("2d"),W=c.width,Hh=c.height,h=st.hist,n=640;g.fillStyle="#0E1317";g.fillRect(0,0,W,Hh);
+  h.forEach((p,k)=>{g.fillStyle=SEC_COL[p.sec];g.globalAlpha=.35;g.fillRect(W-(h.length-k)*W/n,0,W/n+1,Hh);});g.globalAlpha=1;
+  g.strokeStyle="#34434E";g.lineWidth=1;for(const y of [-1,0,1]){g.beginPath();g.moveTo(0,Hh/2-y*Hh*.32);g.lineTo(W,Hh/2-y*Hh*.32);g.stroke();}
+  const line=(f,col,w)=>{g.strokeStyle=col;g.lineWidth=w;g.beginPath();h.forEach((p,k)=>{const x=W-(h.length-k)*W/n,y=f(p);k?g.lineTo(x,y):g.moveTo(x,y);});g.stroke();};
+  line(p=>Hh/2-p.sh*Hh*.32,"rgba(79,179,169,.6)",1);line(p=>Hh-6-Math.min(1,p.lam*4)*(Hh-12),"#C2477E",1.4);line(p=>Hh/2-Math.max(-1.4,Math.min(1.4,p.ou))*Hh*.32,"#E2A33B",2);
+  g.fillStyle="#8C9AA3";g.font="11px IBM Plex Mono,monospace";g.fillText("+1",4,Hh/2-Hh*.32-3);g.fillText(" 0",4,Hh/2-3);g.fillText("−1",4,Hh/2+Hh*.32-3);}
+function drawScope(){if(!A)return;const an=nodes.an,c=$("scope"),g=c.getContext("2d"),W=c.width,Hh=c.height,d=new Float32Array(an.fftSize);an.getFloatTimeDomainData(d);g.fillStyle="#0E1317";g.fillRect(0,0,W,Hh);
+  let z=0;for(let i=1;i<d.length/2;i++)if(d[i-1]<0&&d[i]>=0){z=i;break;}g.strokeStyle="#4FB3A9";g.lineWidth=1.6;g.beginPath();for(let x=0;x<W;x++){const v=d[z+Math.floor(x*1024/W)]||0;const y=Hh/2-v*Hh*.45;x?g.lineTo(x,y):g.moveTo(x,y);}g.stroke();
+  const s=$("spec"),q2=s.getContext("2d"),SW=s.width,SH=s.height,f=new Uint8Array(an.frequencyBinCount);an.getByteFrequencyData(f);q2.fillStyle="#0E1317";q2.fillRect(0,0,SW,SH);
+  for(let x=0;x<SW;x++){const fr=20*Math.pow(1000,x/SW),bin=Math.min(f.length-1,Math.round(fr/(A.sampleRate/2)*f.length)),v=f[bin]/255;q2.fillStyle=`rgba(226,163,59,${.25+.7*v})`;q2.fillRect(x,SH-v*SH,1,v*SH);}
+  q2.fillStyle="#8C9AA3";q2.font="11px IBM Plex Mono,monospace";[[100,"100"],[1000,"1k"],[10000,"10k"]].forEach(([fr,l])=>{const x=Math.log(fr/20)/Math.log(1000)*SW;q2.fillText(l,x+2,12);q2.fillRect(x,0,1,SH);});}
+function frame(){drawTrace();drawScope();requestAnimationFrame(frame);}
+// ---------- controls ----------
+function readCtl(){st.mood=+$("mood").value;st.ten=+$("ten").value;st.era=+$("era").value;$("moodv").textContent=(st.mood>0?"+":"")+st.mood.toFixed(2);$("tenv").textContent=st.ten.toFixed(2);$("erav").textContent=st.era;}
+["mood","ten","era"].forEach(id=>$(id).addEventListener("input",readCtl));
+$("vol").addEventListener("input",e=>{if(A)nodes.master.gain.setTargetAtTime(+e.target.value,A.currentTime,.03);});
+function reseed(){SEED=hashStr($("seed").value);st.root=40+(SEED%8);st.tm=SEED&0xFFFF;st.ou=0;st.sec=0;st.bar=0;st.step=0;st.hist=[];st.hawkT=[];Tsim=0;}
+$("seed").addEventListener("change",()=>{reseed();log(`Seed set: <b>${$("seed").value}</b>`);});
+const EV={war:[1.2,"war declared",{ten:.9,mood:-.7}],crash:[-1.1,"market crash",{ten:.75,mood:-.4}],win:[.9,"election won",{mood:.6}],treaty:[-.6,"treaty signed",{ten:.15,mood:.3}]};
+document.querySelectorAll("[data-ev]").forEach(b=>b.addEventListener("click",()=>{const [sz,l,set]=EV[b.dataset.ev];for(const k in set){const id=k==="ten"?"ten":k;$(id).value=set[k];}readCtl();addJump(sz,l);if(b.dataset.ev==="treaty")st.forced=5;}));
+$("go").addEventListener("click",async()=>{const b=$("go");if(!A){init();next=A.currentTime+.08;timer=setInterval(schedule,25);b.textContent="Stop";b.classList.add("on");log("Engine started");return;}
+  if(A.state==="running"){await A.suspend();clearInterval(timer);b.textContent="Start";b.classList.remove("on");log("Paused");}else{await A.resume();next=A.currentTime+.08;timer=setInterval(schedule,25);b.textContent="Stop";b.classList.add("on");log("Resumed");}});
+// boot: build UI and pre-run the stochastic core silently so the panel opens in a working state
+$("tm").innerHTML="<i></i>".repeat(16);buildVoices();drawMatrix();readCtl();reseed();
+quiet=true;for(let k=0;k<1280;k++){st.step=k;stepProcesses(60/128/4*4);if(k%32===0&&k){st.bar+=8;st.sec=pick(transRow(st.sec),U(S.MARK,st.bar));}}st.bar=0;st.step=0;st.ou=0;st.sec=1;st.hawkT=[];Tsim=0;quiet=false;
+drawGraph();ui(0);log("Ready. Press Start; sound begins on your click.");
+requestAnimationFrame(frame);
+})();
+</script>

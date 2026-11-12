@@ -1,0 +1,620 @@
+<title>Ceteris Surface Catalogue</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an atlas index. Modern Atlas tokens (ADR 0137): paper and slate, proof magenta marks what is new. */
+:root{
+  --ground:#EDEFEA; --panel:#F6F7F3; --line:#CDD3CF; --ink:#1C292F; --ink2:#55646A; --sea:#BCD1DB;
+  --proof:#AE2459; --fork:#5E45A3; --ok:#2F7A4E; --warn:#9A6B12; --decided:#1C292F; --mocked:#2E6A85;
+  --chip-bg:#E2E6E1;
+  --serif:"Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans:"IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --ground:#11171B; --panel:#182026; --line:#2B363C; --ink:#E2E7E3; --ink2:#A2B0AE; --sea:#1A2B36;
+  --proof:#E35E91; --fork:#A890E8; --ok:#6CB485; --warn:#D9AA4E; --decided:#E2E7E3; --mocked:#7FB3CC;
+  --chip-bg:#202A31; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --ground:#11171B; --panel:#182026; --line:#2B363C; --ink:#E2E7E3; --ink2:#A2B0AE; --sea:#1A2B36;
+  --proof:#E35E91; --fork:#A890E8; --ok:#6CB485; --warn:#D9AA4E; --decided:#E2E7E3; --mocked:#7FB3CC;
+  --chip-bg:#202A31; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 64px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--ground)}
+.wrap{max-width:1180px;margin:0 auto}
+header{padding-block:40px 20px;border-bottom:1px solid var(--line);display:grid;gap:14px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+h1{font-family:var(--serif);font-weight:600;font-size:clamp(32px,5vw,48px);line-height:1.05;margin:0;text-wrap:balance;letter-spacing:-.01em}
+.lede{max-width:68ch;margin:0;color:var(--ink2);font-size:16px}
+.lede b{color:var(--ink);font-weight:600}
+.key{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;color:var(--ink2)}
+.key span{display:inline-flex;gap:6px;align-items:center}
+.tally{font-family:var(--mono);font-size:13px;color:var(--ink2);display:flex;flex-wrap:wrap;gap:4px 18px;font-variant-numeric:tabular-nums}
+.tally b{color:var(--ink);font-weight:500}
+
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--ground);border-bottom:1px solid var(--line);
+  padding-block:10px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.bar input[type=search]{flex:1 1 220px;min-width:0;font:inherit;font-size:14px;padding:7px 10px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--ink)}
+.bar input:focus-visible,.bar button:focus-visible,.toc a:focus-visible{outline:2px solid var(--fork);outline-offset:2px}
+.grp{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.grp .lab{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin-right:4px}
+.bar button{font:inherit;font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:3px;background:transparent;color:var(--ink2);cursor:pointer}
+.bar button[aria-pressed=true]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.shown{font-family:var(--mono);font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
+
+.body{display:grid;grid-template-columns:220px minmax(0,1fr);gap:40px;padding-top:24px}
+.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 70px);align-self:start;max-height:calc(100vh - 90px);overflow:auto;font-size:13px}
+.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.toc a{color:var(--ink2);text-decoration:none;display:flex;justify-content:space-between;gap:8px;padding:2px 0}
+.toc a:hover{color:var(--ink)}
+.toc .n{font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums}
+.toc .part{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);margin-top:12px;padding-bottom:2px;border-bottom:1px solid var(--line)}
+@media (max-width:860px){.body{grid-template-columns:minmax(0,1fr)}.toc{display:none}}
+
+section{padding-bottom:28px;scroll-margin-top:80px}
+section h2{font-family:var(--serif);font-weight:600;font-size:24px;margin:0 0 2px;text-wrap:balance;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+section h2 .c{font-family:var(--mono);font-size:12px;font-weight:400;color:var(--ink2)}
+section .blurb{margin:0 0 10px;color:var(--ink2);max-width:72ch}
+.items{border-top:1px solid var(--ink)}
+.it{display:grid;grid-template-columns:minmax(0,15em) minmax(0,1fr);gap:4px 20px;padding:10px 0;border-bottom:1px solid var(--line)}
+.it .nm{font-weight:600;font-size:15px}
+.it .tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+.it p{margin:0;max-width:72ch}
+.it .refs{font-family:var(--mono);font-size:11.5px;color:var(--ink2);margin-top:3px}
+@media (max-width:560px){.it{grid-template-columns:minmax(0,1fr)}}
+.chip{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;padding:1px 6px;border-radius:2px;border:1px solid currentColor;white-space:nowrap;line-height:1.5}
+.s-d{color:var(--decided)}
+.s-m{color:var(--mocked)}
+.s-n{color:var(--proof);background:color-mix(in srgb,var(--proof) 10%,transparent)}
+.v{color:var(--ink2);border-color:var(--line);background:var(--chip-bg)}
+.v-20,.v-later{color:var(--fork);border-color:color-mix(in srgb,var(--fork) 45%,transparent)}
+.empty{color:var(--ink2);font-style:italic;padding:20px 0}
+code{font-family:var(--mono);font-size:.9em}
+footer{border-top:1px solid var(--line);margin-top:24px;padding-top:16px;color:var(--ink2);font-size:13px;max-width:80ch}
+footer a{color:var(--ink)}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Ceteris · UI inventory · 29 Oct 2026</div>
+  <h1>Map modes, screens and panels</h1>
+  <p class="lede">Every surface of the app in one list: what DESIGN.md and the ADRs already <b>decided</b>, what the mocks and research pages <b>proposed</b>, and <b>new</b> ideas from this pass. Versions follow the current scope rules: 1.0 is a pure simulator (economy, finance, growth), politics and war arrive in 2.0, and seats, fog of data, scoring and flavour chrome sit at 2.0+ (ADRs 0207, 0239, 0240). No portraits anywhere; people get dossiers (0187).</p>
+  <div class="key">
+    <span><span class="chip s-d">DECIDED</span> in DESIGN.md or an ADR</span>
+    <span><span class="chip s-m">MOCKED</span> in the screens canvas, art page or a research page; no ADR</span>
+    <span><span class="chip s-n">NEW</span> first proposed here</span>
+  </div>
+  <div class="tally" id="tally"></div>
+</header>
+
+<div class="bar" role="search">
+  <input type="search" id="q" placeholder="Filter by name, description or ADR number" aria-label="Filter surfaces">
+  <div class="grp" id="fs"><span class="lab">Status</span>
+    <button data-s="d" aria-pressed="true">Decided</button><button data-s="m" aria-pressed="true">Mocked</button><button data-s="n" aria-pressed="true">New</button></div>
+  <div class="grp" id="fv"><span class="lab">Version</span>
+    <button data-v="1.0" aria-pressed="true">1.0</button><button data-v="1.x" aria-pressed="true">1.x</button><button data-v="2.0+" aria-pressed="true">2.0+</button><button data-v="later" aria-pressed="true">Later</button></div>
+  <span class="shown" id="shown"></span>
+</div>
+
+<div class="body">
+  <nav class="toc" aria-label="Categories"><ol id="toc"></ol></nav>
+  <main id="main"></main>
+</div>
+
+<footer>
+  Sources: DESIGN.md 20, ADRs 0009-0242, the screens canvas (<a href="https://claude.ai/artifact/EnZHwCVF98t1ixJZiiqnav">46 boards</a>), the <a href="https://claude.ai/artifact/CzBnxpE38BGYo4mMMrpoaq">Iberia main screen</a>, the <a href="https://claude.ai/artifact/JMufbLx4Yqabwd95LvFZVQ">art page</a>, the <a href="https://claude.ai/artifact/3YdWCLPyDhXxwQBzjGMcgt">keyboard page</a>, borrowed mechanics, and the <a href="https://claude.ai/artifact/7AJPvXWQfcbXkWiFiscCYY">instrument charm register</a>. Version tags for decided items follow each ADR's phase line and the 0207 triage; "Later" means 3.0 or a companion game. Every surface listed is a view or an edit path: none writes state except through the edit log (0188).
+</footer>
+</div>
+
+<script>
+const PARTS=[["Map","map"],["Panels and screens","panel"],["Tools around the run","tool"],["Game layer","game"]];
+const C=[
+["pol","map","Map modes: political and territory","Who owns, controls and groups each cell."],
+["phys","map","Map modes: physical, climate and resources","The ground under the economy. Hillshade sits under every mode (0137)."],
+["pop","map","Map modes: population and society","Pops, cohorts and where they move. Identity shares stay fixed at 2000 values until 2.0."],
+["econ","map","Map modes: economy and production","Output, prices, wages and the places where production binds."],
+["trade","map","Map modes: trade and transport","The trade core's own views: flows, frictions, routes and reach."],
+["fin","map","Map modes: money and finance","P5a and P5b state: currencies, spreads, banks and capital."],
+["polit","map","Map modes: politics and institutions","Institutions are 2000 data in 1.0; everything that moves arrives with P6."],
+["war","map","Map modes: war","P7 and later. Control, supply and harm on the cell grid."],
+["ana","map","Map modes: analysis, uncertainty and comparison","Modes that read across branches, lanes and data provenance rather than one state."],
+["ovl","map","Overlays and cartographic layers","Marks drawn on top of whatever mode is active."],
+["proj","map","Other map forms","Geography rearranged: cartograms, isochrones, small multiples. Drawn as panel images under 0196."],
+["insp","panel","Inspectors and entity pages","One page per thing you can click."],
+["exp","panel","Explanation and attribution","Why a number is what it is, and what moved it."],
+["br","panel","Branches, time and comparison","The version-control half of the app."],
+["ens","panel","Ensembles and uncertainty","Many lanes, read at once."],
+["edit","panel","Editing and experiments","Every path into the edit log, plus the tools that search over edits."],
+["led","panel","Ledgers, tables and accounts","Books that balance, shown so you can see them balance."],
+["mon","panel","Monitoring and alerts","Watching many things without staring at the map."],
+["chr","panel","Chronicle and events","What happened, when, and why, written from the event log."],
+["nav","panel","Navigation, search and input","Getting anywhere in place, time and branch."],
+["hud","panel","Chrome, HUD and feel","The frame around the map: date, speed, sound, motion and the small marks that carry provenance."],
+["lab","tool","Calibration and validation","How the model is fitted and judged. Most of this lands with P9."],
+["dev","tool","Performance and diagnostics","For the owner and contributors; some ship in developer builds only."],
+["run","tool","Runs, packs and app lifecycle","Starting, storing, fetching, updating and failing safely."],
+["learn","tool","Learning and reference","The pedia and the paths into it."],
+["share","tool","Export and sharing","Getting a moment, a table or a whole run out of the app."],
+["ws","tool","Windows and workspaces","Pop-out panels only; the map stays in the main window (0196)."],
+["game","game","Game layer","Seats, fog of data, scoring, chrome and flavour. All 2.0+ under 0239 and 0240."],
+["wsurf","game","War surfaces","The 0166 surfaces for P7 onward, plus later companions."]
+];
+// [category, name, status d|m|n, version, description, refs]
+const I=[
+// political
+["pol","Owner","d","1.0","Pale flag-hue tint per state over the hillshade; states outside the focus fade toward paper. The default mode.","20.1, 0137"],
+["pol","Country colour rule","m","1.0","Flag hue at low chroma with a neighbour shift and a short override table (Netherlands orange, UK red, Sweden yellow, Germany slate). Pale versus saturated still open.","art page v17"],
+["pol","Disputed areas","d","1.0","Dashed border and hatch in the political mode; the inspector names the administering state and every claimant, with a pedia entry for each area.","0222"],
+["pol","Subjects and territories","d","1.0","Dependencies and overseas territories in their owner's colour with a lighter ring.","20.1"],
+["pol","Alliances and blocs","d","1.0","2000 memberships (NATO, CSTO, ASEAN...) as data. Membership only changes once diplomacy lands in 2.0.","20.1, 0242"],
+["pol","Customs and currency unions","d","1.0","Union members share a hatch; the euro area changes on its scheduled 2002 date as a commitment in force at t0.","20.1, 0241"],
+["pol","County layer","d","1.0","geoBoundaries county borders from zoom 4, display only; 53,084 units.","0009"],
+["pol","Administrative tiers","d","1.x","One map mode per partition in the registry: regions, provinces, counties or any user-drawn tier.","0190"],
+["pol","Statuses","d","1.x","Special economic zones, autonomous regions, military zones and other tags painted over units.","0190"],
+["pol","Controller","d","2.0+","Who holds each cell in war; differs from owner under occupation.","20.1, 0115"],
+["pol","Claims","d","2.0+","Cells claimed by a state other than the owner, by claimant.","20.1"],
+["pol","Electoral districts","n","2.0+","An electoral partition from the 0190 registry, coloured by seat winner, with the redraw tool from the partition painter.","0190, 0193"],
+["pol","Border age","n","2.0+","Each cell shaded by the tick it last changed owner, so a long run shows where the map has been redrawn.","0115"],
+
+// physical
+["phys","Terrain and relief","d","1.0","Multidirectional hillshade from Copernicus GLO-30 with stepped GEBCO bathymetry; also the base under every other mode.","0137"],
+["phys","Crop suitability","d","1.0","Suitability index per crop group from the pack's agro-climatic data.","20.1"],
+["phys","Resources","d","1.0","Discovered deposits by resource; latent ones are visible in god mode only.","20.1"],
+["phys","Infrastructure","d","1.0","Road, rail, port and power capacity per province.","20.1, 5.3"],
+["phys","Disease environment","d","1.0","Malaria and other ecology-driven disease load.","20.1, 0167"],
+["phys","Emissions","d","1.0","CO2 by province and sector source, from the P8 energy block.","20.1, P8"],
+["phys","Temperature anomaly","d","1.x","Emulator output against the 2000 baseline. Climate lands as the 1.1 minor.","20.1, 0207"],
+["phys","Climate damages","d","1.x","Output lost to temperature by lane; 1.0 runs with damages off.","20.1, 0036"],
+["phys","Element ledgers","d","1.x","Extraction, embodied imports and stocks for carbon, copper, lithium, nickel, phosphorus and embodied energy.","0122"],
+["phys","Water, air and land","d","1.x","Water stress by basin, air pollution, land use and deforestation frontiers.","0038, 0076, 0077"],
+["phys","Sea level and exposed coast","d","1.x","Coastal cells under each sea-level lane.","0037"],
+["phys","Power mix","n","1.0","Generation share by source per grid region, from the residual-load-duration power block.","0034"],
+["phys","Renewable potential","n","1.0","Solar and wind capacity factors per cell; with power mix it shows where learning curves will bite first.","0035"],
+["phys","Hazard exposure","n","1.0","Expected annual loss from floods, quakes, storms and droughts under the endogenous hazards of 0242, with the catalogue history behind it.","0242, 0051"],
+["phys","Growing season","n","1.x","Which provinces are planting or harvesting this month, for reading seasonal price swings.","0081"],
+
+// population
+["pop","Density","d","1.0","People per square kilometre at cell grain.","20.1"],
+["pop","Growth","d","1.0","Natural increase and net migration as a rate.","20.1"],
+["pop","Age structure","d","1.0","Median age, or a chosen age band's share; the inspector shows the pyramid.","20.1, 0032"],
+["pop","Ethnic groups","d","1.0","Group shares as 2000 data; dynamics arrive in P6.","20.1, 0207"],
+["pop","Religion","d","1.0","Affiliation shares as 2000 data; switching and religiosity arrive with 0224 in 2.0.","20.1, 0224"],
+["pop","Education","d","1.0","Attainment by cohort, with learning quality where 0059 lands.","20.1, 0032"],
+["pop","Labour status","d","1.0","Employed, unemployed, informal and out of the labour force.","20.1, 0031"],
+["pop","Urbanization","d","1.0","Urban share and the settlement hierarchy's towns.","20.1, 0074"],
+["pop","Migration flows","d","1.0","Arrows for internal and international moves, width by people per year.","20.1, 0109"],
+["pop","Mortality and health","d","1.0","Life expectancy and deaths by cause.","0033, 0167"],
+["pop","Wellbeing","d","1.x","Material welfare W and life evaluation L side by side; read-only in 1.x.","0191"],
+["pop","Languages","d","2.0+","Repertoires and shift, from the identity-change ADRs.","0223"],
+["pop","Skill mix","n","1.0","Share of each skill group in the labour force, the variable sector switching runs on.","0105"],
+["pop","Dependency ratio","n","1.0","Young plus old over working age; the slow variable behind pensions and saving.","0032, 0044"],
+["pop","Informality","n","1.0","Informal share of employment and output, the margin structural change moves.","0031"],
+["pop","Remittances","n","1.0","Remittance inflow as a share of household income, with the sending country on hover.","0109"],
+
+// economy
+["econ","GDP per capita","d","1.0","Nominal local currency by default; real, PPP and per-head a toggle away.","20.1"],
+["econ","Sector shares","d","1.0","One sector's share of output, or a three-way agriculture, industry and services blend.","20.1"],
+["econ","Wages","d","1.0","By skill group, nominal or in hours of local median work.","20.1"],
+["econ","Price of a good","d","1.0","Price of the chosen good per market, with the good picked from a strip or by ex command.","20.1"],
+["econ","Price gap","d","1.0","Price against a reference node, the clearest sign of trade frictions.","20.1"],
+["econ","Inventories","d","1.0","Stocks in months of use per good.","20.1, 0091"],
+["econ","Market access","d","1.0","Trade-cost-weighted demand reachable from each province.","20.1"],
+["econ","Bottleneck lens","d","1.0","Cells where putty-clay rationing binds this tick; the panel walks the shortfall upstream.","0155, 0020"],
+["econ","Named projects","d","1.x","Pins with schedule bars for dams, plants and railways in the pipeline, plus a construction-capacity heat map.","0206"],
+["econ","Named firms","d","1.x","The real firms of 2000 per cell as rank order statistics of the Pareto tail. Never adds output.","0203"],
+["econ","Leverage map","d","1.x","Derivative of a chosen outcome to a unit shock in each province, from forward-mode tangents.","0117"],
+["econ","Investment and capital age","n","1.0","Investment rate and the average vintage of the capital stock by asset class.","0204"],
+["econ","Distance to frontier","n","1.0","Sector productivity against the world frontier: where catch-up growth has room.","7.5, P8"],
+["econ","Labour share","n","1.0","Labour share of value added and where capital income goes.","0104"],
+["econ","Revealed comparative advantage","n","1.0","Balassa index for the chosen good, recomputed each tick from simulated flows.","8.3"],
+["econ","Self-sufficiency","n","1.0","Local production over local use for a good; values below one light up importers.","8.6"],
+["econ","Change since","n","1.0","Any mode as the change since a chosen tick, the fork tick or 2000, on the diverging ramp.","0137"],
+
+// trade
+["trade","Flow arcs","d","1.0","Animated arcs by good, particles at fixed speed with density for volume.","20.1, 0137"],
+["trade","Market areas","d","1.0","Trade node regions, the grain prices clear at.","20.1"],
+["trade","Tariff walls","d","1.0","Border thickness or fill by applied tariff on a good or on average.","20.1"],
+["trade","Freight costs from here","d","1.0","Generalized trade cost from the selected node to every province.","20.1, 5.4"],
+["trade","Chokepoint exposure","n","1.0","Share of each province's imports routed through a chosen strait or canal, from route-choice shares.","0017"],
+["trade","Main supplier","n","1.0","Each province coloured by its largest foreign supplier of a good, with the share as lightness.","8.3"],
+["trade","Openness","n","1.0","Trade over output, the variable the 28 October benchmark checks against ICIO.","0200"],
+["trade","Terms of trade","n","1.0","Export over import price index, change since a chosen tick.","8.3"],
+["trade","Freight rates and port load","n","1.0","Shipping rates and port utilisation once 8.4 capacity binds.","8.4"],
+["trade","Agreements in force","n","1.0","Preferential agreements and their scheduled phase-ins as recorded at t0.","0241"],
+["trade","Gravity residual","n","1.0","Simulated bilateral flow against the gravity prediction, for spotting where the model departs from its own theory.","0022"],
+
+// finance
+["fin","Currency regimes","d","1.0","Float, peg, board, union and dollarized.","20.1, 9.2"],
+["fin","Sovereign spreads","d","1.0","Spread over the reference curve.","20.1, 9.4"],
+["fin","Bank stress","d","1.0","Capital against the run threshold, by banking system.","20.1, 9.11"],
+["fin","Capital flows","d","1.0","Net portfolio and direct flows as arrows or as a share of GDP.","20.1, 9.5"],
+["fin","Inflation","n","1.0","CPI inflation, with expected inflation on hover.","0019"],
+["fin","Policy rate","n","1.0","The rate set by each 0210 rule, with the rule's gap terms on hover.","0210"],
+["fin","Exchange rate","n","1.0","Change against the dollar or a chosen currency since a chosen tick.","0228"],
+["fin","Public debt","n","1.0","Debt over GDP, with the share in foreign currency as a hatch.","9.6"],
+["fin","Reserve cover","n","1.0","Months of imports covered by reserves; the map form of the peg headroom gauge.","0155"],
+["fin","Credit gap","n","1.0","Credit to GDP against its trend, a classic early warning.","9.3"],
+["fin","House prices","n","1.0","Real house price change and mortgage stress.","0040"],
+["fin","Dollar exposure","n","1.0","Foreign-currency liabilities by sector, the channel of the global financial cycle.","9.12"],
+["fin","Capital controls","n","1.0","Controls in force from crisis rules, by type.","9.12, 0229"],
+["fin","Nearest cliff","n","1.0","Each state coloured by its smallest headroom across all regime switches, labelled with which one.","0155"],
+
+// politics
+["polit","Regime type","d","1.0","Derived labels from the 2000 institutional vector; fixed in 1.0.","10.2, 0136"],
+["polit","Institutions","n","1.0","Any component of the 2000 institutional vector (rule of law, press freedom, central bank independence).","10.1"],
+["polit","Governing parties","d","2.0+","Party in power and vote shares.","20.1, 10.5"],
+["polit","Interest-group dominance","d","2.0+","Strongest group per state.","20.1, 10.4"],
+["polit","Approval and legitimacy","d","2.0+","Two separate stocks, two modes.","0192"],
+["polit","Vote intention","d","2.0+","Polls by party with turnout.","0193"],
+["polit","Grievance and protest","d","2.0+","Grievance, protest events and the Political Stress Index.","20.1, 10.7"],
+["polit","State capacity and reach","d","2.0+","Capacity per state and reach per province by distance from the administrative seat.","0067, 0163"],
+["polit","Organizations","d","2.0+","Presence of emergent parties, movements, lobbies and armed groups.","0189"],
+["polit","Atrocity risk","d","2.0+","Read-only hazard by state and group.","0226"],
+["polit","Conflict hazard","d","2.0+","Reduced-form onset hazard by state.","0110"],
+
+// war
+["war","Fronts and armies","d","2.0+","Fronts on cells; atlas pills with army totals at strategic zoom, APP-6 symbols below.","20.1, 0166"],
+["war","Supply state","d","2.0+","Supply per formation and cell, shortages traced to the binding edge.","0148"],
+["war","Air superiority and sea control","d","2.0+","Contested and held airspace and sea zones.","0150, 0151"],
+["war","Intelligence confidence","d","2.0+","How sure each side is about what it sees; estimates are dashed and faded.","0153"],
+["war","Civilian harm and devastation","d","2.0+","Harm, destroyed capital and blockades.","20.1, 0154"],
+["war","War-economy strain","d","2.0+","Mobilization against capacity, by state.","0165"],
+["war","Displacement","n","2.0+","Refugees and internally displaced people by origin and current location.","11.7"],
+
+// analysis
+["ana","Branch difference","d","1.0","Any mode as the difference between two branches at the same tick.","20.1, 14.5"],
+["ana","Robustness hatch","d","1.0","Provinces whose sign is not robust across seeds are hatched, not only greyed.","0221"],
+["ana","Edits","m","1.0","Proof-magenta outline on every cell an edit touched, with the edit on hover.","screens canvas"],
+["ana","Stipple of doubt","m","1.0","Fills dissolve into stipple where ensemble lanes disagree, density by spread.","charm 10"],
+["ana","Probability","m","1.0","Share of lanes in which an event occurs per province by a date (default, famine, peg break).","ideas board"],
+["ana","Ghost of history","d","1.x","Toggle that draws the 2000-2024 record against the run. Meaningful only for a run with replay on or as a contrast.","0144, 0241"],
+["ana","Data provenance","n","1.0","Observed, imputed and downscaled inputs per province at t0, with the source and method on hover.","0014"],
+["ana","Divergence date","n","1.0","For two branches, the tick at which each province first drifts past a threshold.","14.6"],
+["ana","Predictability horizon","n","1.0","Months until lane spread swamps the signal, per province; the map form of the horizon wall.","14.6"],
+["ana","Variance share","n","1.0","Share of a province's outcome variance due to parameters, shocks or switches, from Sobol runs.","0053"],
+["ana","Anomaly","n","1.0","Each province's value as a z-score against its own run history.",""],
+["ana","Fit to record","n","1.0","In replay runs, simulated minus observed for any series with data.","0052, 0241"],
+
+// overlays
+["ovl","Map numbers","d","1.0","Hold a key to print the active mode's value on every province.","0155"],
+["ovl","Hint labels","d","1.0","Two-letter labels on provinces, controls and edges for keyboard picking.","0188"],
+["ovl","Trade partners halo","d","1.0","Shift+F12 rings the selected province's main partners.","0188"],
+["ovl","Query highlight","d","1.0","The cells matched by the current query or edit-by-query predicate.","0155"],
+["ovl","Price weather","m","1.0","Isolines of any scalar over the fill, with highs, lows and moving fronts after a shock.","charm 7"],
+["ovl","Borders by cost","m","1.0","Border stroke weight follows bilateral trade friction.","charm 8"],
+["ovl","Labels that earn their size","m","1.0","Town label class follows simulated population, so lettering records the run.","charm 9"],
+["ovl","Long exposure","m","1.0","Flow trails at fast speeds that develop and fade when paused.","charm 12"],
+["ovl","Ripples on the real wires","m","1.0","A shock pulse that travels along actual trade and input-output links.","charm 13"],
+["ovl","Map imprint","m","1.0","Corner block naming sources, versions, branch, tick and seal; rides along on every screenshot.","charm 2"],
+["ovl","Survey benchmarks","m","1.0","Pin a value to a province at a tick; later it shows change since, in every fork.","charm 16"],
+["ovl","Map notes and pins","m","1.0","User notes and watch pins on places; they live in the run and copy to other runs.","screens canvas"],
+["ovl","Living map","m","1.x","Ships on lanes, trains, flights and smoke by emissions. Polish parked.","art page v14"],
+["ovl","Atlas details","m","1.x","Water lining, hachures, scale and compass styling.","art page v7"],
+["ovl","Night lights and weather","m","2.0+","Night glow by decade, cloud shadows and fronts. Flavour under 0240.","art page, 0240"],
+["ovl","Class breaks and locked scale","n","1.0","Choose quantile, equal, log or fixed breaks, and lock the scale across ticks so colours do not drift as the world grows.","0221"],
+["ovl","Bivariate fill","n","1.0","Two variables on a checked 3x3 palette, such as wage against price level.","0221"],
+["ovl","Dot density","n","1.0","One dot per N people or units of output, coloured by group or sector.",""],
+["ovl","Proportional symbols","n","1.0","Circles sized by a quantity over any fill, for levels a choropleth distorts.",""],
+["ovl","Route lines","n","1.0","For a selected origin and destination pair, the routes goods take with their shares.","0017"],
+["ovl","Hubs and chokepoints","n","1.0","Ports, junctions and straits as symbols sized by throughput.","5.3"],
+["ovl","Recent events","n","1.0","The last events as small fading pins, clickable to their chronicle entry.","0232"],
+["ovl","Cell grain","n","1.0","At deep zoom the cell lattice shows, with values per cell for cell-grain layers.","0115"],
+
+// projections
+["proj","Globe","d","1.0","The full globe view from the GPU fill layer.","0010"],
+["proj","Trade-cost cartogram","d","1.x","Provinces placed by scaled trade cost, morphing from geographic space; the world shrinks as costs fall.","0124"],
+["proj","Railway time","m","1.0","Isochrone bands of trade cost from a clicked province, keeping geography.","charm 11"],
+["proj","Small multiples","n","1.0","The same mode at six ticks or across four branches in a grid of panel images.","0196"],
+["proj","Country tile map","n","1.0","Equal-size tiles per country for country-level series, so small states are readable.","art page"],
+["proj","Sparkline map","n","1.0","A tiny time series at each country's position.","0196"],
+["proj","Population cartogram","n","1.x","Area by population or output, for reading per-head modes fairly.",""],
+["proj","Trade network","n","1.0","Node-link layout of bilateral flows with geography dropped.",""],
+["proj","Pacific-centred view","m","2.0+","Re-centred map from the local standards set.","0141, 0240"],
+["proj","City zoom handoff","d","later","Deepest zoom hands off to the city companion's diorama.","0137"],
+
+// inspectors
+["insp","Province inspector","d","1.0","Every component of a province, editable in god mode with an apply-at-tick field.","20.2"],
+["insp","Country panel","m","1.0","Headline series, PIT strip, peer radar and the ghost of history.","screens canvas"],
+["insp","Market panel","d","1.0","Supply, demand, inventory and price history per node and good.","20.2"],
+["insp","Route inspector","d","1.0","For an edge, port or chokepoint, the pairs and goods routed through it, and a close-this-edge fork.","0155"],
+["insp","Peer radar","d","1.0","Headline series as percentiles against a saved peer set.","0155"],
+["insp","Place dossier","m","1.0","The province inspector in dossier form: the 2000 file beside today, main export and buyer, benchmarks, chapters.","charm 20"],
+["insp","Smart tooltips","m","1.0","Unit chip, data or model badge, copy as citation, nested cause breakdowns.","screens canvas, 0137"],
+["insp","Partition tree","d","1.x","The tiers of a partition as a tree with aggregated figures per node.","0190"],
+["insp","Situation panel","d","1.x","Participants, defining variables with entry and exit levels, and duration.","0159"],
+["insp","Project card","d","1.x","A named project's schedule, cost, completion hazard and delay history.","0206"],
+["insp","Class of 2000","m","1.x","Medians for the cohort born on the start date in a province: school, first job, wage, move, children.","charm 19"],
+["insp","Good page","n","1.0","One good across the world: producers, users, price dispersion, stocks and elasticities.",""],
+["insp","Sector page","n","1.0","One sector's output, inputs, labour, markups and location.",""],
+["insp","Pop group page","n","1.0","A pop's income, basket, skills, location and migration intent.","6.1"],
+["insp","Currency page","n","1.0","Regime, rate history, reserves, invoicing share and who holds it.","9.2"],
+["insp","Cell inspector","n","1.0","What the cell holds at deep zoom and which units it belongs to in each partition.","0115"],
+
+// explanation
+["exp","Explainer","d","1.0","Waterfall of contributions to any price, wage or flow.","20.2"],
+["exp","Why did this change?","d","1.0","Channel shutdowns under common random numbers, each channel's share with intervals.","0049"],
+["exp","Blame","d","1.0","The edits and shocks that moved a series most, ranked by effect.","0116"],
+["exp","Bisect","d","1.0","Smallest set of edits that flips an outcome predicate.","0116"],
+["exp","Explain chain","d","1.0","Follow causes like a tag stack and step back out.","0188"],
+["exp","Bottleneck walk","d","1.0","Shortfall traced upstream through input-output and trade shares to the origin market.","0155"],
+["exp","Propagation trace","m","1.0","A branch difference split by channel as it spreads hop by hop.","screens canvas"],
+["exp","Why not","d","1.x","Lanes where an event happened against the nearest lane where it did not.","0118"],
+["exp","Household receipt","d","1.x","A representative household's month as a receipt, each line with its provenance and change.","0124"],
+["exp","Influence web","d","1.x","Levers, intermediates and outcomes linked by one-year derivatives.","0156"],
+["exp","Rule readout","n","1.0","For each 0210 policy rule, its inputs, gap terms and output this tick.","0210"],
+["exp","Identity view","n","1.0","Any aggregate shown with the identity it satisfies and each term linked.","4.6"],
+["exp","Quick ablation","n","1.0","Right-click an input and see the result with it set to zero or its 2000 value, in a short CRN fork.","14.4"],
+["exp","Bargaining range tooltip","d","2.0+","Fearon decomposition on diplomacy and war tooltips.","0049"],
+
+// branches
+["br","Branch manager","d","1.0","Tree of branches with fork ticks and edit lists; rebase, cherry-pick, blame and bisect verbs.","20.2, 0116"],
+["br","Compare","d","1.0","Two branches side by side or split; any panel can pin to the baseline.","20.2, 0196"],
+["br","Timeline","d","1.0","Scrubber over snapshots; jump to a tick and fork.","20.2"],
+["br","Time controls","d","1.0","Pause, five speeds, step, run to date, run to next event, sim-bound chip.","20.3, 0208"],
+["br","Daily date","d","1.0","Days count between monthly ticks; events present on their day.","0232"],
+["br","Edit list","d","1.0","The branch's edits as a change list, stepped with g; and g,.","0188"],
+["br","Undo history","m","1.0","Revert, remove or fork, with Antonio's rule: undo removes until the clock passes the edit, then appends a revert.","screens canvas"],
+["br","Compare tray","m","1.0","Collect series and places from anywhere and compare them in one tray.","screens canvas"],
+["br","Blink comparator","m","1.0","Two branches swapped several times a second; only change flickers.","charm 14"],
+["br","Overprint","m","1.0","Main in cyan and fork in magenta, multiplied as printing plates.","charm 15"],
+["br","Chapter bands","m","1.0","The timeline divides itself at detector events into labelled chapters.","charm 17"],
+["br","Edit list diff","n","1.0","Two branches' edit lists aligned, with shared, changed and unique edits.","0116"],
+["br","Fork preview","n","1.0","Before forking, a small estimate of run time and disk cost from the 0212 budgets.","0212"],
+
+// ensembles
+["ens","Fan charts","d","1.0","Quantile bands per branch.","20.2, 0137"],
+["ens","Event probabilities","d","1.0","Table of event frequencies across lanes, with Monte Carlo error.","20.2, 0107"],
+["ens","Run ensemble from here","d","1.0","Fork K seeds in the background and stream summaries to the map.","20.3"],
+["ens","Specification curve","d","1.0","Effect per multiverse variant, sorted, with switches marked.","0119"],
+["ens","Outcome river","m","1.0","Lanes as an alluvial of outcome classes over time.","screens canvas"],
+["ens","Horizon wall","m","1.0","Where lane spread swamps the signal, per province.","screens canvas"],
+["ens","Hazard forecast","m","1.0","Endogenous hazard rates by state and type with their drivers.","screens canvas, 0242"],
+["ens","Event raster","m","1.0","Lanes by time, a mark at each event.","ideas board"],
+["ens","Lane shuffle","m","1.0","Flip through single lanes as cards to feel the spread.","ideas board"],
+["ens","History's percentile","d","1.x","Strip of where reality falls in the ensemble each quarter.","0118"],
+["ens","Spaghetti plot","n","1.0","Every lane as a thin line; hovering one lifts it across all charts.",""],
+["ens","Ridgeline at a tick","n","1.0","Distribution of an outcome across lanes at chosen ticks.",""],
+["ens","Representative lanes","n","1.0","The lanes nearest the median and the tails, chosen by path distance, for narrative reading.","0024"],
+
+// editing
+["edit","Edit dialog","d","1.0","Ex ante or ex post edit with the tick, the god flag and a preview.","14.2"],
+["edit","Edits by query","d","1.0","One edit on every place a predicate selects; re-evaluated on replay.","0155"],
+["edit","Rule edits","d","1.0","When a condition holds, apply an edit; evaluated at the tick boundary.","0188"],
+["edit","Controlled-English line","d","1.0","Sentences that compile to edits with AI off.","0188"],
+["edit","Preregistration","d","1.0","Hash an experiment manifest into a signed tag before any run.","0119"],
+["edit","Batch edit","m","1.0","Edit a selection as one query edit.","screens canvas"],
+["edit","Replay mixer","m","1.0","Apply the replay-2000-2024 set in whole or by family (shocks, policy) and see the shock-luck split.","screens canvas, 0241"],
+["edit","Sweep","m","1.0","Sweep one lever over sibling branches (the BTST mnemonic).","keyboard page"],
+["edit","Goal-seek","d","1.x","Smallest edit set that reaches a target in the ensemble mean.","0117"],
+["edit","Friction dial","d","1.x","Each friction from calibrated value to its nesting limit, with named presets.","0121"],
+["edit","Package scoring","d","1.x","Static score live while editing, dynamic score on request.","0157"],
+["edit","Surrogate sliders","d","1.x","Predicted outcome distribution as levers move, with surrogate error shown.","0079"],
+["edit","Partition painter","d","1.x","Paint, split and merge units of any partition as logged edits.","0190"],
+["edit","World editor","d","1.x","Ex ante editing with the consistency solver.","23.2"],
+["edit","Experiment builder","n","1.0","Branches, metrics, seeds and switches as a form, with the manifest text beside it.","14.1"],
+["edit","Parameter register","n","1.0","Every register parameter with lanes and sources; editing one makes a parameter-edit branch.","17"],
+["edit","Switch board","n","1.0","The 17.2 structural switches as toggles that fork.","17.2"],
+["edit","Shock composer","n","1.0","Design a pandemic seeding, chokepoint closure or disaster, sized against its catalogue.","0242, 0051"],
+["edit","Debate packs","d","1.x","Load a debate's branches, predictions and metrics.","0121"],
+
+// ledgers
+["led","State budget","d","1.0","Revenue and spending lines.","20.2"],
+["led","Balance of payments","d","1.0","Current, capital and financial accounts.","20.2, 0188"],
+["led","Balance sheets","d","1.0","Sectoral balance sheets per state.","20.2, 9.1"],
+["led","Transaction-flow matrix","n","1.0","The stock-flow-consistent matrix with rows and columns that visibly sum to zero.","9.1, 4.6"],
+["led","Input-output table","n","1.0","Coefficients as a heat map, binding cells flagged.","0020"],
+["led","Trade matrix","m","1.0","Bilateral flows by good as a sortable matrix.","ideas board"],
+["led","Flow of funds","n","1.0","Money flows between sectors as a Sankey.","9.1"],
+["led","Debt maturity wall","n","1.0","Sovereign and corporate debt by maturity and currency.","0043"],
+["led","Bank exposures","n","1.0","Who is exposed to whom, the network behind contagion.","9.11"],
+["led","Investment pipeline","n","1.0","Capital under construction by asset class and completion date.","0204"],
+["led","Element Sankey","d","1.x","World flows per carrier.","0122"],
+["led","Interest groups and laws","d","2.0+","Power, positions and laws in force.","20.2"],
+
+// monitoring
+["mon","Monitors","d","1.0","Saved tables of subjects with live columns (WEI, MOST).","0188"],
+["mon","Watch","d","1.0","F9 watches the value under the cursor.","0188"],
+["mon","Pause-on rules","d","1.0","Stop the clock when a condition is presented.","0188, 0208"],
+["mon","Headroom gauges","d","1.0","Distance to each regime switch with burn rate.","0155"],
+["mon","Pins and watchlist","m","1.0","Pinned series with alert rules.","screens canvas"],
+["mon","Alerts inbox","m","1.0","Alerts, toasts and a while-you-were-away recap.","screens canvas"],
+["mon","Screener","m","1.0","Build a query by form and see its text (EQS).","keyboard page"],
+["mon","Situations","d","1.x","Live tracked processes with hysteresis.","0159"],
+["mon","Briefing","n","1.0","One page for a branch at the current tick: movers, situations, alerts, change against the parent.",""],
+["mon","Records","n","1.0","Highs and lows reached in this run, against 2000 and against other branches.",""],
+
+// chronicle
+["chr","Chronicle","d","1.0","Dated entries with linked causes.","0049, 0078"],
+["chr","Event log","d","1.0","Every event with its day and the tick it took effect.","0232"],
+["chr","Event cards","d","1.0","A card for a moment, with nested tooltips; responses are ordinary edits.","0239"],
+["chr","Province history","m","1.0","A place's chronicle and series on one page.","screens canvas"],
+["chr","Calendar","m","1.0","Month grid of events and scheduled commitments (ECO).","keyboard page"],
+["chr","Run names and covers","d","1.x","A title from the largest events and an atlas cover.","0144"],
+["chr","Commitments in force","n","1.0","Schedules adopted by t0 with completion hazards and status.","0241"],
+["chr","Chronicle diff","n","1.0","Two branches' chronicles aligned by date, showing events only one has.",""],
+["chr","Narration and storyteller","d","2.0+","Competing accounts by perspective and a camera that follows salience.","0078, 0240"],
+["chr","Legends","d","2.0+","Queryable history of generated people and the events they touched.","0078"],
+
+// navigation
+["nav","Command palette","d","1.0","Ctrl+Shift+P or F1, every command in the registry.","0188"],
+["nav","Go to anything","d","1.0","Ctrl+P for places, goods, branches, panels.","0188"],
+["nav","Ex line","d","1.0","Colon commands matching the CLI verbs.","0188"],
+["nav","Hint mode","d","1.0","Keyboard picking of map and panel targets.","0188"],
+["nav","Query bar","d","1.0","The query language for selections.","0188"],
+["nav","Subject, function, go","d","1.0","Bloomberg grammar: Spain WEI, wheat GP.","0188"],
+["nav","Marks and jump list","d","1.0","Place, tick and branch bookmarks.","0188"],
+["nav","Which-key menu","d","1.0","Pending-key popup listing next keys.","0188"],
+["nav","Outliner","m","1.0","Sortable, filterable, groupable list of places with columns.","screens canvas"],
+["nav","Saved views and breadcrumb","m","1.0","Named map state with a trail back.","screens canvas"],
+["nav","Mode switcher","m","1.0","Map-mode strip with the slide-projector sound.","art page"],
+["nav","Locator","n","1.0","A mini globe that shows where the camera is when zoomed in.",""],
+
+// hud
+["hud","Top bar","d","1.0","Date, speed, branch and the sim-bound chip that shows when presented time has slowed to what the simulation sustains.","0208"],
+["hud","Status bar","n","1.0","Cursor coordinates (place, tick, branch), selection count, active mode and keymap state, like an editor's status line.","0188"],
+["hud","Themes","d","1.0","Paper (light) and slate (dark) from one token set shared by the panels and the map shader.","0137"],
+["hud","UI scale and reduced motion","d","1.0","Scale from 85% to 200% following the system text size; reduced motion removes eases and particles.","0221, 0137"],
+["hud","Music","d","1.0","Post-minimal chamber music chosen by mood state, or the seeded procedural synth, or both mixed.","0137"],
+["hud","UI sounds","m","1.0","Quiet foley on by default: switch clicks, the pencil on an edit, the two-note bell on a fork, the month tick.","art page v9-v10"],
+["hud","Run seal","m","1.0","A guilloche rosette drawn from the run hash in the title bar and on every export; a fork gets its own.","charm 1, 0128"],
+["hud","Clearing ring","m","1.0","A thin ring round the date that closes as the month clears, with iterations and residual. Hard months visibly hesitate.","charm 4, 0093"],
+["hud","Ink of evidence","m","1.0","Type weight encodes provenance: observed in full ink, imputed in grey italic, simulated in regular, edits in proof magenta.","charm 6"],
+["hud","The world compiles itself","m","1.0","First load draws the layers in their real load order, each credited to its source, then the clock starts at 1 January 2000.","charm 3, 0215"],
+["hud","Units chip","m","1.0","Every number carries a unit chip that cycles nominal, real, per head and hours of local median work.","screens canvas, charm 18"],
+["hud","Data or model badge","m","1.0","A small mark on each value saying whether it is input data, imputed, or simulated after t0.","screens canvas, 0241"],
+["hud","Edit and fork colours","d","1.0","Proof magenta marks anything an edit touched and fork violet anything that belongs to another branch, across map, charts and panels.","0137"],
+["hud","Game feel","m","1.x","Odometer totals, springy bars, floating deltas, the crisis crack and the record shimmer. Kept to effects that help a reader notice change.","art page v13"],
+["hud","Terminal theme","m","1.x","Amber on black for the Bloomberg-minded, built from the same tokens.","keyboard page"],
+["hud","Era themes","d","2.0+","App chrome keyed to the simulated date. Flavour under 0240.","0124, 0240"],
+
+// lab
+["lab","Scorecard","d","1.0","Out-of-sample targets for 2011-2024 with CRPS, PIT and interval coverage, reported unconditional and conditional.","15.4, 0052, 0241"],
+["lab","Natural experiments","d","1.0","The 15.5 replication table: each natural experiment as a replay subset with the model's estimate beside the literature's.","15.5"],
+["lab","Calibration lab","m","1.0","Block calibrations with targets, fits and verdicts, mocked with the real P2 benchmark results.","screens canvas"],
+["lab","Shock-luck split","m","1.0","Unconditional against conditional scores, so shock luck and policy error are separate numbers.","0241"],
+["lab","Fuzz report","d","1.0","Stylized facts the model is fuzzed against, with failures linked to a repro bundle.","0120"],
+["lab","Ablation report","n","1.0","Each mechanism's scorecard with it and without it, the evidence the 15.7 test asks for.","15.7"],
+["lab","Benchmark board","n","1.0","The model against random walk, consensus and published benchmarks per target, with skill scores.","0052"],
+["lab","Posterior viewer","n","1.0","Each estimated parameter's posterior and prior, the lanes drawn from it, and which targets identify it.","0053, 0107"],
+["lab","Relabel test","n","1.0","The start-year relabel test of 0241 as a pass or fail with the diff when it fails.","0241"],
+["lab","Gravity checks","m","1.0","Openness against ICIO shares, the ACR formula and border-shock convergence, as in the 28 October benchmark page.","benchmark page, 0200"],
+["lab","Intercomparison","d","1.x","Other models run on the same protocol and coupled deterministically.","0135"],
+
+// dev
+["dev","Halt panel","d","1.0","On an invariant failure or panic: what broke, at which tick, with fork-from-last-snapshot and the repro bundle folder.","0214"],
+["dev","Tick profiler","m","1.0","Time per system per tick with the per-good budget lines. Developer builds only (Antonio, 29 Oct).","screens canvas, 0235"],
+["dev","Orrery","m","1.0","Systems as rings turning at their own clock rates, weighted by share of the tick budget.","charm 5, 0232"],
+["dev","Flatness gate","d","1.0","Tick time against simulated year, so a slowdown at year 100 is visible before the gate fails.","0234"],
+["dev","Invariant monitor","n","1.0","Live residuals of every asserted identity (SFC, mass balance, population accounting) per tick.","4.6"],
+["dev","Determinism check","n","1.0","Recompute the last K ticks from a snapshot and compare hashes, on demand.","4.5, 0097"],
+["dev","Run-ahead ring","n","1.0","How many finished ticks wait ahead of presented time and why the ring is full or dry.","0208"],
+["dev","Solver log","n","1.0","Per-tick clearing iterations, imputations after redraws and fallbacks taken.","0093, 0190"],
+
+// run
+["run","New run setup","m","1.0","Pack and origin, replay family, lanes, seed and profile on one screen, with the run hash shown before start.","screens canvas"],
+["run","Run library","m","1.0","Runs with hashes, branch counts, size on disk, and covers once 0144 lands.","screens canvas"],
+["run","First-run data fetch","d","1.0","Each user downloads and builds their own data, with progress per source and the archive fallback.","0215"],
+["run","Pack profiles","d","1.0","Prebuilt and user-built profiles with the sources each one needs.","0217"],
+["run","Settings","m","1.0","Data packs, mods, LLM providers, sound, units and the disk budgets.","screens canvas"],
+["run","About and credits","d","1.0","Version and code licences, and a credits screen built from the user's own pack.","0217"],
+["run","Usage statistics","d","1.0","Off by default; the exact payload is shown before anything is sent.","0214"],
+["run","Disk budget prompt","d","1.0","When a budget would be exceeded, says which history tier it will thin and asks.","0212"],
+["run","Open an old run","d","1.0","Compatibility check and migrate path when a new version opens an old run.","0211"],
+["run","Language","d","1.0","UI language picker; one number and date format per UI language in 1.0.","0220"],
+["run","Keymap editor","n","1.0","Rebind keys in either keymap with conflict warnings and a printable cheat sheet.","0188"],
+["run","Source drift","n","1.0","Which upstream sources changed since the pack was built, from the drift job.","0215"],
+["run","Mod manager","d","1.x","Data and mechanism mods with the manifest, load order and hash effect.","23.3, 0134"],
+
+// learn
+["learn","Pedia","d","1.0","Concept pages generated from specs and ADRs: equation, current parameter values with sources, deciding ADRs.","0158"],
+["learn","Disputed area entries","d","1.0","One pedia entry per disputed area with claimants and why the model assigns it as it does.","0222"],
+["learn","Model description","d","1.0","The published model description and style note.","0219"],
+["learn","Coach marks","m","1.0","One-time pointers on first use of a panel.","screens canvas"],
+["learn","Lessons","d","1.x","Small CRN experiments that trigger on a first event and walk through the diff.","0158"],
+["learn","Live equation","n","1.0","The equation behind a value with this province's numbers substituted in.","0158"],
+["learn","Mode legend card","n","1.0","What the active mode shows, its ramp, class breaks, units and source, one key away.","0137"],
+
+// share
+["share","Exports","d","1.0","TSV copy from any table, xlsx from any panel, GeoPackage from any map mode, SVG and PNG from maps and charts.","0197"],
+["share","Local API","d","1.0","Read-only `ceteris serve` on localhost: read at a tick, subscribe, explain, blame and query.","0197"],
+["share","Deep links","d","1.0","`ceteris://` links to a place, tick and branch.","0197"],
+["share","Console and scenario file","d","1.0","Every click logged as the equivalent command; a session exports as a scenario file and recipe.","20.2, 0188"],
+["share","Run hash","d","1.0","Same hash, same world; anyone with the pack can open the same moment.","0128"],
+["share","Licence check on share","d","1.0","What a shared run or export may carry under its sources' licences.","0213"],
+["share","Copy as citation","m","1.0","A value copied with its run, branch, tick, unit and source.","screens canvas"],
+["share","Atlas","d","1.x","`ceteris atlas` renders a run to a reproducible PDF of maps, ledgers, chronicle and fan charts.","0124"],
+["share","Postcards","d","1.x","Any map view at a date with a caption and the run hash.","0144"],
+["share","Time-lapse","n","1.0","Render a mode over a date range to video, with the imprint burned in.",""],
+
+// workspaces
+["ws","Panel host","d","1.0","Panels name no window; they read core columns and submit commands.","0196"],
+["ws","Tear-off panels","d","1.0","Drag a tab out or press Ctrl+K O; F6 cycles across windows.","0196"],
+["ws","Link groups","d","1.0","Panels in a group follow one cursor or pin to a branch and tick.","0188, 0196"],
+["ws","Pinned baseline window","d","1.0","A window pinned to the baseline at the main cursor's tick, beside the fork.","0196"],
+["ws","Terminal workspace","d","1.0","Four linked panels arranged as a terminal user expects.","0188"],
+["ws","Workspace presets","n","1.0","Shipped layouts for common jobs: trade desk, macro desk, lab bench, compare.",""],
+["ws","Presentation mode","n","1.0","Hide chrome, enlarge type and step through saved views as slides with the imprint on each.",""],
+
+// game
+["game","Seat chrome","d","2.0+","Accent, header, regime-class wording and fog halo per seat.","0140"],
+["game","Fog of data","d","2.0+","Published, first-release and latest vintages beside truth, with revisions and manipulation.","0065, 0238"],
+["game","Leadership dossier","d","2.0+","A leadership profile with judgments worded by probability band and redacted paragraphs. No portrait.","0187"],
+["game","Whip count","d","2.0+","Projected vote by party and group with what would move each.","0164, 0194"],
+["game","Loyalty view","d","2.0+","The autocrat's whip count: believed loyalty of security chiefs with intervals.","0199"],
+["game","Org chart","d","2.0+","Government bodies, competences and office holders.","0195"],
+["game","Steward levers","d","2.0+","The seat's lever panel; first for economic levers at 2.0-alpha.","12.6, 0239"],
+["game","Objectives and score","d","2.0+","Score against the AI baseline, Ironman.","23.4, 0239"],
+["game","Ambitions and Pareto","d","2.0+","Generated ambitions and Pareto histograms of outcomes.","0161"],
+["game","Cost screen","d","2.0+","Deaths, displacement and poverty-years attributable to the player's choices.","0132"],
+["game","Front page and codex","d","2.0+","The New Year front page, the rare-event codex, seed of the week.","0144, 0240"],
+["game","Trade seats","d","2.0+","The commodity trader's book and the corridor planner.","0160"],
+["game","Situation room","m","2.0+","Crisis screen with clocks, options and advisers' readings.","ideas board"],
+["game","Cabinet table","m","2.0+","Ministers' positions on a decision around one table.","ideas board"],
+["game","String wall","m","2.0+","Intelligence leads pinned and linked by string.","ideas board"],
+["game","Red box","m","2.0+","The day's papers to sign or send back.","ideas board"],
+["game","Gazette","m","2.0+","Enacted edits in the seat's official journal format and numbering.","charm 24"],
+["game","Release calendar","m","2.0+","Statistics arriving on each office's real release rhythm under fog of data.","charm 23"],
+["game","National map styles","m","2.0+","Ordnance Survey, IGN or swisstopo symbology for the seat's map.","charm 22"],
+["game","Flags and names","m","2.0+","Flag studio and dynamic state names.","0142, 0143"],
+["game","Diplomacy board","n","2.0+","Bilateral relations matrix, treaties and the bargaining range for an open crisis.","11.1, 11.2"],
+["game","Post-mortem","n","2.0+","End-of-run report: score, cost screen, private ledger and the branches not taken.","0132, 0164"],
+
+// war surfaces
+["wsurf","Strategic map","d","2.0+","Fronts on cells, theatres, control, supply, air and sea control, harm and strain.","0166"],
+["wsurf","Theatre view","d","2.0+","Segments with force ratios, axes, reserves, phase lines and HQ latency.","0166"],
+["wsurf","Order of battle","d","2.0+","Formation tree, readiness, span warnings and a template designer.","0166, 0146"],
+["wsurf","Logistics view","d","2.0+","Flows in tonnes per day, depots, railheads, truck radius, each shortage traced to its edge.","0148, 0166"],
+["wsurf","Battle planner","d","2.0+","Phased operations with fires, air, deception and an outcome band computed on beliefs.","0166, 0153"],
+["wsurf","Production and procurement","d","2.0+","Lines with learning curves, order books and stockpiles in days of fire.","0166, 0165"],
+["wsurf","Air tasking and naval board","d","2.0+","Sorties and sea zones.","0166"],
+["wsurf","Command console","d","2.0+","Appointments, delegation levels, risk tolerance and deviations.","0147, 0166"],
+["wsurf","War ledger","d","2.0+","Losses, spending and displacement, a view only.","0166"],
+["wsurf","Equipment designers","m","later","Parked until war stages W3 and W4.","equipment page"],
+["wsurf","Battle companion","m","later","A Command Ops style companion with 2.5D diorama tokens.","battle page"]
+];
+
+const $=s=>document.querySelector(s);
+const VCLS={"1.0":"v","1.x":"v","2.0+":"v v-20","later":"v v-later"};
+const SL={d:"DECIDED",m:"MOCKED",n:"NEW"};
+const VL={"1.0":"1.0","1.x":"1.x","2.0+":"2.0+","later":"LATER"};
+const state={q:"",s:new Set(["d","m","n"]),v:new Set(["1.0","1.x","2.0+","later"])};
+try{const sv=JSON.parse(localStorage.getItem("cat-f")||"null");if(sv){state.s=new Set(sv.s);state.v=new Set(sv.v)}}catch(e){}
+const esc=t=>t.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])).replace(/`([^`]+)`/g,"<code>$1</code>");
+
+function tally(){
+  const c={d:0,m:0,n:0},v={};
+  I.forEach(x=>{c[x[2]]++;v[x[3]]=(v[x[3]]||0)+1});
+  $("#tally").innerHTML=`<span><b>${I.length}</b> surfaces</span><span><b>${c.d}</b> decided</span><span><b>${c.m}</b> mocked</span><span><b>${c.n}</b> new</span><span>1.0 <b>${v["1.0"]}</b> · 1.x <b>${v["1.x"]}</b> · 2.0+ <b>${v["2.0+"]}</b> · later <b>${v.later}</b></span>`;
+}
+function render(){
+  const q=state.q.trim().toLowerCase();
+  const ok=x=>state.s.has(x[2])&&state.v.has(x[3])&&(!q||(x[1]+" "+x[4]+" "+x[5]).toLowerCase().includes(q));
+  let main="",toc="",shown=0,lastPart="";
+  for(const [id,part,title,blurb] of C){
+    const rows=I.filter(x=>x[0]===id&&ok(x));
+    if(part!==lastPart){toc+=`<li class="part">${PARTS.find(p=>p[1]===part)[0]}</li>`;lastPart=part}
+    toc+=`<li><a href="#${id}"><span>${title.replace(/^Map modes: /,"")}</span><span class="n">${rows.length}</span></a></li>`;
+    if(!rows.length)continue;
+    shown+=rows.length;
+    main+=`<section id="${id}"><h2>${title}<span class="c">${rows.length}</span></h2><p class="blurb">${blurb}</p><div class="items">`+
+      rows.map(x=>`<div class="it"><div><div class="nm">${esc(x[1])}</div><div class="tags"><span class="chip s-${x[2]}">${SL[x[2]]}</span><span class="chip ${VCLS[x[3]]}">${VL[x[3]]}</span></div></div><div><p>${esc(x[4])}</p>${x[5]?`<div class="refs">${esc(x[5])}</div>`:""}</div></div>`).join("")+
+      `</div></section>`;
+  }
+  $("#main").innerHTML=main||`<p class="empty">Nothing matches. Clear the filter or turn a status or version back on.</p>`;
+  $("#toc").innerHTML=toc;
+  $("#shown").textContent=`${shown} of ${I.length} shown`;
+}
+document.querySelectorAll("#fs button,#fv button").forEach(b=>{
+  const k=b.dataset.s?"s":"v",val=b.dataset.s||b.dataset.v;
+  b.setAttribute("aria-pressed",state[k].has(val));
+  b.addEventListener("click",()=>{state[k].has(val)?state[k].delete(val):state[k].add(val);b.setAttribute("aria-pressed",state[k].has(val));
+    try{localStorage.setItem("cat-f",JSON.stringify({s:[...state.s],v:[...state.v]}))}catch(e){}render()});
+});
+$("#q").addEventListener("input",e=>{state.q=e.target.value;render()});
+tally();render();
+</script>

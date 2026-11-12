@@ -1,0 +1,516 @@
+<title>Borrowed Mechanics for Ceteris</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Layout: an atlas plate catalogue. Each mechanic is a numbered plate: provenance in a narrow left margin, the three-part reading on the right. Tokens follow ADR 0137 (Modern Atlas). */
+:root {
+  --paper: #EDEFEA;
+  --sheet: #F6F7F3;
+  --ink: #1C292F;
+  --ink-2: #4A5A61;
+  --rule: #C9D0CC;
+  --sea: #BCD1DB;
+  --edit: #AE2459;
+  --fork: #5E45A3;
+  --ok: #2F6B4F;
+  --warn: #8A5A12;
+  --late: #5B6770;
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #161E22; --sheet: #1C262B; --ink: #DCE3E0; --ink-2: #9AA8AE; --rule: #2E3B41;
+    --sea: #2B4350; --edit: #E06A93; --fork: #A390E4; --ok: #79C29C; --warn: #D9A85A; --late: #8E9BA3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #161E22; --sheet: #1C262B; --ink: #DCE3E0; --ink-2: #9AA8AE; --rule: #2E3B41;
+  --sea: #2B4350; --edit: #E06A93; --fork: #A390E4; --ok: #79C29C; --warn: #D9A85A; --late: #8E9BA3;
+  color-scheme: dark;
+}
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 64px; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.1; letter-spacing: -0.01em; }
+h2 { font-size: 24px; line-height: 1.2; }
+h3 { font-size: 19px; line-height: 1.25; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--fork); }
+.eyebrow { font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
+.mono { font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+header.top { display: grid; gap: 14px; border-bottom: 2px solid var(--ink); padding-bottom: 22px; }
+header.top .lede { font-family: var(--serif); font-size: 18px; line-height: 1.5; color: var(--ink); }
+header.top .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink-2); }
+section { margin-top: 44px; display: grid; gap: 16px; }
+.rule-label { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--rule); padding-bottom: 8px; }
+.rule-label .eyebrow { margin-left: auto; }
+
+.short { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.short a.pick { display: grid; gap: 4px; padding: 12px 14px; background: var(--sheet); border: 1px solid var(--rule); text-decoration: none; color: var(--ink); }
+.short a.pick:hover, .short a.pick:focus-visible { border-color: var(--ink); outline: none; }
+.short .n { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+.short .t { font-family: var(--serif); font-weight: 600; font-size: 16px; }
+.short .s { font-size: 13.5px; color: var(--ink-2); }
+
+.key { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 13.5px; color: var(--ink-2); }
+.key b { color: var(--ink); font-weight: 600; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filters button { font: 500 13px var(--sans); letter-spacing: 0.04em; padding: 6px 12px; background: transparent; color: var(--ink); border: 1px solid var(--rule); cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.filters button:focus-visible { outline: 2px solid var(--fork); outline-offset: 2px; }
+.filters .count { margin-left: auto; color: var(--ink-2); }
+
+.plate { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 0 26px; padding: 22px 0; border-top: 1px solid var(--rule); scroll-margin-top: 16px; }
+.plate .margin { display: grid; gap: 8px; align-content: start; }
+.plate .num { font-family: var(--mono); font-size: 13px; color: var(--ink-2); }
+.plate .from { font-family: var(--serif); font-style: italic; font-size: 14.5px; line-height: 1.35; color: var(--ink-2); }
+.plate .body { display: grid; gap: 12px; min-width: 0; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { font: 500 11.5px var(--mono); letter-spacing: 0.02em; padding: 2px 7px; border: 1px solid currentColor; white-space: nowrap; }
+.tag.fit-10 { color: var(--ok); }
+.tag.fit-1x { color: var(--fork); }
+.tag.fit-20 { color: var(--late); }
+.tag.cost { color: var(--warn); }
+.tag.kind { color: var(--ink-2); }
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.cols > div { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.cols h4 { margin: 0; font: 600 11.5px var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
+.cols p { font-size: 14.5px; }
+.cols .map h4 { color: var(--edit); }
+.dedupe { font-size: 13px; color: var(--ink-2); border-left: 2px solid var(--sea); padding-left: 10px; }
+
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+th { font: 600 11.5px var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); border-bottom: 1.5px solid var(--ink); }
+td.g { font-family: var(--serif); font-style: italic; color: var(--ink-2); white-space: nowrap; }
+td .mono { white-space: nowrap; }
+
+.note { font-size: 14px; color: var(--ink-2); }
+footer { margin-top: 48px; padding-top: 14px; border-top: 2px solid var(--ink); display: grid; gap: 6px; color: var(--ink-2); font-size: 13.5px; }
+
+@media (max-width: 760px) {
+  .plate { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .plate .margin { grid-template-columns: auto 1fr; gap: 10px; align-items: baseline; }
+  .cols { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .filters .count { margin-left: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">Ceteris research note &middot; 28 October 2026</div>
+  <h1>Borrowed mechanics</h1>
+  <p class="lede">Twenty mechanics from other games that Ceteris does not already plan, each mapped onto the rule that the sim owns consequences and the game changes state only through interventions. Most of the strongest ones fit the economy-only 1.0 because they are views or lab tools, not new behaviour.</p>
+  <div class="meta mono">
+    <span>Deduped against DESIGN.md, ADRs 0001-0144, the bold-ideas doc and the three research notes</span>
+    <span>War kept light (separate thread)</span>
+  </div>
+</header>
+
+<section aria-labelledby="short-h">
+  <div class="rule-label"><h2 id="short-h">Shortlist</h2><span class="eyebrow">Best value for 1.0</span></div>
+  <p class="note">These six are cheap, need nothing beyond P2-P5, write no state, and fix the risk the Victoria 3 comparison named first: legibility.</p>
+  <div class="short">
+    <a class="pick" href="#m01"><span class="n">01 &middot; Kerbal Space Program</span><span class="t">Headroom gauges</span><span class="s">How far each state is from the next regime switch the model contains, and how fast it is closing.</span></a>
+    <a class="pick" href="#m02"><span class="n">02 &middot; Factorio, Anno</span><span class="t">Bottleneck lens</span><span class="s">Where within-tick rationing binds, which input, and the chain upstream to its origin.</span></a>
+    <a class="pick" href="#m03"><span class="n">03 &middot; Cities: Skylines</span><span class="t">Who uses this route</span><span class="s">Click a corridor or strait and see every origin, destination and good riding on it.</span></a>
+    <a class="pick" href="#m05"><span class="n">05 &middot; Budget Hero, Rule the Waves</span><span class="t">Static and dynamic score</span><span class="s">Design a package, see the accounting cost at once, then the full-model cost. The gap is the lesson.</span></a>
+    <a class="pick" href="#m06"><span class="n">06 &middot; Victoria 3</span><span class="t">Lessons as small experiments</span><span class="s">Onboarding that forks the user's own world and shows one counterfactual.</span></a>
+    <a class="pick" href="#m04"><span class="n">04 &middot; Democracy 4</span><span class="t">Generated influence web</span><span class="s">The policy web, drawn from derivatives at the current state instead of authored arrows.</span></a>
+  </div>
+</section>
+
+<section aria-labelledby="cat-h">
+  <div class="rule-label"><h2 id="cat-h">Catalogue</h2><span class="eyebrow">20 plates</span></div>
+  <div class="key">
+    <span><b>Fit 1.0</b> lands with the economy (P2-P5, P9)</span>
+    <span><b>Fit 1.x</b> a minor after 1.0, mostly with 1.3 Steward</span>
+    <span><b>Fit 2.0+</b> needs politics, institutions or war to move</span>
+    <span><b>Cost</b> S under two weeks, M one to two months, L more (part-time)</span>
+  </div>
+  <div class="filters" role="group" aria-label="Filter by release fit">
+    <button type="button" id="f-all" data-f="all" aria-pressed="true">All</button>
+    <button type="button" id="f-10" data-f="fit-10" aria-pressed="false">Fit 1.0</button>
+    <button type="button" id="f-1x" data-f="fit-1x" aria-pressed="false">Fit 1.x</button>
+    <button type="button" id="f-20" data-f="fit-20" aria-pressed="false">Fit 2.0+</button>
+    <span class="count mono" id="count" aria-live="polite">20 shown</span>
+  </div>
+
+  <div id="plates">
+
+  <article class="plate" id="m01" data-fit="fit-10">
+    <div class="margin"><span class="num">01</span><span class="from">Kerbal Space Program (delta-v readout, maneuver preview)</span></div>
+    <div class="body">
+      <h3>Headroom gauges</h3>
+      <div class="tags"><span class="tag fit-10">Fit 1.0</span><span class="tag cost">Cost S-M</span><span class="tag kind">View</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>KSP shows how much delta-v each stage has left, so the player knows before launch whether the rocket reaches orbit.</p></div>
+        <div><h4>Why it works</h4><p>It turns a hidden physical budget into one number with a direction, so failure is foreseeable instead of sudden.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Per state, the distance to each switch the model already contains: months of reserves to the peg-break region (9.2), debt and spread to the crisis region (9.13), bank capital to the run threshold (9.11), food stocks to famine rules (0029). Burn rate from ADR 0096 tangents. Where the switch is a hazard, show the hazard curve, not a cliff.</p></div>
+      </div>
+      <p class="dedupe">New. Alerts (23.8) fire after a user-set line is crossed; this shows the model's own lines before they are reached.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m02" data-fit="fit-10">
+    <div class="margin"><span class="num">02</span><span class="from">Factorio (production statistics), Anno 1800 (supply and demand per good)</span></div>
+    <div class="body">
+      <h3>Bottleneck lens</h3>
+      <div class="tags"><span class="tag fit-10">Fit 1.0</span><span class="tag cost">Cost S-M</span><span class="tag kind">View</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Factorio graphs production and consumption per item over switchable windows (minutes to hundreds of hours). Players trace a starved assembler back up the chain to the missing input.</p></div>
+        <div><h4>Why it works</h4><p>The fun of a production game is finding the binding constraint. A good lens makes the hunt fast without solving it for you.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>A map mode colouring cells where putty-clay rationing (ADR 0020) binds this tick, and a panel that walks the shortfall upstream through the IO table and trade shares to the origin market. Every series gets Factorio's window toggle (month, year, decade).</p></div>
+      </div>
+      <p class="dedupe">New. The receipt (0124) traces a household basket; this traces a firm's missing input. Rationing is already computed, so the cost is the view.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m03" data-fit="fit-10">
+    <div class="margin"><span class="num">03</span><span class="from">Cities: Skylines and its traffic mods (route view on a road segment)</span></div>
+    <div class="body">
+      <h3>Who uses this route</h3>
+      <div class="tags"><span class="tag fit-10">Fit 1.0</span><span class="tag cost">Cost S</span><span class="tag kind">View</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Select a road segment and every vehicle on it is traced to its origin and destination, so the player sees why a junction jams.</p></div>
+        <div><h4>Why it works</h4><p>It links a local symptom to the distant choices that cause it, which is the whole idea of a network.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Click a transport edge, port or chokepoint and list the origin-destination pairs and goods routed through it, from the route-choice shares of ADR 0017. A "close this edge" button forks a branch, so the preview and the shock are one gesture.</p></div>
+      </div>
+      <p class="dedupe">New. The cartogram (0124) shows costs, not who carries what; chokepoints exist as data but have no per-edge inspector.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m04" data-fit="fit-10">
+    <div class="margin"><span class="num">04</span><span class="from">Democracy 4 (the policy web)</span></div>
+    <div class="body">
+      <h3>Generated influence web</h3>
+      <div class="tags"><span class="tag fit-10">Fit 1.0</span><span class="tag cost">Cost M</span><span class="tag kind">View</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Policies, statistics and voter groups are nodes; lines show who affects whom, and hovering a policy lights up everything it touches.</p></div>
+        <div><h4>Why it works</h4><p>A complex system feels learnable when its wiring is visible. Democracy's weakness is that the wiring is authored and fixed.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Draw the web from the model: levers (tariffs, taxes, policy rate) to intermediate variables to pop groups and sectors, edge weights from ADR 0096 derivatives at the current state, refreshed quarterly. Edges change as the economy changes, and each opens the explainer. Label it local and path-conditional.</p></div>
+      </div>
+      <p class="dedupe">New. Listed under "games worth studying" in the design notes but never designed. The leverage map (0117) is spatial and per outcome; this is per lever.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m05" data-fit="fit-10">
+    <div class="margin"><span class="num">05</span><span class="from">Budget Hero, CRFB Debt Fixer, Rule the Waves (designing under a budget)</span></div>
+    <div class="body">
+      <h3>Static and dynamic score</h3>
+      <div class="tags"><span class="tag fit-10">Fit 1.0</span><span class="tag cost">Cost M</span><span class="tag kind">Lab tool</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Budget games hand the player a menu of policy cards, each with an official cost, to hit a deficit target. Rule the Waves asks for a ship that fits a budget, with every trade-off visible while you design.</p></div>
+        <div><h4>Why it works</h4><p>Live feedback while composing makes trade-offs tangible before committing.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>A package designer for tax, tariff and transfer changes. While editing: the static score (accounting cost at current quantities, as a conventional CBO score) and a per-pop-group incidence table. On "run": the dynamic score from the ensemble under CRN. The package saves as an edit list.</p></div>
+      </div>
+      <p class="dedupe">New. Surrogate sliders (0079) predict outcomes; this separates the accounting answer from the general-equilibrium one, which teaches the core idea of the model.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m06" data-fit="fit-10">
+    <div class="margin"><span class="num">06</span><span class="from">Victoria 3 (Lessons), Into the Breach</span></div>
+    <div class="body">
+      <h3>Lessons as small experiments</h3>
+      <div class="tags"><span class="tag fit-10">Fit 1.0</span><span class="tag cost">Cost M</span><span class="tag kind">Onboarding</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Victoria 3 opens a short, step-by-step lesson the first time the player meets a mechanic, using the player's own game.</p></div>
+        <div><h4>Why it works</h4><p>Teaching at the moment of need, on the player's own situation, sticks better than a front-loaded tutorial.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>The first price spike, rationing event or capital-flow reversal offers a lesson that forks the user's world, changes one thing (no export ban, half the tariff) and shows the diff under CRN. The user learns the explainer and branch manager by using them. Lessons are text files; experiments are edit lists.</p></div>
+      </div>
+      <p class="dedupe">New. The specs have no onboarding. Classroom mode (research notes) is instructor-led; this is self-serve.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m07" data-fit="fit-10">
+    <div class="margin"><span class="num">07</span><span class="from">Football Manager (Data Hub)</span></div>
+    <div class="body">
+      <h3>Peer radar</h3>
+      <div class="tags"><span class="tag fit-10">Fit 1.0</span><span class="tag cost">Cost S</span><span class="tag kind">View</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Players' and teams' metrics are shown as percentiles against a chosen comparison group, often as radar charts.</p></div>
+        <div><h4>Why it works</h4><p>Raw numbers mean little without a reference. Percentiles against a fair peer set answer "is this good?" at a glance.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Any state's headline series as percentiles against a peer set the user picks (income group, region, commodity exporters, currency regime), with the AI-baseline branch as a ghost outline. Peer sets are saved queries.</p></div>
+      </div>
+      <p class="dedupe">New. History's percentile (0118) ranks reality within the ensemble; this ranks a state among states.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m08" data-fit="fit-10">
+    <div class="margin"><span class="num">08</span><span class="from">Crusader Kings III (game concepts), Civilopedia</span></div>
+    <div class="body">
+      <h3>In-app pedia from the specs</h3>
+      <div class="tags"><span class="tag fit-10">Fit 1.0</span><span class="tag cost">Cost S-M</span><span class="tag kind">View</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>In CK3 every game term inside a tooltip is a link to its concept entry; Civ keeps a full encyclopedia one click away.</p></div>
+        <div><h4>Why it works</h4><p>Players learn vocabulary in place instead of leaving the game for a wiki.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Terms in tooltips (Armington elasticity, putty-clay, iceberg cost) link to pages generated from the specs: the equation, live parameter values with sources, the deciding ADR. The parameter wiki (0127) becomes its parameter section.</p></div>
+      </div>
+      <p class="dedupe">Extends 0127 (a static site) into the app's tooltips.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m09" data-fit="fit-10">
+    <div class="margin"><span class="num">09</span><span class="from">Factorio (alt-mode), Europa Universalis IV (macro builder)</span></div>
+    <div class="body">
+      <h3>Numbers on the map and edits by query</h3>
+      <div class="tags"><span class="tag fit-10">Fit 1.0</span><span class="tag cost">Cost S</span><span class="tag kind">View, editor</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Holding Alt in Factorio prints contents and recipes over every machine. EU4's macro builder applies one action to every province matching a filter.</p></div>
+        <div><h4>Why it works</h4><p>Colour shows patterns, numbers settle arguments. Bulk actions keep large worlds manageable.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Hold a key to print the active map mode's value on each province. Select provinces by query ("every port province with a food deficit") and apply one edit to all; the selection is stored with the edit so it replays.</p></div>
+      </div>
+      <p class="dedupe">New as UI. Edits by query may already be possible in the scripting API (14.8); this exposes it in the app.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m10" data-fit="fit-1x">
+    <div class="margin"><span class="num">10</span><span class="from">Transport Tycoon and OpenTTD, Victoria 3 (construction queue)</span></div>
+    <div class="body">
+      <h3>Corridor planner seat</h3>
+      <div class="tags"><span class="tag fit-1x">Fit 1.x</span><span class="tag cost">Cost M</span><span class="tag kind">Seat, lab candidate</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>The player lays track or builds ports and watches cargo find the new route. Victoria 3 adds the wait: projects queue on limited construction capacity.</p></div>
+        <div><h4>Why it works</h4><p>One visible build reshapes flows across the map, which makes network economics feel physical.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>A seat that builds one corridor (canal, rail line, port, pipeline) as an edit on the transport graph. Delivery delay and cost overrun are drawn from reference-class distributions by project type (Flyvbjerg, Holm and Buhl 2002: rail about 45% over, roads about 20%). Score: market-access gains (5.5, Donaldson and Hornbeck 2016) against cost, under CRN.</p></div>
+      </div>
+      <p class="dedupe">New seat. 5.5 lets AI states propose projects but has no overrun or delay model; adding one is a small lab change that the seat then uses.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m11" data-fit="fit-1x">
+    <div class="margin"><span class="num">11</span><span class="from">Mount &amp; Blade (caravans), Offworld Trading Company</span></div>
+    <div class="body">
+      <h3>Commodity trader seat</h3>
+      <div class="tags"><span class="tag fit-1x">Fit 1.x</span><span class="tag cost">Cost M</span><span class="tag kind">Seat</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>In Mount &amp; Blade the player buys cheap in one town and sells dear in another. In Offworld every purchase pushes the shared price up and every sale pushes it down.</p></div>
+        <div><h4>Why it works</h4><p>Arbitrage teaches price geography directly, and price impact punishes greed.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>A trading house that buys, stores and ships between province markets. Small positions are price-taking; past a size the storage rule of 0091 shows the player's own price impact. Scenarios: 2007-08 rice, 2010 wheat, 2022 gas. Uses only the trade core.</p></div>
+      </div>
+      <p class="dedupe">Close to the supply-chain manager and macro-fund seats (research notes), but physical arbitrage plus storage is a distinct loop. A good first seat that needs no politics.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m12" data-fit="fit-1x">
+    <div class="margin"><span class="num">12</span><span class="from">Europa Universalis V (situations), Victoria 3 (journal), Democracy 4 (situations)</span></div>
+    <div class="body">
+      <h3>Situations as tracked processes</h3>
+      <div class="tags"><span class="tag fit-1x">Fit 1.0-1.3</span><span class="tag cost">Cost M</span><span class="tag kind">View</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>A long multi-actor process (the Hundred Years' War, a housing crisis) gets its own panel with participants, progress and end conditions.</p></div>
+        <div><h4>Why it works</h4><p>Slow processes become legible stories with a beginning and an end, instead of a scatter of events.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Situations are detectors on model variables with hysteresis (enter at one level, leave at another, so they do not flicker): a peg under pressure, a restructuring, a commodity boom, a sudden stop. Each has a panel, participants and a named arc. Unlike Democracy 4's, they add no effects.</p></div>
+      </div>
+      <p class="dedupe">Builds on event log v2 and its detectors (DF path) and chronicle naming (0078). The persistent tracking panel is new.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m13" data-fit="fit-1x">
+    <div class="margin"><span class="num">13</span><span class="from">Old World (ambitions), EU4 missions without the script</span></div>
+    <div class="body">
+      <h3>Generated ambitions</h3>
+      <div class="tags"><span class="tag fit-1x">Fit 1.3</span><span class="tag cost">Cost S-M</span><span class="tag kind">Game layer</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Old World periodically offers a few goals suited to the player's state; picking and completing one earns legitimacy.</p></div>
+        <div><h4>Why it works</h4><p>Short-horizon goals give a sandbox direction without scripting history.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Every few game years, offer three objectives built from the seat's data (gaps against peers, open situations): "inflation under 10% by 2004". Each shows its difficulty as the share of AI-baseline lanes that reach it. A chosen ambition joins the 23.4 objective vector with a fixed weight.</p></div>
+      </div>
+      <p class="dedupe">New. 23.4 has preset and user-written objectives; none are generated or priced by the ensemble.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m14" data-fit="fit-1x">
+    <div class="margin"><span class="num">14</span><span class="from">Opus Magnum and other Zachtronics games (solution histograms)</span></div>
+    <div class="body">
+      <h3>Pareto histograms</h3>
+      <div class="tags"><span class="tag fit-1x">Fit 1.3</span><span class="tag cost">Cost S</span><span class="tag kind">Scoring view</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>After a solve, the game shows your solution on histograms of every player's cost, cycles and area. There is no single score.</p></div>
+        <div><h4>Why it works</h4><p>Several axes invite replay to improve one at the expense of another, and show trade-offs without a weighting.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>At the end of a scenario, place the result on histograms per axis (welfare, debt, emissions, bottom-40 income) against the AI-baseline ensemble, the player's earlier runs, and any runs shared by hash through the timeline library (0132). No server needed.</p></div>
+      </div>
+      <p class="dedupe">New. 23.4 scores one weighted objective; this shows the whole frontier beside it.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m15" data-fit="fit-1x">
+    <div class="margin"><span class="num">15</span><span class="from">Slay the Spire (Ascension)</span></div>
+    <div class="body">
+      <h3>Ascension ladder</h3>
+      <div class="tags"><span class="tag fit-1x">Fit 1.3</span><span class="tag cost">Cost S</span><span class="tag kind">Game layer</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Twenty numbered difficulty levels, each adding one modifier and unlocked by winning the level below.</p></div>
+        <div><h4>Why it works</h4><p>Mastery has a visible path, and each step changes one thing the player can name.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Order 23.4's honest frictions into rungs: reporting lag, statistical fog (0065), revisions, markets that learn the player's rule faster, a longer AI planning horizon. No rung bends the model.</p></div>
+      </div>
+      <p class="dedupe">Packaging of 23.4 difficulty, which is already defined but has no progression.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m16" data-fit="fit-1x">
+    <div class="margin"><span class="num">16</span><span class="from">Kerbal Space Program (maneuver nodes)</span></div>
+    <div class="body">
+      <h3>Policy paths on the timeline</h3>
+      <div class="tags"><span class="tag fit-1x">Fit 1.3</span><span class="tag cost">Cost S-M</span><span class="tag kind">Editor</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Drop a node on the orbit, drag its handles, and the predicted trajectory redraws before the burn.</p></div>
+        <div><h4>Why it works</h4><p>Planning becomes direct manipulation with instant prediction, then a deliberate commit.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Drag nodes onto the timeline to draft a lever path (a rate path, a tariff phase-in). The surrogate fan redraws as nodes move; "commit" turns nodes into timed edits and launches the full ensemble to confirm.</p></div>
+      </div>
+      <p class="dedupe">Extends surrogate sliders (0079) from one value to a schedule.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m17" data-fit="fit-1x">
+    <div class="margin"><span class="num">17</span><span class="from">Frostpunk (irreversible laws), Stellaris (policy cooldowns)</span></div>
+    <div class="body">
+      <h3>Commitment devices</h3>
+      <div class="tags"><span class="tag fit-1x">Fit 1.3</span><span class="tag cost">Cost M</span><span class="tag kind">Lab candidate</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Frostpunk's laws cannot be repealed; Stellaris locks a policy for years after a change. Choices bind the future.</p></div>
+        <div><h4>Why it works</h4><p>Irreversibility gives decisions weight and stops the player from toggling every month.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Real versions with real payoffs: a fiscal rule, a currency board (0123), central-bank independence, a WTO tariff binding. Binding removes levers or adds an exit cost; in return, expectations (9.13) put more weight on the announced rule. This is the Kydland-Prescott trade of flexibility for credibility. Weight and its evidence (for example Iara and Wolff 2014 on fiscal rules and spreads) need a 17 entry.</p></div>
+      </div>
+      <p class="dedupe">New mechanism. 0083 covers announcements moving expectations before implementation, not binding.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m18" data-fit="fit-20">
+    <div class="margin"><span class="num">18</span><span class="from">Europa Universalis V (proximity and control)</span></div>
+    <div class="body">
+      <h3>State reach</h3>
+      <div class="tags"><span class="tag fit-20">Fit 2.0</span><span class="tag cost">Cost M</span><span class="tag kind">Lab candidate</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Control over a location falls with its travel distance from the capital, which caps what the player can extract there.</p></div>
+        <div><h4>Why it works</h4><p>Geography constrains power, so roads and administrative seats matter beyond trade.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>Tax collection and policy implementation (0083) fall with generalized trade cost (5.4) from the capital or regional seats; infrastructure raises reach. Evidence: Michalopoulos and Papaioannou (2014) on national institutions fading with distance from the capital; Herbst (2000). Feeds 0067 state capacity.</p></div>
+      </div>
+      <p class="dedupe">New. 0067 and 0068 have no distance term. Institutions are fixed in 1.0, so this waits for 2.0.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m19" data-fit="fit-20">
+    <div class="margin"><span class="num">19</span><span class="from">Frostpunk 2 (council votes), Suzerain</span></div>
+    <div class="body">
+      <h3>Whip count</h3>
+      <div class="tags"><span class="tag fit-20">Fit 2.0</span><span class="tag cost">Cost M</span><span class="tag kind">Game layer</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>Before a vote, Frostpunk 2 shows how each faction will vote, and the player can trade promises to flip them.</p></div>
+        <div><h4>Why it works</h4><p>Legislation becomes a negotiation with visible stakes, and broken promises come back later.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>For a bill in the legislative process (10.6), show the projected count by party and interest group with intervals, and what would move each. Promises are recorded commitments; breaking one costs trust with that group (10.7).</p></div>
+      </div>
+      <p class="dedupe">New UI over P6. The coalition-partner seat (0130) uses the same machinery.</p>
+    </div>
+  </article>
+
+  <article class="plate" id="m20" data-fit="fit-20">
+    <div class="margin"><span class="num">20</span><span class="from">Tropico (El Presidente's Swiss account)</span></div>
+    <div class="body">
+      <h3>Private ledger objective</h3>
+      <div class="tags"><span class="tag fit-20">Fit 2.0</span><span class="tag cost">Cost S</span><span class="tag kind">Objective preset</span></div>
+      <div class="cols">
+        <div><h4>What it is</h4><p>The ruler can skim into a personal account, and the score counts it apart from the island's welfare.</p></div>
+        <div><h4>Why it works</h4><p>Two ledgers make the conflict between ruler and ruled a choice the player feels.</p></div>
+        <div class="map"><h4>In Ceteris</h4><p>An objective preset scoring the ruling coalition's offshore wealth (profit shifting and havens, 0041; corruption, 10.1) against veil-of-ignorance welfare (0129). The post-mortem shows both.</p></div>
+      </div>
+      <p class="dedupe">New preset on existing scoring. Needs 10.1 to move, so 2.0.</p>
+    </div>
+  </article>
+
+  </div>
+</section>
+
+<section aria-labelledby="cov-h">
+  <div class="rule-label"><h2 id="cov-h">Already in Ceteris</h2><span class="eyebrow">Left out of the catalogue</span></div>
+  <p class="note">Mechanics from the requested games that the specs or research notes already cover.</p>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>Game</th><th>Mechanic</th><th>Where it lives</th></tr></thead>
+    <tbody>
+      <tr><td class="g">RimWorld</td><td>Storyteller personas, pacing</td><td><span class="mono">ADR 0078</span>; design notes, pacing</td></tr>
+      <tr><td class="g">Dwarf Fortress</td><td>Legends, named wars and eras, history burn-in</td><td><span class="mono">0078</span>; narrative note; DF comparison path</td></tr>
+      <tr><td class="g">Crusader Kings III</td><td>Characters with traits and memory; dynasties</td><td><span class="mono">23.5, 0066</span>, 4.0 candidate; century relay <span class="mono">0132</span></td></tr>
+      <tr><td class="g">Hearts of Iron</td><td>Command spectrum, fronts, logistics</td><td><span class="mono">23.5</span>; the war thread</td></tr>
+      <tr><td class="g">Stellaris, Terra Invicta</td><td>Sector governors, AI personalities, councillor ops</td><td>Delegation and rival memory (design notes); covert action <span class="mono">23.6</span></td></tr>
+      <tr><td class="g">Victoria 3</td><td>Price tooltips, needs, ledgers</td><td>Explainer <span class="mono">20.2</span>; PIGL; receipt <span class="mono">0124</span></td></tr>
+      <tr><td class="g">Democracy 4</td><td>Political capital</td><td>Design notes, roles and agency</td></tr>
+      <tr><td class="g">Suzerain</td><td>Ministers with their own agendas; diegetic documents</td><td>Implementation slippage <span class="mono">23.5</span>; letterhead <span class="mono">0141</span></td></tr>
+      <tr><td class="g">Football Manager</td><td>Scouting under uncertainty; staff advice</td><td>Dossiers <span class="mono">23.5</span>; advisers (design notes); <span class="mono">0131</span></td></tr>
+      <tr><td class="g">Frostpunk</td><td>Laws as trade-offs; hope and discontent</td><td>Policy catalog <span class="mono">23.7</span>; grievance <span class="mono">10.7</span></td></tr>
+      <tr><td class="g">Into the Breach</td><td>Telegraph what happens if you do nothing</td><td>Design notes, feedback</td></tr>
+      <tr><td class="g">Spelunky 2, Slay the Spire</td><td>Daily seeded challenges</td><td>Seed of the week <span class="mono">0144</span></td></tr>
+      <tr><td class="g">Factorio</td><td>Blueprint strings; deterministic lockstep</td><td>Runs as hashes <span class="mono">0128</span>; multiplayer (design notes)</td></tr>
+      <tr><td class="g">Civilization</td><td>Achievements; historic moments</td><td>Rare-event codex, front page <span class="mono">0144</span></td></tr>
+      <tr><td class="g">Plague Inc.</td><td>Spreading an idea across a map</td><td>Idea seat <span class="mono">0130</span>; narratives <span class="mono">0139</span></td></tr>
+      <tr><td class="g">Mount &amp; Blade, Kenshi</td><td>Rise from nobody in a world that does not notice</td><td>Citizen seat <span class="mono">0130</span></td></tr>
+      <tr><td class="g">Papers, Please</td><td>A household ledger against the job</td><td>Receipt <span class="mono">0124</span>; citizen seat</td></tr>
+      <tr><td class="g">Kerbal Space Program</td><td>Failure as learning, quickload</td><td>Lab versus Ironman; post-mortem</td></tr>
+      <tr><td class="g">Cities: Skylines</td><td>Info views; city play</td><td>Map modes <span class="mono">20.1</span>; city companion (separate game)</td></tr>
+      <tr><td class="g">En-ROADS, Fishbanks, Beer Game</td><td>Instant sliders; facilitated workshops; commons; bullwhip</td><td>Surrogate sliders <span class="mono">0079</span>; classroom and red-team; fisheries <span class="mono">0138</span>; supply-chain seat</td></tr>
+      <tr><td class="g">Shadow Empire</td><td>Generated planet with history</td><td>Synthetic worlds <span class="mono">23.3</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section aria-labelledby="rej-h">
+  <div class="rule-label"><h2 id="rej-h">Considered and rejected</h2><span class="eyebrow">Conflicts with design rules</span></div>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>Mechanic</th><th>From</th><th>Why not</th></tr></thead>
+    <tbody>
+      <tr><td>Threats scaled to the player's wealth</td><td class="g">RimWorld</td><td>Rubber-banding. Difficulty may change information and frictions only (23.4), and it would bias the score against the AI baseline.</td></tr>
+      <tr><td>Monarch points, orders, stratagem cards</td><td class="g">EU4, Old World, Shadow Empire</td><td>Abstract currencies, excluded by ADR 0049. Political capital is the one stock and it comes from approval.</td></tr>
+      <tr><td>Focus trees, mission trees</td><td class="g">Hearts of Iron IV, EU4</td><td>Scripted outcomes. Generated ambitions (13) give the same direction from data.</td></tr>
+      <tr><td>Golden and dark ages from era score</td><td class="g">Civilization VI</td><td>An abstract meter with authored effects. Eras are named from structural breaks instead (narrative note).</td></tr>
+      <tr><td>Situations with authored effects</td><td class="g">Democracy 4</td><td>Effects would bypass the mechanism. Situations (12) keep only the tracking.</td></tr>
+      <tr><td>End-game crisis</td><td class="g">Stellaris</td><td>An external scripted threat. Ceteris gets late drama from endogenous crises, drift and the shock tape.</td></tr>
+      <tr><td>Desk minigame of individual cases</td><td class="g">Papers, Please</td><td>Single cases do not aggregate to pop cells. The citizen seat carries the texture.</td></tr>
+      <tr><td>Binary swipe decisions</td><td class="g">Reigns</td><td>Too thin for an action space where every choice is an ordinary intervention.</td></tr>
+      <tr><td>Persistent shared economy</td><td class="g">EVE Online, Eco</td><td>Cloud hosting is a non-goal; lockstep and async play cover multiplayer.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section aria-labelledby="war-h">
+  <div class="rule-label"><h2 id="war-h">War, briefly</h2></div>
+  <p class="note">Left to the war thread. Two pointers for it: Rule the Waves sets the naval budget from international tension and hides rival designs until they are seen in battle, which suits the dossier rule; Shadow Empire draws supply as a network flow from headquarters with truck capacity, which matches the transport graph. Mobilization through the IO table is already the quartermaster seat (0130).</p>
+</section>
+
+<footer>
+  <span>Every plate respects one rule: views write no state, and seats act only through the Steward action space as recorded edits.</span>
+  <span class="mono">Sources checked: specs/DESIGN.md at 6423389, adr/0001-0144, bold-ideas doc, research/ceteris-game-design-notes.md, ceteris-brainstorm-additions.md, ceteris-narrative-and-explanation.md</span>
+</footer>
+</div>
+
+<script>
+(function () {
+  var buttons = document.querySelectorAll('.filters button');
+  var plates = document.querySelectorAll('#plates .plate');
+  var count = document.getElementById('count');
+  function apply(f) {
+    var n = 0;
+    plates.forEach(function (p) {
+      var show = f === 'all' || p.dataset.fit === f;
+      p.hidden = !show;
+      if (show) n++;
+    });
+    count.textContent = n + ' shown';
+    buttons.forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.f === f ? 'true' : 'false'); });
+  }
+  buttons.forEach(function (b) { b.addEventListener('click', function () { apply(b.dataset.f); }); });
+  document.querySelectorAll('.short a.pick').forEach(function (a) {
+    a.addEventListener('click', function () { apply('all'); });
+  });
+})();
+</script>

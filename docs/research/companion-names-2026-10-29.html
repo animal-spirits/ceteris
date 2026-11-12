@@ -1,0 +1,252 @@
+<title>Companion Game Names</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; a name sheet per game, each candidate a row with meaning, fit and collision status. */
+:root {
+  --bg: #f3f4f6;
+  --panel: #ffffff;
+  --ink: #1d2230;
+  --muted: #5d6475;
+  --rule: #d9dce4;
+  --proof: #b0207a;      /* Ceteris proof magenta: marks the recommended pick */
+  --clear: #2f7a4e;
+  --minor: #9a6a10;
+  --blocked: #b23a2e;
+  --display: "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #14171f; --panel: #1c202a; --ink: #e6e8ee; --muted: #9aa1b2; --rule: #2e3341;
+  --proof: #ea6bb8; --clear: #6cc58f; --minor: #e0b450; --blocked: #f0806f; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #14171f; --panel: #1c202a; --ink: #e6e8ee; --muted: #9aa1b2; --rule: #2e3341;
+  --proof: #ea6bb8; --clear: #6cc58f; --minor: #e0b450; --blocked: #f0806f; color-scheme: dark }
+
+body { background: var(--bg); color: var(--ink); font: 15px/1.6 var(--body); }
+.wrap { max-width: 860px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 40px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: 2.6rem; }
+h2 { font-size: 1.9rem; }
+h3 { font-size: 1.35rem; }
+p { margin: 0; max-width: 66ch; }
+.eyebrow { font: 500 0.72rem/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 16px; }
+.lede { font-size: 1.05rem; color: var(--muted); }
+
+.lineup { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+.lineup div { background: var(--panel); padding: 18px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lineup .nm { font: 600 1.7rem/1.05 var(--display); }
+.lineup .rec .nm { color: var(--proof); }
+.lineup .role { font: 400 0.75rem/1.3 var(--mono); color: var(--muted); }
+.lineup .gl { font-size: 0.85rem; font-style: italic; color: var(--muted); }
+@media (max-width: 620px) { .lineup { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.fam { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.fam > div { background: var(--panel); border: 1px solid var(--rule); padding: 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.fam > div.rec { border-color: var(--proof); }
+.fam .set { font: 600 1.15rem/1.3 var(--display); }
+.fam ul { margin: 0; padding-left: 1.1em; font-size: 0.9rem; color: var(--muted); }
+@media (max-width: 720px) { .fam { grid-template-columns: 1fr; } }
+
+.sheet { background: var(--panel); border: 1px solid var(--rule); }
+.sheet header { padding: 16px 18px; border-bottom: 1px solid var(--rule); display: flex; flex-direction: column; gap: 4px; }
+.row { display: grid; grid-template-columns: 11rem minmax(0, 1fr) 7.5rem; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--rule); align-items: start; }
+.row:last-child { border-bottom: 0; }
+.row .nm { font: 600 1.45rem/1.1 var(--display); }
+.row .say { font: 400 0.72rem/1.4 var(--mono); color: var(--muted); }
+.row.rec .nm { color: var(--proof); }
+.row.rec .nm::after { content: "recommended"; display: block; font: 500 0.66rem/1.6 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.row .txt { display: flex; flex-direction: column; gap: 6px; font-size: 0.92rem; min-width: 0; }
+.row .txt .m { color: var(--muted); font-style: italic; }
+.tag { font: 500 0.7rem/1.3 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 7px; border: 1px solid currentColor; justify-self: start; }
+.tag.clear { color: var(--clear); } .tag.minor { color: var(--minor); } .tag.blocked { color: var(--blocked); }
+.note { font-size: 0.82rem; color: var(--muted); }
+@media (max-width: 620px) { .row { grid-template-columns: minmax(0, 1fr); gap: 8px; } }
+
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+.tw { overflow-x: auto; background: var(--panel); border: 1px solid var(--rule); }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 500 0.72rem/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+td:first-child { font: 600 1.05rem/1.3 var(--display); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+a { color: var(--proof); }
+a:focus-visible { outline: 2px solid var(--proof); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+<section>
+  <span class="eyebrow">Ceteris companions · names · 29 Oct 2026</span>
+  <h1>Naming the city, space and battle games</h1>
+  <p class="lede">The three parked companions each exchange a context file and a summary file with a Ceteris run. A shared naming rule makes them read as one family on a shelf. The recommended set below uses Latin terms of art, the way "ceteris paribus" is one.</p>
+</section>
+
+<div class="lineup" aria-label="Recommended line-up">
+  <div><span class="role">world simulator</span><span class="nm">Ceteris</span><span class="gl">other things equal</span></div>
+  <div class="rec"><span class="role">city</span><span class="nm">Mutatis</span><span class="gl">what must change, changed</span></div>
+  <div class="rec"><span class="role">space</span><span class="nm">Res Nullius</span><span class="gl">a thing that belongs to no one</span></div>
+  <div class="rec"><span class="role">battle</span><span class="nm">Vis Major</span><span class="gl">superior force</span></div>
+</div>
+
+<section>
+  <span class="eyebrow">Naming rule</span>
+  <h2>Three ways to make a family</h2>
+  <div class="fam">
+    <div class="rec">
+      <span class="eyebrow" style="color:var(--proof)">Recommended</span>
+      <span class="set">Latin terms of art</span>
+      <span class="note">Ceteris · Mutatis · Res Nullius · Vis Major</span>
+      <ul>
+        <li>Each name is a phrase an economist or lawyer uses for exactly that situation.</li>
+        <li>Mutatis completes the most famous pair in economics with Ceteris.</li>
+        <li>Two of the four are two words, and Vis Major needs a gloss.</li>
+      </ul>
+    </div>
+    <div>
+      <span class="eyebrow">Alternative</span>
+      <span class="set">Namesakes of the core model</span>
+      <span class="note">Ceteris · Thünen · Hohmann · Lanchester</span>
+      <ul>
+        <li>Each game is named for the equation at its heart: land-rent rings, transfer orbits, attrition laws.</li>
+        <li>Keeps Hohmann, the working title.</li>
+        <li>Ceteris itself does not fit the rule, so the family is three plus one.</li>
+      </ul>
+    </div>
+    <div>
+      <span class="eyebrow">Alternative</span>
+      <span class="set">Best name per game</span>
+      <span class="note">Ceteris · Mutatis · Hohmann · Lanchester</span>
+      <ul>
+        <li>Picks the strongest single name for each game.</li>
+        <li>Shared wordmark and a "a Ceteris companion" strap line carry the family instead.</li>
+        <li>Weakest shelf identity of the three.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">Form: I recommend standalone names with a shared wordmark and the strap line "a Ceteris companion", over prefixed titles like "Ceteris: Mutatis". The companions are separate programs, and prefixes read as DLC.</p>
+</section>
+
+<section>
+  <span class="eyebrow">City</span>
+  <h2>The city builder</h2>
+  <p>A separate program for one metro, real footprints from OSM, organic plots, serious diorama look. The region file is held fixed while the player changes the city, which is ceteris paribus applied to everything outside the city limits.</p>
+  <div class="sheet">
+    <div class="row rec">
+      <div><div class="nm">Mutatis</div><div class="say">MOO-tah-tiss</div></div>
+      <div class="txt"><span class="m">From "mutatis mutandis": once the things that must change have been changed.</span>
+        <span>The region is held equal, the city is what you change. Ceteris and Mutatis are the two halves of the comparative-statics phrase pair, so the family link needs no explanation to anyone who took economics.</span></div>
+      <span class="tag minor">Minor</span>
+    </div>
+    <div class="row">
+      <div><div class="nm">Thünen</div><div class="say">TOO-nen</div></div>
+      <div class="txt"><span class="m">Johann Heinrich von Thünen, The Isolated State (1826): land use in rings by transport cost.</span>
+        <span>The first spatial economist; land rent falling with distance is the city's core mechanic. The umlaut is awkward in store search and file names.</span></div>
+      <span class="tag clear">Clear</span>
+    </div>
+    <div class="row">
+      <div><div class="nm">Christaller</div><div class="say">KRIS-tah-ler</div></div>
+      <div class="txt"><span class="m">Walter Christaller, central place theory (1933): towns form a hierarchy by the market range of their goods.</span>
+        <span>Fits a city slotted into a regional hierarchy. Long, and Christaller's work was used in Nazi settlement planning, which a reviewer will find.</span></div>
+      <span class="tag clear">Clear</span>
+    </div>
+    <div class="row">
+      <div><div class="nm">Genius Loci</div><div class="say">JEE-nee-us LOH-sai</div></div>
+      <div class="txt"><span class="m">Spirit of the place.</span>
+        <span>Matches the rule that new growth takes its style from the local street pattern. Several itch.io jam games already use it, and it reads fantasy.</span></div>
+      <span class="tag minor">Minor</span>
+    </div>
+  </div>
+  <p class="note">Mutatis collision: an iOS shooter called Mutatis (about 2019) and an itch.io jam game; nothing on Steam found. Mutazione on Steam is close in sound but a different word.</p>
+</section>
+
+<section>
+  <span class="eyebrow">Space</span>
+  <h2>The space economy game</h2>
+  <p>A company, agency or settlement builds an off-Earth economy on a delta-v map, with Earth prices from a Ceteris run. The open question that drives it is who may own lunar ice and asteroid metal.</p>
+  <div class="sheet">
+    <div class="row rec">
+      <div><div class="nm">Res Nullius</div><div class="say">RACE noo-LEE-us</div></div>
+      <div class="txt"><span class="m">A thing belonging to no one, which the first taker may own.</span>
+        <span>The live legal fight in space resources: the Outer Space Treaty bars national appropriation, while the 2015 US Space Act and the Artemis Accords treat extracted resources as ownable. The name states the game's political economy, as Ceteris states the method.</span></div>
+      <span class="tag clear">Clear</span>
+    </div>
+    <div class="row">
+      <div><div class="nm">Hohmann</div><div class="say">HOH-mahn</div></div>
+      <div class="txt"><span class="m">Walter Hohmann (1925): the minimum-energy transfer between two orbits.</span>
+        <span>The working title. Names the map rather than the economy, and is short and searchable. Best pick if you choose the namesake family.</span></div>
+      <span class="tag clear">Clear</span>
+    </div>
+    <div class="row">
+      <div><div class="nm">Oberth</div><div class="say">OH-bert</div></div>
+      <div class="txt"><span class="m">Hermann Oberth: burns deep in a gravity well buy the most delta-v.</span>
+        <span>Fits the "cheap launch undercuts lunar water" tension, but obscure outside rocketry.</span></div>
+      <span class="tag clear">Clear</span>
+    </div>
+    <div class="row">
+      <div><div class="nm">In Situ</div><div class="say">in SIT-oo</div></div>
+      <div class="txt"><span class="m">On site; from in-situ resource utilisation (ISRU).</span>
+        <span>Accurate and on-family, but too generic to find in a search.</span></div>
+      <span class="tag minor">Minor</span>
+    </div>
+  </div>
+  <p class="note">Hohmann collision: one itch.io jam game, "Hohmann Havoc". Res Nullius: no game found. The Factorio overhaul mod "Nullius" (a lifeless planet to terraform) is near the bare word, so keep the full two words.</p>
+</section>
+
+<section>
+  <span class="eyebrow">Battle</span>
+  <h2>The operational battle game</h2>
+  <p>A 2D and 2.5D Command Ops style program for one front segment over an hour window, with the result picking a quantile of the Ceteris combat resolver. The war is the shock Ceteris cannot price in advance.</p>
+  <div class="sheet">
+    <div class="row rec">
+      <div><div class="nm">Vis Major</div><div class="say">viss MAY-jor</div></div>
+      <div class="txt"><span class="m">Superior force; in contract law, the force majeure that excuses performance.</span>
+        <span>Works on both sides of the coupling: in the battle it is the force that wins, and in the economy it is the shock no contract covers. Short and Latin, matching Ceteris.</span></div>
+      <span class="tag clear">Clear</span>
+    </div>
+    <div class="row">
+      <div><div class="nm">Lanchester</div><div class="say">LAN-ches-ter</div></div>
+      <div class="txt"><span class="m">F. W. Lanchester (1916): the linear and square laws of attrition.</span>
+        <span>The maths inside the resolver. Wargamers know it; others hear an English town or the old car brand (defunct, owned by Jaguar). Best pick if you choose the namesake family.</span></div>
+      <span class="tag clear">Clear</span>
+    </div>
+    <div class="row">
+      <div><div class="nm">Uti Possidetis</div><div class="say">OO-tee poss-ih-DEH-tiss</div></div>
+      <div class="txt"><span class="m">"As you possess": at the end of a war each side keeps what it holds.</span>
+        <span>Describes exactly what a battle result does to the Ceteris front line. Hard to say and to spell, so a poor title.</span></div>
+      <span class="tag clear">Clear</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Rejected</span>
+  <h2>Names already taken or wrong</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Name</th><th>For</th><th>Why not</th></tr></thead>
+    <tbody>
+      <tr><td>Per Aspera</td><td>space</td><td>Steam game (2020), Mars terraforming.</td></tr>
+      <tr><td>Plus Ultra</td><td>space</td><td>Steam game "Plus Ultra: Legado" (2024).</td></tr>
+      <tr><td>Ad Astra</td><td>space</td><td>Film, several games, generic.</td></tr>
+      <tr><td>Terra Nullius</td><td>space</td><td>Colonial dispossession doctrine (Australia); itch.io and board games use it.</td></tr>
+      <tr><td>Lagrange</td><td>space</td><td>Mobile game "Lagrange: The Last Frontier".</td></tr>
+      <tr><td>Casus Belli</td><td>battle</td><td>Steam game "Casus Belli: Battle of Annihilation"; long-running French RPG magazine.</td></tr>
+      <tr><td>Ultima Ratio</td><td>battle</td><td>"Ultima Ratio Regum", a well-known roguelike; "Ultima" is an EA trademark.</td></tr>
+      <tr><td>Alea</td><td>battle</td><td>alea is Ravensburger's board-game label.</td></tr>
+      <tr><td>Clausewitz</td><td>battle</td><td>Paradox's engine name.</td></tr>
+      <tr><td>Kriegsspiel</td><td>battle</td><td>Dozens of games and rule sets.</td></tr>
+      <tr><td>Townscape</td><td>city</td><td>Too close to Townscaper.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <span class="eyebrow">Method</span>
+  <h3>What the collision check covered</h3>
+  <p class="note">Web searches of Steam, itch.io, app stores and general results on 29 October 2026. My container cannot reach the Steam store directly, and I did not search trademark registers (USPTO, EUIPO). Clear means no game of that name turned up; it is not legal clearance. Before any public release, run the pick through <a href="https://www.tmdn.org/tmview/">TMview</a> in class 9 and class 41. Ceteris staying non-commercial and open source lowers the risk but does not remove it. Sources: <a href="https://apps.apple.com/us/app/mutatis/id1480039210">Mutatis (iOS)</a>, <a href="https://bywilliamjmeyer.itch.io/mutatis">Mutatis (itch.io)</a>, <a href="https://richard-pittman.itch.io/hohmann-havoc">Hohmann Havoc</a>, <a href="https://mods.factorio.com/mod/nullius">Nullius (Factorio)</a>, <a href="https://store.steampowered.com/app/667000/Casus_Belli_Battle_Of_Annihilation/">Casus Belli (Steam)</a>, <a href="https://store.steampowered.com/app/2685570/Plus_Ultra_Legado/">Plus Ultra: Legado (Steam)</a>, <a href="https://en.wikipedia.org/wiki/Ultima_Ratio_Regum_(video_game)">Ultima Ratio Regum</a>.</p>
+</section>
+
+</div>

@@ -1,0 +1,235 @@
+<title>Royal Houses and Restorations</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single register column like a printed almanach, with marginal tags for phase and status. */
+:root{
+  --bg:#f5f6f8; --paper:#ffffff; --fg:#1b2130; --muted:#5a6375; --rule:#d4d8e0;
+  --azure:#2f4785; --or:#9a7a22; --gules:#8a2f2f; --tint:#e9ecf4;
+  --display:"Instrument Serif",Georgia,serif;
+  --body:"Source Serif 4",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12151c; --paper:#181c25; --fg:#e4e7ee; --muted:#9aa3b5; --rule:#2c3342;
+  --azure:#8fa6e6; --or:#d4b25a; --gules:#e08a8a; --tint:#1f2533; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12151c; --paper:#181c25; --fg:#e4e7ee; --muted:#9aa3b5; --rule:#2c3342;
+  --azure:#8fa6e6; --or:#d4b25a; --gules:#e08a8a; --tint:#1f2533; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:17px/1.6 var(--body)}
+.wrap{max-width:860px;margin:0 auto;padding-block:40px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font:400 clamp(2.4rem,6vw,3.6rem)/1.05 var(--display);margin:0 0 .3em;text-wrap:balance}
+h2{font:400 2rem/1.15 var(--display);margin:2.2em 0 .5em;text-wrap:balance;border-top:1px solid var(--rule);padding-top:.8em}
+h3{font:600 1.05rem/1.3 var(--body);margin:1.6em 0 .4em}
+p,li{max-width:68ch}
+.lede{font-size:1.15rem;color:var(--fg)}
+.meta{font:500 .78rem/1.4 var(--mono);color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+code,.m{font:400 .86em var(--mono)}
+.tw{overflow-x:auto;margin:1em 0;border:1px solid var(--rule);background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;vertical-align:top;padding:.55em .75em;border-bottom:1px solid var(--rule)}
+th{font:500 .74rem/1.3 var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:var(--tint)}
+tr:last-child td{border-bottom:0}
+.tag{display:inline-block;font:500 .7rem/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;padding:.35em .5em;border:1px solid currentColor;border-radius:2px;white-space:nowrap}
+.t-no{color:var(--gules)} .t-yes{color:var(--azure)} .t-or{color:var(--or)}
+.answer{background:var(--paper);border:1px solid var(--rule);border-left:3px solid var(--azure);padding:1em 1.2em;margin:1.4em 0}
+.answer p{margin:.4em 0}
+.paths{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:1em 0}
+.path{background:var(--paper);border:1px solid var(--rule);padding:.9em 1em}
+.path h4{font:400 1.35rem/1.2 var(--display);margin:0 0 .3em}
+.path p{font-size:.92rem;margin:.3em 0}
+.path .ex{font-size:.82rem;color:var(--muted)}
+.fig{background:var(--paper);border:1px solid var(--rule);padding:1em;margin:1.2em 0;overflow-x:auto}
+.fig svg{display:block;min-width:620px;width:100%;height:auto}
+.fig figcaption{font-size:.85rem;color:var(--muted);margin-top:.6em;max-width:none}
+svg text{font-family:var(--body);fill:var(--fg)}
+svg .sm{font-family:var(--mono);font-size:10px;fill:var(--muted)}
+svg .ln{stroke:var(--muted);stroke-width:1;fill:none}
+svg .box{fill:var(--tint);stroke:var(--rule)}
+svg .head{fill:var(--paper);stroke:var(--or);stroke-width:1.5}
+ol.dec{padding-left:1.3em} ol.dec li{margin:.5em 0}
+.src{font-size:.82rem;color:var(--muted)}
+a{color:var(--azure)}
+a:focus-visible{outline:2px solid var(--azure);outline-offset:2px}
+</style>
+
+<div class="wrap">
+<p class="meta">Ceteris Paribus · design note · 30 October 2026</p>
+<h1>Royal houses, claimants and restorations</h1>
+<p class="lede">Can the world on 1 January 2000 carry its real royal houses, with their people and family trees, including deposed houses and pretenders? And can a user play a restoration?</p>
+
+<div class="answer">
+<p><strong>Yes to both, in two steps, and neither is 1.0.</strong> Houses are characters with kin edges and a succession law. They belong to the character layer of P6 (2.0-alpha), next to the real 2000 roster of ADR 0183. The roleplay is a claimant seat. Seats start at 2.0 (ADR 0239), and this one fits 2.0-beta beside the founder seat.</p>
+<p>There is no separate "monarchy mode". Every run carries the houses, and a restoration happens only when simulated politics produces one: a royalist movement that wins a referendum, a transition that picks a king as a neutral head of state, or a strongman who installs one. Nothing is scheduled (ADR 0241).</p>
+</div>
+
+<h2>Where it sits in the roadmap</h2>
+<div class="tw"><table>
+<tr><th>Release</th><th>What ships</th><th>Why there</th></tr>
+<tr><td><span class="tag t-no">1.0</span></td><td>Nothing. At most the house tables could ride the pack early as inert data.</td><td>1.0 is the economy without politics (0136, 0239). A house without politics has nothing to do.</td></tr>
+<tr><td><span class="tag t-yes">2.0-alpha · P6</span></td><td>Houses, kin edges, claims, succession laws, abdication, royalism as a policy axis, the three restoration paths, the family section of the dossier, god-mode install and depose.</td><td>Lands with characters (0183-0187), government bodies (0195), votes (0191-0194) and organizations (0189), which it reuses.</td></tr>
+<tr><td><span class="tag t-yes">2.0-beta · P7</span></td><td>Claimant seat. Occupation settlements that install a claimant.</td><td>Seats after the Steward (0239); installation by an occupier needs war (P7).</td></tr>
+<tr><td><span class="tag t-or">2.x</span></td><td>Monarch office seat after a restoration (constitutional or executive), dynasty chronicle presets.</td><td>Office seats of 0237 come after the Steward.</td></tr>
+</table></div>
+
+<h2>What is in the 2000 data</h2>
+<p>Three kinds of house, each one a record with members, a head, a succession law and zero or more claims.</p>
+
+<h3>Reigning, sovereign (about 29 states plus 15 other Commonwealth realms)</h3>
+<p>United Kingdom and the realms, Spain, Netherlands, Belgium, Luxembourg, Denmark, Norway, Sweden, Liechtenstein, Monaco, Andorra (co-princes, one of them France's president), Vatican (elective), Japan, Thailand, Cambodia, Malaysia (rotating), Brunei, Bhutan, Nepal, Tonga, Saudi Arabia, Jordan, Morocco, Kuwait, Qatar, Bahrain, Oman, the UAE, Lesotho and Swaziland. Samoa's head of state for life is a borderline case.</p>
+
+<h3>Reigning, subnational with formal powers</h3>
+<p>The nine Malay rulers, the seven UAE emirs, the Sultan of Yogyakarta (also governor), and traditional authorities with statutory roles such as the Zulu king, the Kabaka of Buganda (restored 1993), the Asantehene and Nigeria's emirs. Under ADR 0195 these are bodies with membership rule "heredity" and the self-constitution competence.</p>
+
+<h3>Deposed houses with a live claim in 2000</h3>
+<p>Candidates to check at import. Several are disputed between lines, which the model keeps as separate claims to the same title.</p>
+<div class="tw"><table>
+<tr><th>Claim</th><th>Head on 1 Jan 2000</th><th>Position then</th></tr>
+<tr><td>Romania</td><td>Michael I, reigned 1927-30 and 1940-47</td><td>Citizenship restored 1997, lives partly in Romania</td></tr>
+<tr><td>Bulgaria</td><td>Simeon II, reigned 1943-46</td><td>In Madrid; property restitution under way</td></tr>
+<tr><td>Greece</td><td>Constantine II, reigned 1964-73</td><td>Abolished by 1974 referendum (69%); in London</td></tr>
+<tr><td>Yugoslavia, Serbia</td><td>Crown Prince Alexander</td><td>Opposition figure in exile; Milošević in power</td></tr>
+<tr><td>Albania</td><td>Leka</td><td>1997 referendum lost (about a third for monarchy)</td></tr>
+<tr><td>Italy</td><td>Vittorio Emanuele</td><td>Male heirs barred from Italy by the constitution</td></tr>
+<tr><td>Russia</td><td>Disputed: Maria Vladimirovna; Romanov Family Association</td><td>Two lines, two claims</td></tr>
+<tr><td>France</td><td>Disputed: Orléans (Henri), Legitimist (Louis Alphonse), Bonaparte</td><td>Three claims to one title</td></tr>
+<tr><td>Austria-Hungary</td><td>Otto von Habsburg</td><td>Former MEP</td></tr>
+<tr><td>Germany, Prussia</td><td>Georg Friedrich</td><td>Private life</td></tr>
+<tr><td>Portugal</td><td>Duarte Pio</td><td>Recognised informally</td></tr>
+<tr><td>Brazil</td><td>Disputed: Vassouras and Petrópolis branches</td><td>1993 plebiscite, about 13% for monarchy</td></tr>
+<tr><td>Afghanistan</td><td>Mohammed Zahir Shah</td><td>In Rome; Taliban in power</td></tr>
+<tr><td>Iran</td><td>Reza Pahlavi</td><td>In the United States</td></tr>
+<tr><td>Iraq</td><td>Sharif Ali bin al-Hussein</td><td>Constitutional Monarchy Movement in exile</td></tr>
+<tr><td>Libya</td><td>Senussi line</td><td>Exile</td></tr>
+<tr><td>Egypt</td><td>Fuad II</td><td>Exile</td></tr>
+<tr><td>Ethiopia</td><td>Solomonic line (Zera Yacob)</td><td>Exile</td></tr>
+<tr><td>Montenegro</td><td>Nikola Petrović-Njegoš</td><td>Returned</td></tr>
+<tr><td>Rwanda</td><td>Kigeli V</td><td>Exile in the United States</td></tr>
+<tr><td>Vietnam, Laos, Korea, Hawaii, Bavaria and others</td><td>Various</td><td>Low salience; candidates for the "minor" tier</td></tr>
+</table></div>
+<p>Facts after 1 January 2000 are never inputs. Simeon II becoming prime minister in 2001, Nepal abolishing its monarchy in 2008 and the 2007 change to Romania's house law are validation patterns, not data.</p>
+
+<figure class="fig">
+<svg viewBox="0 0 640 230" role="img" aria-labelledby="romT">
+<title id="romT">House of Romania on 1 January 2000: Michael I and Anne, five daughters, no son; the agnatic heir lies outside the line.</title>
+<rect class="head" x="200" y="12" width="240" height="48" rx="2"/>
+<text x="320" y="33" text-anchor="middle" font-size="15">Michael I  ∞  Anne</text>
+<text class="sm" x="320" y="50" text-anchor="middle">head · b. 1921 · claim: Romania · law: agnatic (1923)</text>
+<path class="ln" d="M320 60 V90 M64 90 H576 M64 90 V110 M192 90 V110 M320 90 V110 M448 90 V110 M576 90 V110"/>
+<g font-size="13">
+<rect class="box" x="10" y="110" width="108" height="44"/><text x="64" y="129" text-anchor="middle">Margareta</text><text class="sm" x="64" y="145" text-anchor="middle">b. 1949</text>
+<rect class="box" x="138" y="110" width="108" height="44"/><text x="192" y="129" text-anchor="middle">Elena</text><text class="sm" x="192" y="145" text-anchor="middle">b. 1950</text>
+<rect class="box" x="266" y="110" width="108" height="44"/><text x="320" y="129" text-anchor="middle">Irina</text><text class="sm" x="320" y="145" text-anchor="middle">b. 1953</text>
+<rect class="box" x="394" y="110" width="108" height="44"/><text x="448" y="129" text-anchor="middle">Sophie</text><text class="sm" x="448" y="145" text-anchor="middle">b. 1957</text>
+<rect class="box" x="522" y="110" width="108" height="44"/><text x="576" y="129" text-anchor="middle">Maria</text><text class="sm" x="576" y="145" text-anchor="middle">b. 1964</text>
+</g>
+<text class="sm" x="320" y="182" text-anchor="middle">Under the house law in force on t0, no daughter is eligible: the law function returns the agnatic heir in another branch.</text>
+<text class="sm" x="320" y="198" text-anchor="middle">A change of house law is an act of the head, drawn from a hazard on state (age, no male heir, salience), never from the 2007 date.</text>
+</svg>
+<figcaption>How the family section of a dossier would draw a house: heads framed in gold, eligibility computed by the law function. Example uses public facts as of 1 January 2000.</figcaption>
+</figure>
+
+<h2>Data sources and licences</h2>
+<div class="tw"><table>
+<tr><th>Source</th><th>Content</th><th>Licence</th><th>Use</th></tr>
+<tr><td>Wikidata</td><td>People, father <span class="m">P22</span>, mother <span class="m">P25</span>, spouse <span class="m">P26</span>, child <span class="m">P40</span>, sibling <span class="m">P3373</span>, family/house <span class="m">P53</span>, noble title <span class="m">P97</span>, position held <span class="m">P39</span> with dates, birth and death</td><td>CC0</td><td>Primary. Pulled at pack build, same as the 0183 roster.</td></tr>
+<tr><td>Wikipedia lines of succession, "List of current pretenders", "Heads of former ruling families"</td><td>Curated claim lists, disputes</td><td>CC BY-SA 4.0</td><td>Cross-check only. Facts are taken from Wikidata; no text copied.</td></tr>
+<tr><td>Constitutions and house laws</td><td>Succession rules in force (e.g. Spain art. 57, Act of Settlement)</td><td>Public legal texts; CCP coding (licence to verify, ADR 0050)</td><td>Law function per house, tests.</td></tr>
+<tr><td>Official royal sites</td><td>Published lines of succession</td><td>Mostly copyright; facts not</td><td>Test fixtures only (order of the line).</td></tr>
+<tr><td>Archigos, REIGN</td><td>Monarchs who were effective leaders, entry and exit</td><td>Already listed under 0066 (verify)</td><td>Executive monarchs' exit hazards.</td></tr>
+<tr><td>Kokkonen, Møller and Sundell, European monarchs 1000-1800</td><td>Succession crises and depositions by law type</td><td>Replication data (licence to verify)</td><td>Prior on crisis hazard by succession law.</td></tr>
+<tr><td>Referendum records (C2D and national)</td><td>Monarchy votes: Italy 1946, Greece 1974, Brazil 1993, Albania 1997, Australia 1999</td><td>Facts; database terms to verify</td><td>Initial royalism and its fit.</td></tr>
+<tr><td>The Peerage, Geni, WikiTree, FamilySearch, Almanach de Gotha, Burke's</td><td>Deep genealogy</td><td>Copyright or terms that forbid bulk reuse; Geni and WikiTree hide recent and living people</td><td><strong>Not used.</strong></td></tr>
+</table></div>
+<p>Wikidata coverage is good for heads, heirs and spouses and thin for distant cousins and minor claims. Claims and disputes therefore live in a small curated file in <span class="m">crates/ceteris-pack/config/</span> that names Wikidata ids and the basis of each claim; people and kin come from Wikidata.</p>
+
+<h2>How houses fit the character model</h2>
+<p>Everything is an extension of existing records, with three new small objects.</p>
+<div class="tw"><table>
+<tr><th>Object</th><th>Fields</th><th>Reuses</th></tr>
+<tr><td>Character (0183)</td><td>+ parents, spouses with dates, house, eligibility flags (renounced, unequal marriage, religion rule)</td><td>Same record as every leader; kin edges are data, unlike 0185 relations, which only events create</td></tr>
+<tr><td>House</td><td>Wikidata id, head, cadet-of, law, residence state, exile flag, wealth stock (sovereign houses only, in the household sector)</td><td>0189 organization with kinship membership</td></tr>
+<tr><td>Claim</td><td>Title, target (state or 0190 partition unit), basis, legal status in the target (barred, tolerated, recognised), salience</td><td>Distinct from 0222 territorial claims</td></tr>
+<tr><td>Succession law</td><td>A pure function on the kin graph that returns the ordered line</td><td>0195 membership rule "heredity" gets its parameters</td></tr>
+</table></div>
+
+<h3>Succession laws</h3>
+<div class="tw"><table>
+<tr><th>Law</th><th>2000 examples</th></tr>
+<tr><td>Absolute primogeniture</td><td>Sweden, Netherlands, Norway, Belgium</td></tr>
+<tr><td>Male-preference primogeniture</td><td>United Kingdom, Spain, Denmark, Monaco</td></tr>
+<tr><td>Agnatic primogeniture</td><td>Japan, Liechtenstein, Luxembourg, most deposed houses</td></tr>
+<tr><td>Agnatic seniority with designation</td><td>Saudi Arabia (sons of the founder)</td></tr>
+<tr><td>Ruler designates within the house</td><td>Jordan, Kuwait, Qatar, Oman (family council fallback)</td></tr>
+<tr><td>Election or rotation among eligible houses</td><td>Malaysia, UAE presidency, Cambodia's throne council, Vatican</td></tr>
+</table></div>
+<p>Laws can change in a run. A reigning house changes its law by bill through its 0195 bodies; a deposed head changes the house law by personal act, at a hazard that rises with age and with no eligible heir under the current law. That is how a run can produce what Romania did in 2007, or Britain in 2013, without reading either date.</p>
+<p>Abdication and regency are hazards on the head: age, health from life tables, the house's own abdication record before 2000 (the Dutch and Luxembourg habit, the British absence of one) and the heir's age. A minor heir triggers a regency body. A succession crisis (no eligible heir, rival lines, an heir unacceptable to the selectorate) uses the 0066 crisis state.</p>
+
+<h2>How a restoration emerges</h2>
+<p>One new state variable and no new event. In each state with a live claim, the policy space of 10.5 gains one axis: support for restoring house <em>h</em>. Each pop cell holds a position on it, which moves like any other opinion (Hegselmann-Krause diffusion, 10.7) with a target set by:</p>
+<ul>
+<li>lived memory of the monarchy, through the 0139 experience kernel (old cohorts in Romania, none in Brazil);</li>
+<li>alignment with the house's church and ethnic group;</li>
+<li>the diffuse-support deficit of the current regime (legitimacy, 0192), since royalism rises when the republic fails;</li>
+<li>the claimant's salience: residence in the country, public acts, scandals.</li>
+</ul>
+<p>From there the existing machinery does the work.</p>
+<div class="paths">
+<div class="path"><h4>By vote</h4><p>Latent support becomes a movement (0189) and a party plank or a new party (10.5 entry). If it wins seats, it tables a bill changing the head-of-state body to heredity in house <em>h</em>; the bill passes the 0195 veto gates, often a referendum.</p><p class="ex">Pre-2000 cases: Greece 1920, 1935, 1946; failures in Italy 1946, Greece 1974, Brazil 1993, Albania 1997.</p></div>
+<div class="path"><h4>By transition</h4><p>After a revolution, civil war or occupation, the constituent body picks a head-of-state form. A claimant is one option, scored by the bargaining parties for neutrality, royalism and foreign patrons' preferences.</p><p class="ex">Spain 1975 and Cambodia 1993.</p></div>
+<div class="path"><h4>By force</h4><p>A personalist ruler designates a claimant as successor to secure the regime (0066 succession), or a military faction or occupier installs one (P7).</p><p class="ex">Franco's designation of Juan Carlos in 1969; Greece 1935.</p></div>
+</div>
+<p>The same machinery runs in reverse: abolition by referendum, by revolution against an absolute monarch (Menaldo; Yom and Gause on coalitions, rents and patrons) or a realm becoming a republic. And a claimant may simply enter electoral politics as a candidate, which is the Simeon II pattern.</p>
+<p>In god mode any user can install or depose a house at any tick; the edit is logged as an intervention. That covers "what if" without waiting for the model.</p>
+
+<h3>Calibration and validation</h3>
+<p>The reference class is small: about six restorations and a dozen monarchy referendums since 1900. So the axis gets few free parameters (a memory weight, a legitimacy weight, a salience weight), fitted on referendum shares and pre-2000 restorations, and the scorecard checks frequencies, not paths. Held-out 2000-2024 patterns: no sovereign restoration; one deposed monarch elected head of government; one abolition after a civil war; one realm becoming a republic; about nine abdications. A run that restores three thrones per decade fails.</p>
+<p>Unit tests: each law function reproduces the published 2000 line of succession for the United Kingdom, Spain, the Netherlands, Sweden, Norway, Belgium, Denmark and Japan to depth ten; switching real names off changes no state hash (0183).</p>
+
+<h2>Privacy and ethics for living people</h2>
+<p>Most people in these trees were alive in 2000, many still are, and some were children then. ADR 0183 already accepts real living leaders with three guards: the run-level real-names switch, role labels in the lab, and no likeness (0187). Houses add family members who never held office, so the bar should be higher.</p>
+<ul>
+<li><strong>Notability gate.</strong> A person is named only if they head a house, sit within the first ten of a line, are the spouse or parent of such a person, and have a Wikidata item with at least one Wikipedia article. Others are omitted, or shown as an unnamed node when the line needs them.</li>
+<li><strong>Minimal fields.</strong> Birth date, sex, kin, titles, positions, residence state. No health, sexuality or wealth beyond the house aggregate. Religion only as the constitutional eligibility flag.</li>
+<li><strong>What a run may do to a real person.</strong> Age, die by life tables and the existing hazards, abdicate, renounce, be deposed, restored or elected. Children born in a run and new spouses are generated people with generated names. A marriage between two real living people is blocked. There is no affair, illegitimacy or scandal mechanic aimed at private life.</li>
+<li><strong>Wording.</strong> Every event touching a real person is worded as an event of this run, as 0183 requires, and exports carry the counterfactual line.</li>
+<li><strong>Distribution.</strong> The project ships code and queries; each user's pack build pulls CC0 data. Any prebuilt pack profile (0217) uses the same gate. A denylist of Wikidata ids in <span class="m">sources.toml</span> lets anyone be removed on request, and every build honours it.</li>
+<li><strong>Lèse-majesté.</strong> Thailand (art. 112) and a few others criminalise depictions of the monarch. A run that deposes a reigning king is fiction about a real person. The real-names switch is the user's tool; the project should not try to localise around it.</li>
+</ul>
+
+<h2>Roleplaying a restoration: the claimant seat</h2>
+<p>At 2.0-beta a user can take the head of a deposed house. The seat follows the house: when the head dies, play continues as the heir (0198 continuation). It is scored against the same seat played by the AI from the same start (0198), with presets such as "restore the throne", "keep the house united" or "stay solvent".</p>
+<p>The verbs are actions every AI claimant also has. The seat chooses; the simulation decides what follows.</p>
+<ul>
+<li>Return from exile or stay out, subject to the state's entry law.</li>
+<li>Found or endorse a movement (0189), court interest groups (church, army, landowners), fund them from house wealth.</li>
+<li>Speak: raise salience at the risk of backlash or a ban.</li>
+<li>Run for office, or accept a ministry, as Simeon II did.</li>
+<li>Negotiate in a transition when one opens.</li>
+<li>Manage the house: designate an heir, change the house law, settle with a rival line, arrange marriages among generated members.</li>
+</ul>
+<p>If the throne is restored, the seat becomes the monarch's office under the restored constitution: a constitutional monarch has few levers (assent, formateur, dissolution where allowed), an executive monarch has the 0195 levers of the office. In 2.0+ the claimant reads polls through the published layer, so royalist support is uncertain to the player (0238).</p>
+
+<h2>Cost</h2>
+<div class="tw"><table>
+<tr><th>Item</th><th>Part-time weeks</th><th>Phase</th></tr>
+<tr><td>Import: houses, kin, claims file, notability gate, denylist</td><td>1.5-2.5</td><td>P6</td></tr>
+<tr><td>Law functions, abdication, regency, crisis hookup, tests</td><td>1-1.5</td><td>P6</td></tr>
+<tr><td>Royalism axis, three paths, abolition paths, fits</td><td>2-3</td><td>P6 (the transition path needs P6 constitution-making)</td></tr>
+<tr><td>Family section of the dossier, house view</td><td>1-1.5</td><td>P6</td></tr>
+<tr><td>Claimant seat and its presets</td><td>2-3</td><td>2.0-beta</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>7.5-11.5</strong></td><td>None before 1.0</td></tr>
+</table></div>
+
+<h2>Decisions</h2>
+<p>Asked on cards in the thread. An ADR follows the picks.</p>
+<ol class="dec">
+<li><strong>Phasing.</strong> Recommended: everything with P6 (2.0-alpha), the claimant seat at 2.0-beta, nothing in 1.0.</li>
+<li><strong>Which houses.</strong> Recommended: sovereign reigning, subnational with formal powers, and deposed houses with a live claim in 2000. Traditional authorities without statutory roles stay generic bodies.</li>
+<li><strong>Living people and tree depth.</strong> Recommended: the notability gate above, ancestors back to 1800 as static display nodes, generated spouses and children after 2000, no real-to-real marriages.</li>
+<li><strong>Restoration mechanism.</strong> Recommended: the royalism axis plus existing paths, with no restoration hazard of its own.</li>
+</ol>
+<p class="src">Related: ADRs 0066, 0136, 0183-0187, 0189, 0190-0195, 0198, 0222, 0237-0241. Sources consulted: Wikidata property documentation; Wikipedia, "Pretender" and lists of current pretenders; WikiTree privacy rules (public after 150 years from birth or 100 from death).</p>
+</div>

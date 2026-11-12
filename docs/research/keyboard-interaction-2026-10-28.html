@@ -1,0 +1,1734 @@
+<title>Ceteris Keys</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Layout: one reading column (max 74rem); the live demo opens the page full width, reference sections follow as dense keymap tables. Tokens are the Modern Atlas set from ADR 0137 (paper / slate), seat accent from ADR 0140 (Spain, toned). */
+:root{
+  --paper:#EDEFEA; --panel:#F6F7F3; --ink:#1C292F; --muted:#56646A; --rule:#C8CEC6; --sea:#BCD1DB;
+  --edit:#AE2459; --fork:#5E45A3; --accent:#8A6A00; --on-accent:#FFFFFF;
+  --es:#E6D6A8; --pt:#CDE0BE; --fr:#C9D4E9;
+  --ramp-lo:#EEF2EC; --ramp-hi:#1F5A6E; --neg:#B4652A; --pos:#2D6A98; --mid:#F1F2EE;
+  --sel:rgba(138,106,0,.30); --kbd:#FFFFFF;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --sans:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#141D21; --panel:#1A252A; --ink:#E2E6E0; --muted:#97A4A8; --rule:#2F3D43; --sea:#1C3240;
+  --edit:#E2668F; --fork:#A28DE8; --accent:#E2BC45; --on-accent:#1C1A10;
+  --es:#5A4F33; --pt:#3A5238; --fr:#3A4763;
+  --ramp-lo:#22313A; --ramp-hi:#94D3E2; --neg:#E39B5E; --pos:#73ADDB; --mid:#26323A;
+  --sel:rgba(226,188,69,.30); --kbd:#22303A; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --paper:#141D21; --panel:#1A252A; --ink:#E2E6E0; --muted:#97A4A8; --rule:#2F3D43; --sea:#1C3240;
+  --edit:#E2668F; --fork:#A28DE8; --accent:#E2BC45; --on-accent:#1C1A10;
+  --es:#5A4F33; --pt:#3A5238; --fr:#3A4763;
+  --ramp-lo:#22313A; --ramp-hi:#94D3E2; --neg:#E39B5E; --pos:#73ADDB; --mid:#26323A;
+  --sel:rgba(226,188,69,.30); --kbd:#22303A; color-scheme:dark }
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+.wrap{max-width:74rem;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px}
+h1,h2,h3{font-family:var(--serif);font-weight:600;text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:2.6rem;letter-spacing:-.01em}
+h2{font-size:1.65rem;margin-top:3rem;padding-top:1rem;border-top:1px solid var(--rule)}
+h3{font-size:1.15rem;margin-top:1.8rem}
+p{max-width:68ch;margin:.6rem 0}
+.lede{font-family:var(--serif);font-size:1.15rem;max-width:62ch;color:var(--ink)}
+.eyebrow{font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+a{color:var(--fork)}
+code,kbd,.mono{font-family:var(--mono);font-size:.86em}
+kbd{display:inline-block;padding:0 .35em;min-width:1.5em;text-align:center;border:1px solid var(--rule);border-bottom-width:2px;border-radius:3px;background:var(--kbd);color:var(--ink);line-height:1.45;white-space:nowrap}
+code{background:var(--panel);padding:.05em .3em;border-radius:2px}
+.muted{color:var(--muted)}
+.tag{display:inline-block;font-size:.72rem;font-family:var(--mono);color:var(--muted);border:1px solid var(--rule);padding:0 .35em;border-radius:2px;white-space:nowrap}
+.edit{color:var(--edit)} .fork{color:var(--fork)}
+
+/* demo */
+.demo{margin-top:1.4rem;border:1px solid var(--rule);background:var(--panel)}
+.demo-bar{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:space-between;padding:.5rem .75rem;border-bottom:1px solid var(--rule)}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+.seg button{font:inherit;font-size:.85rem;background:transparent;color:var(--ink);border:0;padding:.2rem .7rem;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.seg button:focus-visible,.try button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.demo-body{display:grid;grid-template-columns:minmax(0,1fr) 300px}
+.stage{position:relative;min-width:0;outline:none}
+.stage:focus-visible{box-shadow:inset 0 0 0 2px var(--accent)}
+canvas{display:block;width:100%;background:var(--sea)}
+.focus-note{position:absolute;inset:auto 0 0 0;margin:auto;top:0;height:max-content;width:max-content;max-width:90%;background:var(--ink);color:var(--paper);padding:.45rem .8rem;font-size:.9rem;border-radius:3px;pointer-events:none}
+.legend{display:flex;gap:.6rem;align-items:center;font-size:.8rem;color:var(--muted);padding:.3rem .75rem;border-top:1px solid var(--rule);min-height:1.9rem;flex-wrap:wrap}
+.legend .ramp{width:120px;height:8px;border:1px solid var(--rule)}
+.status{display:flex;gap:.8rem;align-items:center;font-family:var(--mono);font-size:.8rem;padding:.25rem .75rem;background:var(--ink);color:var(--paper);flex-wrap:wrap}
+.status .mode{font-weight:600;padding:0 .4rem;background:var(--accent);color:var(--on-accent)}
+.status .mode.visual{background:var(--fork);color:#fff}
+.status .mode.cmd{background:var(--paper);color:var(--ink)}
+.status .rec{color:var(--edit);font-weight:600;background:var(--paper);padding:0 .3rem}
+.status .grow{flex:1}
+.cmd{font-family:var(--mono);font-size:.85rem;padding:.3rem .75rem;min-height:1.9rem;border-top:1px solid var(--rule);white-space:pre-wrap;word-break:break-word}
+.cmd .caret{background:var(--ink);color:var(--paper)}
+.msgs{font-family:var(--mono);font-size:.78rem;padding:.4rem .75rem;margin:0;max-height:14rem;overflow:auto;border-top:1px dashed var(--rule);white-space:pre;color:var(--ink)}
+.side{border-left:1px solid var(--rule);display:flex;flex-direction:column;min-width:0;background:var(--paper)}
+.tabs{display:flex;border-bottom:1px solid var(--rule)}
+.tabs button{flex:1;font:inherit;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;background:transparent;color:var(--muted);border:0;border-bottom:2px solid transparent;padding:.4rem .2rem;cursor:pointer}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.pane{padding:.6rem .75rem;font-size:.85rem;overflow:auto;max-height:520px}
+.pane h4{font-family:var(--serif);font-size:1.15rem;margin:0;font-variant:small-caps;letter-spacing:.02em}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:.15rem .8rem;margin:.5rem 0;font-variant-numeric:tabular-nums}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-family:var(--mono);text-align:right}
+.row{font-family:var(--mono);font-size:.78rem;padding:.15rem .3rem;border-left:2px solid transparent;display:grid;grid-template-columns:4.6rem 1fr;gap:.4rem}
+.row.cur{border-left-color:var(--accent);background:var(--panel)}
+.row.inh{color:var(--muted)}
+.row .t{color:var(--edit)}
+.whichkey{position:absolute;left:10px;bottom:10px;background:var(--paper);border:1px solid var(--rule);padding:.4rem .6rem;font-family:var(--mono);font-size:.76rem;display:grid;grid-template-columns:auto auto;gap:.05rem .8rem;max-width:calc(100% - 20px);box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.whichkey b{color:var(--accent)}
+.palette{position:absolute;left:50%;top:12px;transform:translateX(-50%);width:min(560px,92%);background:var(--paper);border:1px solid var(--ink);box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.palette .in{font-family:var(--mono);font-size:.9rem;padding:.5rem .7rem;border-bottom:1px solid var(--rule)}
+.palette .it{display:grid;grid-template-columns:1fr auto auto;gap:.8rem;padding:.25rem .7rem;font-size:.85rem;align-items:center}
+.palette .it.on{background:var(--ink);color:var(--paper)}
+.palette .it.on kbd{color:var(--ink)}
+.palette .it .ex{font-family:var(--mono);font-size:.75rem;color:var(--muted)}
+.palette .it.on .ex{color:var(--paper);opacity:.8}
+.helpcard{position:absolute;inset:12px;overflow:auto;background:var(--paper);border:1px solid var(--ink);padding:.8rem 1rem;font-size:.85rem}
+.try{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.5rem 1rem;padding:.7rem .75rem;border-top:1px solid var(--rule)}
+.try div{display:flex;gap:.6rem;align-items:baseline;min-width:0}
+.try button{font:inherit;font-size:.78rem;border:1px solid var(--rule);background:var(--paper);color:var(--ink);border-radius:3px;padding:.05rem .5rem;cursor:pointer;flex:none}
+.try code{white-space:normal;word-break:break-word}
+
+/* reference */
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:0 2.5rem}
+.tbl{overflow-x:auto;margin:.6rem 0}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th{text-align:left;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;border-bottom:1px solid var(--ink);padding:.3rem .5rem .3rem 0}
+td{border-bottom:1px solid var(--rule);padding:.32rem .6rem .32rem 0;vertical-align:top}
+td:first-child{white-space:nowrap}
+.principles{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem 2rem;margin-top:1rem;counter-reset:p}
+.principles div{border-top:2px solid var(--ink);padding-top:.5rem}
+.principles b{font-family:var(--serif);font-size:1.05rem;display:block}
+pre.block{font-family:var(--mono);font-size:.8rem;background:var(--panel);border:1px solid var(--rule);padding:.7rem .9rem;overflow-x:auto;line-height:1.45}
+.qa{border-left:3px solid var(--accent);padding:.2rem 0 .2rem .9rem;margin:.9rem 0}
+.qa p{margin:.25rem 0}
+@media (max-width:820px){
+  .demo-body{grid-template-columns:1fr}
+  .side{border-left:0;border-top:1px solid var(--rule)}
+  h1{font-size:2rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+<div class="eyebrow">Ceteris Paribus · input design · brainstorm, 28 Oct 2026</div>
+<h1>Ceteris Keys</h1>
+<p class="lede">A keyboard grammar for the workbench: one command registry, a standard keymap with Paradox conventions, an opt-in vim mode whose cursor lives in place, time and branch, a command palette that also takes terminal mnemonics and plain English, a query language for selections and edits, hint labels for anything on screen, and automation that stays reproducible.</p>
+
+<section class="demo" aria-label="Interactive demo">
+  <div class="demo-bar">
+    <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+      <span class="eyebrow">Keymap</span>
+      <span class="seg" role="group" aria-label="Keymap">
+        <button id="km-vim" aria-pressed="true">Vim</button>
+        <button id="km-std" aria-pressed="false">Standard</button>
+      </span>
+    </div>
+    <span class="muted" style="font-size:.82rem">Stylized Iberia, toy numbers. Click the map, then type. <kbd>g?</kbd> or <kbd>F1</kbd> for help.</span>
+  </div>
+  <div class="demo-body">
+    <div style="min-width:0;display:flex;flex-direction:column">
+      <div class="stage" id="stage" tabindex="0" aria-label="Map. Focus here and type commands.">
+        <canvas id="map"></canvas>
+        <div class="focus-note" id="focusNote">Click here to give the map the keyboard</div>
+        <div class="whichkey" id="whichkey" hidden></div>
+        <div class="palette" id="palette" hidden></div>
+        <div class="helpcard" id="helpcard" hidden></div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="status" id="status"></div>
+      <div class="cmd" id="cmd"></div>
+      <pre class="msgs" id="msgs" hidden></pre>
+    </div>
+    <aside class="side">
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tab-insp" aria-selected="true">Inspector</button>
+        <button role="tab" id="tab-log" aria-selected="false">Edit log</button>
+        <button role="tab" id="tab-br" aria-selected="false">Branches</button>
+        <button role="tab" id="tab-reg" aria-selected="false">Registers</button>
+      </div>
+      <div class="pane" id="pane"></div>
+    </aside>
+  </div>
+  <div class="try" id="try"></div>
+</section>
+
+<h2>Principles</h2>
+<div class="principles">
+  <div><b>One command registry</b>Every action is a named command with typed arguments. Menus, buttons, the palette, both keymaps and the ex line call the same commands. Where a command has a CLI form (ADR 0113), the ex form is that subcommand, so the console history is already a scenario script.</div>
+  <div><b>Keys never write state</b>A key produces a command. Commands that change the world append to the edit log (14.2) or issue an order (0145). Keymaps, hints and the palette are presentation: they enter no run hash, and a test asserts that rebinding changes no state hash, as 0140 does for chrome.</div>
+  <div><b>The cursor has three coordinates</b>Place (cell, province, state, country), tick (monthly, daily while a war runs) and branch. Every motion moves one of them. Marks and the jump list store all three, so "go back" means back in space, time and history at once.</div>
+  <div><b>Two keymaps, one grammar</b>Standard is the default and contains only conventions people already know, from Excel, VS Code, the three desktop platforms, Paradox and Factorio. Vim is opt-in and modal. Both are text files; mods may ship keymaps, which never touch state.</div>
+  <div><b>Teach through the palette</b>Each palette row shows its key in the active keymap and its ex form. A which-key panel opens after any prefix. Lessons (0158) teach keys at the moment the mechanic first appears.</div>
+  <div><b>Pause when typing</b>Entering the command line, a value prompt or hint mode pauses the clock (on by default) and the prompt shows the tick the edit will land on. An edit's tick is the view tick at commit, never wall-clock, so typing speed cannot change a run.</div>
+</div>
+
+<h2>Vim mode</h2>
+<p>The mapping works because Ceteris already has the data model of an editor with history. A branch is a parent plus an ordered list of timed edits (14.1), which is a buffer with a change list. The branch tree is an undo tree. Compare is diff mode. The explainer is a tag stack. The table below is the spine of the design; every other section follows from it.</p>
+<div class="tbl"><table>
+<thead><tr><th>Vim</th><th>Ceteris</th><th>Consequence</th></tr></thead>
+<tbody>
+<tr><td>Buffer</td><td>Branch</td><td><code>:ls</code> lists branches, <code>:b name</code> switches, <kbd>Ctrl-^</kbd> flips to the alternate branch at the same place and tick. <code>"%</code> and <code>"#</code> hold current and alternate.</td></tr>
+<tr><td>Window</td><td>A view of a branch (map or panel)</td><td><kbd>Ctrl-w v</kbd> splits the map into two branches side by side with linked cameras; <kbd>Ctrl-w h/j/k/l</kbd> moves focus between map and panels.</td></tr>
+<tr><td>Tab page</td><td>Workspace layout</td><td>A saved arrangement of map mode, panels and splits ("trade desk", "war room"). <kbd>gt</kbd>, <kbd>gT</kbd>.</td></tr>
+<tr><td>Cursor</td><td>Place × tick</td><td>Space motions and time motions are separate families and compose with counts.</td></tr>
+<tr><td>Change list</td><td>Edit list of the branch</td><td><kbd>g;</kbd> and <kbd>g,</kbd> walk your edits, jumping to each edit's place and tick.</td></tr>
+<tr><td>Undo tree</td><td>Branch versions</td><td>Each edit-list change makes a content-addressed version; <kbd>u</kbd>, <kbd>Ctrl-r</kbd>, <code>:undolist</code>. Named forks are the versions you chose to keep.</td></tr>
+<tr><td>Folds</td><td>Aggregation grain</td><td><kbd>zo</kbd> opens a country into states, provinces, then cells (ADR 0115); <kbd>zc</kbd> closes; <kbd>zR</kbd> finest everywhere, <kbd>zM</kbd> countries only.</td></tr>
+<tr><td>Diff mode</td><td>Branch compare (14.5)</td><td><code>:diffsplit main</code>; <kbd>]c</kbd>/<kbd>[c</kbd> jump to the next divergence; <kbd>do</kbd>/<kbd>dp</kbd> pull or push the edit under the cursor between branches.</td></tr>
+<tr><td>Tags</td><td>Explainer chain (20.2, 0118)</td><td><kbd>Ctrl-]</kbd> on a number follows its largest cause; <kbd>Ctrl-t</kbd> comes back. The bottleneck walk of 0155 is a tag chain.</td></tr>
+<tr><td>Quickfix list</td><td>Result list</td><td>Search hits, bisect probes, blame entries and alerts load into one list; <code>:cn</code>, <code>:cp</code>, <code>:copen</code>.</td></tr>
+<tr><td><code>:help</code></td><td>Pedia (0158)</td><td><code>:h putty-clay</code> opens the generated concept page with the equation and parameter sources.</td></tr>
+<tr><td><code>.vimrc</code></td><td><code>ceterisrc</code></td><td>Ex commands run at start-up: maps, options, saved queries.</td></tr>
+</tbody></table></div>
+
+<h3>Modes</h3>
+<div class="tbl"><table>
+<thead><tr><th>Mode</th><th>Enter</th><th>What keys do</th></tr></thead>
+<tbody>
+<tr><td>Normal</td><td><kbd>Esc</kbd></td><td>Motions move the cursor in place or time; operators start edits; the sim keeps running unless paused.</td></tr>
+<tr><td>Visual</td><td><kbd>v</kbd> provinces, <kbd>V</kbd> whole states, <kbd>Ctrl-v</kbd> box</td><td>Motions grow the selection: <kbd>v</kbd> paints each province the cursor visits, <kbd>V</kbd> snaps to states, <kbd>Ctrl-v</kbd> takes the lat-lon box between anchor and cursor. <kbd>o</kbd> swaps anchor and cursor.</td></tr>
+<tr><td>Operator-pending</td><td>After <kbd>c</kbd> <kbd>y</kbd> <kbd>d</kbd> <kbd>&gt;</kbd> <kbd>&lt;</kbd> <kbd>!</kbd> <kbd>gb</kbd></td><td>Waits for a motion or a text object that names the target set.</td></tr>
+<tr><td>Insert</td><td><kbd>c</kbd>, <kbd>r</kbd>, <kbd>R</kbd>, <kbd>i</kbd></td><td>Typing into a value field of the edit draft, or a note pinned to a place and tick (<kbd>i</kbd>). Notes are annotations, never state.</td></tr>
+<tr><td>Command-line</td><td><kbd>:</kbd> <kbd>/</kbd> <kbd>?</kbd> <kbd>q:</kbd></td><td>Ex commands, search by name or query, the command history window.</td></tr>
+<tr><td>Hint</td><td><kbd>f</kbd> map, <kbd>F</kbd> panel controls, <kbd>t</kbd> routes</td><td>Two-letter labels on every target; type a label to jump or act.</td></tr>
+<tr><td>Order-pending</td><td><kbd>o</kbd> with formations selected</td><td>War surfaces only (0145-0166): mission verb, then a target. See War below.</td></tr>
+</tbody></table></div>
+
+<div class="grid2">
+<div>
+<h3>Motions in space</h3>
+<div class="tbl"><table><tbody>
+<tr><td><kbd>h</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>l</kbd></td><td>Neighbour west, south, north, east (closest bearing within 75°). Counts repeat: <kbd>5l</kbd>.</td></tr>
+<tr><td><kbd>w</kbd> <kbd>b</kbd></td><td>Keep going in the last direction until a state border, landing on the first province past it; <kbd>b</kbd> goes the other way.</td></tr>
+<tr><td><kbd>W</kbd> <kbd>B</kbd></td><td>The same, to the next country border.</td></tr>
+<tr><td><kbd>e</kbd> <kbd>E</kbd></td><td>Last province before the state or country border.</td></tr>
+<tr><td><kbd>gc</kbd></td><td>Capital of the cursor's country. <kbd>gC</kbd>: the seat's capital.</td></tr>
+<tr><td><kbd>H</kbd> <kbd>M</kbd> <kbd>L</kbd></td><td>Province at the top, middle, bottom of the view.</td></tr>
+<tr><td><kbd>f</kbd><i>xy</i></td><td>Hint jump: every visible province gets a label.</td></tr>
+<tr><td><kbd>*</kbd> <kbd>#</kbd></td><td>Next or previous province like this one: same state in political modes, within 5% of the value in numeric modes.</td></tr>
+<tr><td><kbd>n</kbd> <kbd>N</kbd></td><td>Next or previous search hit.</td></tr>
+<tr><td><kbd>%</kbd></td><td>On a route: jump between origin and destination. On a province: its largest trade partner.</td></tr>
+<tr><td><kbd>gr</kbd></td><td>"References": list provinces that buy from or sell to this one (route shares, 0017).</td></tr>
+</tbody></table></div>
+</div>
+<div>
+<h3>Motions in time</h3>
+<div class="tbl"><table><tbody>
+<tr><td><kbd>)</kbd> <kbd>(</kbd></td><td>One tick forward or back (a month; a day while any war runs). Forward past the head runs the sim; back reads from snapshots.</td></tr>
+<tr><td><kbd>}</kbd> <kbd>{</kbd></td><td>Next or previous chronicle event (edits, shock tape, detector events).</td></tr>
+<tr><td><kbd>]y</kbd> <kbd>[y</kbd> · <kbd>]Y</kbd> <kbd>[Y</kbd></td><td>Next or previous January; decade.</td></tr>
+<tr><td><kbd>]e</kbd> <kbd>[e</kbd></td><td>Next or previous edit by tick, anywhere on the map.</td></tr>
+<tr><td><kbd>]c</kbd> <kbd>[c</kbd></td><td>Next or previous divergence from the compare branch.</td></tr>
+<tr><td><kbd>]a</kbd> <kbd>[a</kbd></td><td>Next alert: a headroom gauge crossing (0155) or a detector event.</td></tr>
+<tr><td><kbd>]s</kbd> <kbd>[s</kbd></td><td>Next stage change of a tracked situation (0159).</td></tr>
+<tr><td><kbd>G</kbd></td><td>The head (latest simulated tick).</td></tr>
+<tr><td><kbd>gg</kbd></td><td>The branch's fork tick; 2000-01 on the root.</td></tr>
+<tr><td><i>2008</i><kbd>G</kbd></td><td>January of that year. <code>:2008-09</code> for a month.</td></tr>
+<tr><td><kbd>Space</kbd> <kbd>+</kbd> <kbd>-</kbd> <i>n</i><kbd>gs</kbd></td><td>Pause, faster, slower, set speed <i>n</i>. Digits stay counts, so speed is <kbd>3gs</kbd>, not <kbd>3</kbd>.</td></tr>
+</tbody></table></div>
+</div>
+</div>
+
+<div class="grid2">
+<div>
+<h3>Camera and grain</h3>
+<div class="tbl"><table><tbody>
+<tr><td><kbd>zz</kbd></td><td>Centre on the cursor.</td></tr>
+<tr><td><kbd>z+</kbd> <kbd>z-</kbd></td><td>Zoom in, out.</td></tr>
+<tr><td><kbd>zh</kbd> <kbd>zl</kbd> · <kbd>Ctrl-e</kbd> <kbd>Ctrl-y</kbd></td><td>Pan sideways; pan down, up.</td></tr>
+<tr><td><kbd>zs</kbd></td><td>Fit the selection.</td></tr>
+<tr><td><kbd>zx</kbd></td><td>Reset camera and grain.</td></tr>
+<tr><td><kbd>zo</kbd> <kbd>zc</kbd> <kbd>zR</kbd> <kbd>zM</kbd></td><td>Open or close one level of grain at the cursor; finest everywhere; countries only.</td></tr>
+<tr><td><code>:set nu</code> · <code>:set rnu</code></td><td>Print the map mode's value on every province; relative numbers print the difference from the cursor province, or from the compare branch in diff mode. Tapping <kbd>Alt</kbd> toggles them, as Factorio alt-mode does (0155 "map numbers").</td></tr>
+</tbody></table></div>
+</div>
+<div>
+<h3>Map modes</h3>
+<p><kbd>gm</kbd> opens a which-key menu by group, then mode: <kbd>gmp</kbd> political, <kbd>gme</kbd> economy, <kbd>gmt</kbd> trade, <kbd>gmf</kbd> finance, <kbd>gmn</kbd> population, <kbd>gml</kbd> politics, <kbd>gmw</kbd> war, <kbd>gmx</kbd> physical, <kbd>gmb</kbd> bottleneck lens, <kbd>gmd</kbd> diff. A third key picks within the group where needed (<kbd>gmep</kbd> then a good). <kbd>gM</kbd> toggles the previous mode, as <kbd>Ctrl-^</kbd> does for branches. <code>:mode prices wheat</code> is the ex form; <code>:set good=steel</code> changes the good without leaving the mode.</p>
+</div>
+</div>
+
+<h3>Text objects: naming a set of places</h3>
+<p>Use after an operator (<kbd>c</kbd><kbd>i</kbd><kbd>s</kbd>) or in visual mode (<kbd>v</kbd><kbd>a</kbd><kbd>c</kbd>). <kbd>i</kbd> is the thing itself, <kbd>a</kbd> adds the ring of provinces that border it. A count widens the ring: <kbd>2ap</kbd> is the province plus two rings.</p>
+<div class="tbl"><table>
+<thead><tr><th>Object</th><th><kbd>i</kbd> inner</th><th><kbd>a</kbd> around</th></tr></thead>
+<tbody>
+<tr><td><kbd>p</kbd> province</td><td>The cursor province</td><td>Plus its neighbours</td></tr>
+<tr><td><kbd>s</kbd> state</td><td>All provinces of the state</td><td>Plus bordering provinces of other states</td></tr>
+<tr><td><kbd>c</kbd> country</td><td>The country</td><td>Plus the foreign border ring</td></tr>
+<tr><td><kbd>m</kbd> market</td><td>Provinces in the cursor's market area (trade node)</td><td>Plus markets it trades with above a share</td></tr>
+<tr><td><kbd>u</kbd> union</td><td>Customs or currency union members</td><td>Plus their partners in trade agreements</td></tr>
+<tr><td><kbd>r</kbd> region</td><td>Statistical region (UN subregion, NUTS)</td><td>Plus neighbours</td></tr>
+<tr><td><kbd>/</kbd> search</td><td>Current search hits</td><td>Plus neighbours</td></tr>
+<tr><td><kbd>q</kbd> query</td><td>The last saved query's set (<code>"q</code>)</td><td>Plus neighbours</td></tr>
+<tr><td><kbd>e</kbd> edit</td><td>Target set of the edit under the cursor</td><td>Plus neighbours</td></tr>
+<tr><td><kbd>t</kbd> theatre, <kbd>F</kbd> front</td><td>War: cells of a theatre or front segment</td><td>Plus the depth band behind it</td></tr>
+</tbody></table></div>
+
+<h3>Operators: edits as verbs</h3>
+<p>An operator plus a target makes one edit in the log, at the view tick. If you are looking at the past, the edit lands in the past and the branch replays from the nearest snapshot (14.3). God-mode operators refuse unless <code>:set god</code> is on; in seat play only in-world edits are possible, and the refusal names the in-world alternative.</p>
+<div class="tbl"><table>
+<thead><tr><th>Key</th><th>Does</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td><kbd>c</kbd></td><td>Change: opens the edit draft for the target with the active field; type <code>+5</code>, <code>-2</code> or <code>=12</code>.</td><td><kbd>cis</kbd> <code>+5</code> raises the tariff in every province of the state.</td></tr>
+<tr><td><kbd>&gt;</kbd> <kbd>&lt;</kbd></td><td>Step the active field up or down by its step size; the count is the number of steps.</td><td><kbd>3&gt;ic</kbd> three steps for the country.</td></tr>
+<tr><td><kbd>Ctrl-a</kbd> <kbd>Ctrl-x</kbd></td><td>The same on the cursor province, or on the selection in visual mode.</td><td><kbd>vis</kbd> <kbd>5 Ctrl-a</kbd></td></tr>
+<tr><td><kbd>y</kbd></td><td>Yank values of the target into a register: the field's values, the set, the tick.</td><td><kbd>"ayip</kbd></td></tr>
+<tr><td><kbd>p</kbd> <kbd>P</kbd></td><td>Put. With values: set the field to them on the target. <kbd>p</kbd> puts after (ex post, at the view tick); <kbd>P</kbd> puts before (ex ante, at the branch start). With edits: cherry-pick them into this branch at their ticks.</td><td><kbd>"ap</kbd> on another province.</td></tr>
+<tr><td><kbd>d</kbd></td><td>Delete the branch's edits that touch the target. They go to <code>"1</code> to <code>"9</code> and can be put back.</td><td><kbd>dic</kbd></td></tr>
+<tr><td><kbd>x</kbd></td><td>Delete the latest edit on the cursor province. On a route (after <kbd>t</kbd>): close the edge, as a fork (0155).</td><td></td></tr>
+<tr><td><kbd>r</kbd> <kbd>R</kbd></td><td>Replace the field's value on one province; <kbd>R</kbd> walks provinces in order, typing a value for each, for scenario editors.</td><td></td></tr>
+<tr><td><kbd>~</kbd></td><td>Toggle a boolean field (port open, export ban, union membership).</td><td></td></tr>
+<tr><td><kbd>J</kbd></td><td>Join: transfer the selection to the anchor's country. God mode only.</td><td></td></tr>
+<tr><td><kbd>!</kbd></td><td>Filter through an ensemble: run K lanes from here with the target as the outcome region and show the fan chart.</td><td><kbd>!ic</kbd></td></tr>
+<tr><td><kbd>gb</kbd></td><td>Blame over the target (0116): edits and shock-tape entries ranked by effect on the field.</td><td><kbd>gbis</kbd></td></tr>
+<tr><td><kbd>gd</kbd> <kbd>K</kbd></td><td>Explain the number under the cursor (waterfall); <kbd>K</kbd> pins it as a tooltip.</td><td></td></tr>
+<tr><td><kbd>.</kbd></td><td>Repeat the last edit on a new target. The killer feature: <kbd>cis</kbd> once, then <kbd>w.</kbd> <kbd>w.</kbd> across neighbouring states.</td><td></td></tr>
+</tbody></table></div>
+
+<div class="grid2">
+<div>
+<h3>Registers</h3>
+<p>Registers are typed: values, edits, a selection, keys or text. A put does what its type means.</p>
+<div class="tbl"><table><tbody>
+<tr><td><code>""</code></td><td>Unnamed: last yank or delete.</td></tr>
+<tr><td><code>"0</code></td><td>Last yank.</td></tr>
+<tr><td><code>"1</code>–<code>"9</code></td><td>Deleted edits, newest first.</td></tr>
+<tr><td><code>"a</code>–<code>"z</code></td><td>Named. <code>"A</code> appends.</td></tr>
+<tr><td><code>"+</code></td><td>System clipboard: series as CSV, edits as scenario TOML, a place as a postcard link (0144).</td></tr>
+<tr><td><code>"%</code> <code>"#</code></td><td>Current and alternate branch (name and hash).</td></tr>
+<tr><td><code>"/</code> <code>":</code> <code>".</code></td><td>Last search or query, last ex command, last edit.</td></tr>
+<tr><td><code>"=</code></td><td>Expression: <code>"=gdp_pc*1.1&lt;CR&gt;p</code> puts a computed value.</td></tr>
+<tr><td><code>"_</code></td><td>Black hole.</td></tr>
+</tbody></table></div>
+</div>
+<div>
+<h3>Marks and jumps</h3>
+<div class="tbl"><table><tbody>
+<tr><td><kbd>m</kbd><i>a</i></td><td>Mark place, tick and branch in <i>a</i>. Lowercase is per branch; uppercase works across branches and switches to the mark's branch.</td></tr>
+<tr><td><kbd>'</kbd><i>a</i></td><td>Jump to the mark's place, keep the current tick.</td></tr>
+<tr><td><kbd>`</kbd><i>a</i></td><td>Jump to place and tick.</td></tr>
+<tr><td><kbd>`^</kbd> <kbd>`.</kbd></td><td>The fork point; the last edit.</td></tr>
+<tr><td><kbd>''</kbd> <kbd>``</kbd></td><td>Back to where you were before the last jump.</td></tr>
+<tr><td><kbd>Ctrl-o</kbd> <kbd>Ctrl-i</kbd></td><td>Older, newer in the jump list. In winit, <kbd>Tab</kbd> and <kbd>Ctrl-i</kbd> are different keys, so <kbd>Tab</kbd> stays free.</td></tr>
+<tr><td><code>:marks</code> <code>:jumps</code> <code>:changes</code></td><td>List them.</td></tr>
+</tbody></table></div>
+</div>
+</div>
+
+<h3>Macros, repeat and global commands</h3>
+<p><kbd>qa</kbd> … <kbd>q</kbd> records keys into <code>"a</code>; <kbd>@a</kbd> replays, <kbd>@@</kbd> repeats, <kbd>20@a</kbd> twenty times. Macros are presentation: only the edits they produce enter the log, so a recorded macro never makes a run non-reproducible. Saved macros are text, so <code>:let @a = '...'</code> in <code>ceterisrc</code> works.</p>
+<p>There are two ways to apply something to every place that matches a predicate, and the difference matters for replay:</p>
+<div class="tbl"><table>
+<thead><tr><th>Command</th><th>Logged as</th><th>On replay</th></tr></thead>
+<tbody>
+<tr><td><code>:where port &amp; deficit(food) &gt; 0 tariff -5</code></td><td>One edit that stores the predicate (0155 "edits by query")</td><td>Re-evaluated at the edit's tick, so a fork where different provinces have a deficit gets a different set.</td></tr>
+<tr><td><code>:g/port &amp; deficit(food) &gt; 0/tariff -5</code></td><td>One edit with the fixed set the predicate matched now</td><td>Always those provinces. The predicate is kept as a comment.</td></tr>
+<tr><td><code>:g/coastal/normal 3&lt;C-a&gt;</code></td><td>Whatever the keys produce at each match, like vim's <code>:g</code></td><td>Fixed sets.</td></tr>
+</tbody></table></div>
+
+<h3>Ex commands</h3>
+<p>Each ex command is a registry command; where the CLI has the same verb, the arguments match, so <code>:bisect</code> in the app and <code>ceteris bisect</code> in a shell take the same predicate.</p>
+<div class="tbl"><table>
+<thead><tr><th>Group</th><th>Commands</th></tr></thead>
+<tbody>
+<tr><td>Time</td><td><code>:2008-09</code> <code>:goto</code> <code>:run 2010-01</code> <code>:pause</code> <code>:set speed=3</code> <code>:ensemble 32</code> (run K lanes from here, 20.3)</td></tr>
+<tr><td>Branches</td><td><code>:fork [name]</code> <code>:ls</code> <code>:b name</code> <code>:bn</code> <code>:bp</code> <code>:diffsplit main</code> <code>:diffoff</code> <code>:bisect "default(ARG) before 2003" --lanes 32</code> <code>:rebase onto main</code> <code>:cherry-pick @a</code> <code>:blame gdp_pc</code> (0116)</td></tr>
+<tr><td>Edits</td><td><code>:tariff +3</code> <code>:tfp =2</code> on the cursor or <code>:'&lt;,'&gt;</code> selection; <code>:where</code>; <code>:g</code>; <code>:undolist</code>; <code>:s/×0.5/×0.6/</code> in the edit log</td></tr>
+<tr><td>Ranges</td><td>Dates and marks give time windows: <code>:2008,2012 blame gdp_pc</code>, <code>:'a,'b compare</code>, <code>:.,+12 ensemble</code>. <code>'&lt;,'&gt;</code> is the visual selection in space.</td></tr>
+<tr><td>Views</td><td><code>:mode</code> <code>:set nu</code> <code>:explain</code> <code>:receipt</code> <code>:cartogram</code> (0124) <code>:peers income-group</code> <code>:route</code> (0155) <code>:goalseek</code> <code>:leverage</code> (0117)</td></tr>
+<tr><td>Session</td><td><code>:w</code> writes the branch as a scenario file; <code>:e scenario.toml</code>; <code>:source recipe.cet</code>; <code>:q</code> warns on unwritten branches; <code>:nmap</code> <code>:nnoremap</code>; <code>:h topic</code> (pedia); <code>:postcard</code> (0144)</td></tr>
+</tbody></table></div>
+
+<div class="grid2">
+<div>
+<h3>Windows, buffers, tabs</h3>
+<div class="tbl"><table><tbody>
+<tr><td><kbd>Ctrl-w v</kbd> <kbd>Ctrl-w s</kbd></td><td>Split the map, vertical or horizontal; the new pane shows the alternate branch with a linked camera and cursor.</td></tr>
+<tr><td><kbd>Ctrl-w h/j/k/l</kbd></td><td>Move focus between map and panels.</td></tr>
+<tr><td><kbd>Ctrl-w o</kbd> <kbd>Ctrl-w =</kbd></td><td>Only this pane; equalize sizes.</td></tr>
+<tr><td><kbd>Ctrl-w x</kbd></td><td>Swap the branches of two panes.</td></tr>
+<tr><td><kbd>Ctrl-^</kbd></td><td>Alternate branch, same place and tick.</td></tr>
+<tr><td><kbd>gt</kbd> <kbd>gT</kbd> <code>:tabnew</code></td><td>Workspace layouts.</td></tr>
+</tbody></table></div>
+</div>
+<div>
+<h3>Inside panels</h3>
+<div class="tbl"><table><tbody>
+<tr><td>Tables</td><td><kbd>j</kbd> <kbd>k</kbd> rows, <kbd>h</kbd> <kbd>l</kbd> columns, <kbd>s</kbd> sort by column (<kbd>S</kbd> reverse), <kbd>/</kbd> filter, <kbd>zo</kbd> expand a row's cause breakdown, <kbd>gd</kbd> drill, <kbd>Enter</kbd> open, <kbd>yy</kbd> row, <kbd>yic</kbd> column.</td></tr>
+<tr><td>Edit log</td><td>A text buffer in scenario-file syntax. <kbd>dd</kbd> drops an edit, <kbd>yy</kbd> yanks it, <kbd>p</kbd> in another branch cherry-picks it, <code>:s</code> rewrites arguments, <code>:w</code> validates and commits. Invalid lines are flagged, never guessed.</td></tr>
+<tr><td>Timeline</td><td><kbd>h</kbd> <kbd>l</kbd> ticks, <kbd>w</kbd> <kbd>b</kbd> years, <kbd>{</kbd> <kbd>}</kbd> events, <kbd>Enter</kbd> jump the map there.</td></tr>
+<tr><td>Charts</td><td><kbd>h</kbd> <kbd>l</kbd> move the read-out, <kbd>]w</kbd> cycles the window (month, year, decade, run; 0155), <kbd>gd</kbd> explains the point.</td></tr>
+<tr><td>Branch manager</td><td>A tree: <kbd>j</kbd> <kbd>k</kbd>, <kbd>zo</kbd> <kbd>zc</kbd>, <kbd>Enter</kbd> switch, <kbd>=</kbd> set as compare, <kbd>dd</kbd> archive.</td></tr>
+</tbody></table></div>
+</div>
+</div>
+
+<h2>Standard keymap</h2>
+<p>This is the default for everyone, and it has no new conventions in it. Each binding is taken from software people already use: the map cursor behaves like Excel's active cell, time behaves like a debugger, views and the palette follow VS Code, the clock follows Paradox, and copying settings follows Factorio. Where two sources disagree, the table says which one wins. On Mac, <kbd>Cmd</kbd> replaces <kbd>Ctrl</kbd> throughout (platform notes below).</p>
+<div class="tbl"><table>
+<thead><tr><th>Key</th><th>Does</th><th>Borrowed from</th></tr></thead>
+<tbody>
+<tr><td colspan="3" class="eyebrow" style="padding-top:.9rem">Time</td></tr>
+<tr><td><kbd>Space</kbd></td><td>Pause, resume</td><td>Paradox, every RTS</td></tr>
+<tr><td><kbd>1</kbd>–<kbd>5</kbd> · <kbd>+</kbd> <kbd>-</kbd></td><td>Set speed; faster, slower (numpad too)</td><td>Paradox</td></tr>
+<tr><td><kbd>F5</kbd> · <kbd>Shift F5</kbd></td><td>Run (continue); pause</td><td>VS Code and Visual Studio debugger</td></tr>
+<tr><td><kbd>F10</kbd> · <kbd>Shift F10</kbd></td><td>Step one tick forward (a day while a war runs); step back, read from snapshots</td><td>Debugger "step over" and "step back"</td></tr>
+<tr><td><kbd>Ctrl F10</kbd></td><td>Run to the date under the timeline cursor</td><td>Debugger "run to cursor"</td></tr>
+<tr><td><kbd>F9</kbd></td><td>Toggle a watch on the value at the cursor: pause when it moves past a threshold</td><td>Debugger breakpoint</td></tr>
+<tr><td><kbd>Ctrl G</kbd></td><td>Go to date</td><td>"Go to line" in editors, Excel's Go To</td></tr>
+<tr><td><kbd>Ctrl Home</kbd> · <kbd>Ctrl End</kbd></td><td>Fork tick (or 2000-01); head</td><td>Excel, editors: start and end of document</td></tr>
+<tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>Previous, next chronicle event</td><td>Paging</td></tr>
+<tr><td><kbd>F8</kbd> · <kbd>Shift F8</kbd></td><td>Next, previous alert</td><td>VS Code "next problem"</td></tr>
+
+<tr><td colspan="3" class="eyebrow" style="padding-top:.9rem">Map and selection</td></tr>
+<tr><td>Arrows</td><td>Move the province cursor to the neighbour in that direction</td><td>Excel active cell</td></tr>
+<tr><td><kbd>Ctrl</kbd> + arrows</td><td>Jump to the last province before the next state border</td><td>Excel "edge of data region", word jump in editors</td></tr>
+<tr><td><kbd>Shift</kbd> + arrows · <kbd>Ctrl Shift</kbd> + arrows</td><td>Extend the selection; extend to the border</td><td>Excel, every text field</td></tr>
+<tr><td><kbd>Shift Space</kbd> · <kbd>Ctrl Space</kbd></td><td>Select the cursor's state; its country</td><td>Excel: select row; select column</td></tr>
+<tr><td><kbd>Ctrl A</kbd></td><td>Select all provinces in view; press again for all</td><td>Excel, OS</td></tr>
+<tr><td>click · <kbd>Shift</kbd> click · <kbd>Ctrl</kbd> click · drag</td><td>Select; add a range; toggle one; box select</td><td>OS file managers, RTS</td></tr>
+<tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · middle drag · wheel</td><td>Pan; pan; zoom. Bound to physical keys, so AZERTY gets ZQSD without a setting</td><td>Paradox, Factorio</td></tr>
+<tr><td><kbd>Ctrl =</kbd> <kbd>Ctrl -</kbd> <kbd>Ctrl 0</kbd></td><td>Zoom in, out, reset</td><td>Browsers, VS Code, Office</td></tr>
+<tr><td><kbd>Home</kbd></td><td>Capital of the cursor's country</td><td>Grand strategy "go to capital"</td></tr>
+<tr><td><kbd>Alt ←</kbd> <kbd>Alt →</kbd></td><td>Back, forward through places and dates visited</td><td>Browsers, VS Code</td></tr>
+<tr><td><kbd>Ctrl 1</kbd>–<kbd>9</kbd> · <kbd>Alt 1</kbd>–<kbd>9</kbd></td><td>Save the selection and camera to a group; recall it</td><td>RTS control groups (Alt recall, because bare digits are speeds)</td></tr>
+<tr><td><kbd>Shift 1</kbd>–<kbd>9</kbd> · <kbd>M</kbd></td><td>Nine pinned map modes; the map mode picker</td><td>Paradox map-mode hotkeys</td></tr>
+<tr><td><kbd>Alt</kbd> (tap)</td><td>Toggle map numbers</td><td>Factorio alt-mode</td></tr>
+
+<tr><td colspan="3" class="eyebrow" style="padding-top:.9rem">Edits</td></tr>
+<tr><td><kbd>F2</kbd></td><td>Edit the active field at the cursor or on the selection; type <code>+3</code>, <code>-2</code> or <code>=12</code></td><td>Excel "edit cell", OS rename</td></tr>
+<tr><td><kbd>Enter</kbd> · <kbd>Esc</kbd> · <kbd>Tab</kbd></td><td>Commit; cancel; next field in the draft</td><td>Excel, every form</td></tr>
+<tr><td><kbd>Ctrl Enter</kbd></td><td>Commit the typed value to every selected province</td><td>Excel "fill selection"</td></tr>
+<tr><td><kbd>Ctrl D</kbd></td><td>Copy the anchor province's value to the rest of the selection</td><td>Excel "fill down"</td></tr>
+<tr><td><kbd>F4</kbd></td><td>Repeat the last edit on the current cursor or selection</td><td>Excel and Office "repeat"</td></tr>
+<tr><td><kbd>]</kbd> <kbd>[</kbd></td><td>Step the active field up, down</td><td>Bracket increments in design tools</td></tr>
+<tr><td><kbd>Delete</kbd></td><td>Remove this branch's edits on the selection</td><td>Excel "clear contents"</td></tr>
+<tr><td><kbd>Ctrl Z</kbd> · <kbd>Ctrl Y</kbd> / <kbd>Ctrl Shift Z</kbd></td><td>Undo; redo, on the edit log</td><td>Everywhere</td></tr>
+<tr><td><kbd>Ctrl C</kbd> <kbd>Ctrl X</kbd> <kbd>Ctrl V</kbd></td><td>Copy values or edits; cut edits (move them); paste at the view tick (ex post)</td><td>Everywhere</td></tr>
+<tr><td><kbd>Ctrl Alt V</kbd></td><td>Paste special: ex ante or ex post, values or edits, keep or re-target places</td><td>Office paste special</td></tr>
+<tr><td><kbd>Q</kbd> · <kbd>Shift</kbd> right-click, <kbd>Shift</kbd> click</td><td>Pipette the cursor's settings; copy settings from one province, paste onto another</td><td>Factorio</td></tr>
+
+<tr><td colspan="3" class="eyebrow" style="padding-top:.9rem">Find and command</td></tr>
+<tr><td><kbd>Ctrl Shift P</kbd> · <kbd>F1</kbd></td><td>Command palette</td><td>VS Code</td></tr>
+<tr><td><kbd>Ctrl P</kbd></td><td>Go to anything: place, date, branch, mark</td><td>VS Code quick open</td></tr>
+<tr><td><kbd>Ctrl F</kbd> · <kbd>F3</kbd> <kbd>Shift F3</kbd></td><td>Find by name or query; next, previous hit</td><td>Office, browsers</td></tr>
+<tr><td><kbd>Ctrl H</kbd></td><td>Find and replace: select by query and apply an edit (<code>:where</code>), with a "keep the predicate" box</td><td>Office, VS Code</td></tr>
+<tr><td><kbd>Ctrl Shift F</kbd></td><td>Search the edit logs of every branch</td><td>VS Code "find in files"</td></tr>
+<tr><td><kbd>F12</kbd> · <kbd>Alt F12</kbd> · <kbd>Shift F12</kbd></td><td>Explain the number (go to its cause); peek it in a tooltip; references (who trades with this place)</td><td>VS Code go to definition, peek, references</td></tr>
+<tr><td><kbd>;</kbd> · <kbd>Ctrl ;</kbd></td><td>Hint labels on the map; on panel controls</td><td>Vimium-style, opt-in feel</td></tr>
+<tr><td><kbd>Shift F1</kbd></td><td>Pedia page for whatever is under the cursor</td><td>Windows and Office context help</td></tr>
+
+<tr><td colspan="3" class="eyebrow" style="padding-top:.9rem">Branches and views</td></tr>
+<tr><td><kbd>Ctrl S</kbd> · <kbd>Ctrl Shift S</kbd></td><td>Write the branch as a scenario file; save as a new branch (fork here)</td><td>Save, Save As</td></tr>
+<tr><td><kbd>Ctrl N</kbd> · <kbd>Ctrl O</kbd></td><td>New scenario; open a scenario or run</td><td>Everywhere</td></tr>
+<tr><td><kbd>Ctrl Tab</kbd> · <kbd>Ctrl PgUp</kbd> <kbd>Ctrl PgDn</kbd></td><td>Most recent branch; previous, next branch tab</td><td>VS Code tabs, Excel sheets</td></tr>
+<tr><td><kbd>Ctrl W</kbd> · <kbd>Ctrl Shift T</kbd></td><td>Close the branch view or panel; reopen the last closed</td><td>Browsers, VS Code</td></tr>
+<tr><td><kbd>Ctrl \</kbd></td><td>Split: the compare branch side by side, cameras linked</td><td>VS Code split editor</td></tr>
+<tr><td><kbd>Ctrl B</kbd> · <kbd>Ctrl J</kbd> · <kbd>Ctrl `</kbd></td><td>Toggle side panel; bottom panel; console</td><td>VS Code</td></tr>
+<tr><td><kbd>Ctrl Shift E</kbd> <kbd>G</kbd> <kbd>M</kbd> <kbd>X</kbd></td><td>Edit log; branch manager; alerts; mods</td><td>VS Code explorer, source control, problems, extensions</td></tr>
+<tr><td><kbd>F6</kbd></td><td>Move focus between map, panels and status bar</td><td>Windows, browsers, VS Code</td></tr>
+<tr><td><kbd>F11</kbd> · <kbd>Alt Enter</kbd></td><td>Full screen</td><td>OS, games</td></tr>
+<tr><td><kbd>Ctrl ,</kbd> · <kbd>Ctrl K Ctrl S</kbd></td><td>Settings; keyboard shortcuts editor</td><td>VS Code, Mac apps</td></tr>
+<tr><td><kbd>Esc</kbd> · <kbd>Enter</kbd> · double-click</td><td>Close the top panel or cancel; open the inspector; open the inspector</td><td>OS dialogs, games</td></tr>
+</tbody></table></div>
+<div class="grid2">
+<div>
+<h3>Where sources disagree</h3>
+<ul>
+<li><b>Digits.</b> Paradox wins: <kbd>1</kbd>–<kbd>5</kbd> set speed. Control groups move to <kbd>Ctrl</kbd>/<kbd>Alt</kbd> + digit and map modes to <kbd>Shift</kbd> + digit.</li>
+<li><b>Arrows.</b> Excel wins: arrows move the cursor, because the cursor is what keyboard edits act on. Panning stays on WASD and the mouse, where grand strategy and Factorio players already have it.</li>
+<li><b>F-keys.</b> VS Code and the debugger win over Paradox panel keys (F1 country, F2 economy and so on). Panels move to <kbd>Ctrl Shift</kbd> + letter. Time on <kbd>F5</kbd>/<kbd>F9</kbd>/<kbd>F10</kbd> is the stronger mapping: running a simulation is closer to debugging than to any game panel.</li>
+<li><b>F11.</b> Full screen, as on Windows and Linux. "Step into" has no use, because <kbd>F10</kbd> already steps a day during a war.</li>
+<li><b>F12.</b> Explain, as in "go to definition", rather than Steam's screenshot key. Postcards (0144) go in the palette and can be bound to Steam's key if the player wants.</li>
+<li><b>Alt.</b> On Windows, holding Alt also shows menu access keys. The two coexist: a tap toggles map numbers and Alt plus a letter opens a menu.</li>
+</ul>
+</div>
+<div>
+<h3>Platform notes</h3>
+<div class="tbl"><table><tbody>
+<tr><td>Mac</td><td><kbd>Cmd</kbd> for <kbd>Ctrl</kbd>. <kbd>Option</kbd> + arrows jumps to a state border and <kbd>Cmd</kbd> + arrows to a country border, matching text fields. <kbd>Cmd [</kbd> <kbd>Cmd ]</kbd> go back and forward. Redo is <kbd>Cmd Shift Z</kbd>. Full screen is <kbd>Ctrl Cmd F</kbd>. Settings is <kbd>Cmd ,</kbd>; quit is <kbd>Cmd Q</kbd>.</td></tr>
+<tr><td>Windows</td><td><kbd>Alt F4</kbd> quits. <kbd>Alt</kbd> + letter opens menus. <kbd>Shift F10</kbd> and the menu key open the context menu at the cursor province.</td></tr>
+<tr><td>Linux</td><td>As Windows. <kbd>Ctrl Q</kbd> quits. Super-key shortcuts are left to the desktop.</td></tr>
+<tr><td>Laptops</td><td>Every F-key binding also has a palette entry. "Use F1–F12 as standard keys" is not assumed.</td></tr>
+</tbody></table></div>
+</div>
+</div>
+
+<h2>Command palette</h2>
+<p><kbd>Ctrl Shift P</kbd> or <kbd>F1</kbd> in the standard keymap, as in VS Code; <kbd>Ctrl-k</kbd> or <kbd>:</kbd> in vim mode. One fuzzy list over the registry and the world. <kbd>Ctrl P</kbd> opens it filtered to places, dates and branches.</p>
+<div class="grid2">
+<div>
+<ul>
+<li><b>Commands</b> with their key in the active keymap and their ex form, ranked by frecency.</li>
+<li><b>Places</b>: provinces, states, countries, markets, chokepoints, in English and local names (0143).</li>
+<li><b>Times</b>: typing <code>2008-09</code> offers "go to" and "fork at".</li>
+<li><b>Branches, marks, saved queries, situations, goods, series.</b></li>
+<li><b>Queries</b>: input that starts with <code>where</code> previews the matching set live on the map, then offers select, edit, peer set or save.</li>
+</ul>
+</div>
+<div>
+<ul>
+<li><b>Arguments as chips</b>: <code>bisect</code> asks for a predicate, then lanes; <kbd>Tab</kbd> moves between chips.</li>
+<li><b>Seat wording</b>: titles follow the regime register of 0140, and the canonical name always matches too, so "cabinet", "central committee" and "government" find the same panel.</li>
+<li><b>Context</b>: commands that need a selection or a war are listed last and greyed, with the reason, not hidden.</li>
+<li><b>Teaching</b>: run a command from the palette three times and the row starts showing "Next time: <kbd>cis</kbd>".</li>
+</ul>
+</div>
+</div>
+
+<h2>Query language</h2>
+<p>One small language for search, visual selection, <code>:where</code>, <code>:g</code>, peer sets and saved queries. Its text form is what an edit by query stores (0155), so it must be deterministic: no wall-clock, no randomness, and every column it names has a unit that the parser checks.</p>
+<pre class="block">query   := term (('&amp;' | '|') term)*
+term    := '!' term | '(' query ')' | atom
+atom    := flag                         coastal  port  capital  edited  rationed(steel)
+         | column cmp number unit?      gdp_pc &lt; 12k   tariff(wheat) &gt;= 10%   pop &gt; 1M
+         | key '=' name                 country=Spain   state="Castilla y León"   union=EU
+         | near(place, k)               near(Madrid, 2)        within 300km of Lisboa
+         | rank(column) cmp k           rank(gdp_pc) &lt;= 10   (within the current set)
+         | pct(column, peers) cmp n     pct(debt_gdp, income-group) &gt; 90
+         | routes(through, edge)        routes(through, Suez)
+time    := query '@' date | query 'over' date '..' date     deficit(food) &gt; 0 over 2007..2008</pre>
+<p class="muted">Examples: <code>/Sev</code> finds by name. <code>/port &amp; deficit(food) &gt; 0</code> highlights matches. <code>:where rationed(steel) &amp; country=DEU tfp +1</code> is an edit by query. <code>:peers pct(reserves_months, currency=peg) &lt; 25</code> is a peer set.</p>
+
+<h2>Hint mode</h2>
+<p>Borrowed from Vimium. Every target gets a two-letter label from the home row, assigned in reading order so labels are stable while the camera is still, which keeps hint jumps usable inside macros.</p>
+<div class="tbl"><table><tbody>
+<tr><td><kbd>f</kbd></td><td>Provinces on the map (cells when the grain is open). In visual mode, toggles the hinted province in the selection.</td></tr>
+<tr><td><kbd>F</kbd></td><td>Every control in the visible panels: buttons, tabs, table rows, chart series. Replaces the mouse for one click.</td></tr>
+<tr><td><kbd>t</kbd></td><td>Transport edges, ports and chokepoints for the route inspector (0155).</td></tr>
+<tr><td><kbd>gf</kbd></td><td>Entities on the map: formations in war surfaces, firms in the bottleneck lens, labels in the cartogram.</td></tr>
+<tr><td><kbd>Shift</kbd> + label</td><td>Act and stay in hint mode, for picking several targets.</td></tr>
+</tbody></table></div>
+
+<h2>Terminal style</h2>
+<p>The Bloomberg Terminal is the best keyboard interface for people who live inside numbers, and its grammar fits Ceteris closely: load a subject, then run a function on it. It needs no new mode. The palette and the ex line already accept it, and a "Terminal" workspace (a tab page) arranges four linked panels the way a terminal user expects.</p>
+<div class="grid2">
+<div>
+<h3>Subject, function, go</h3>
+<p>Type a subject, an optional type key, a mnemonic, then <kbd>Enter</kbd> (the terminal's <kbd>GO</kbd>): <code>Spain WEI</code>, <code>Sevilla DES</code>, <code>wheat GP</code>. With no subject, the function runs on the cursor. In the terminal keymap the F-keys become subject types, as Bloomberg's yellow keys are: <kbd>F2</kbd> country, <kbd>F3</kbd> state, <kbd>F4</kbd> province, <kbd>F5</kbd> market, <kbd>F6</kbd> good, <kbd>F7</kbd> branch, <kbd>F8</kbd> formation. That settles ambiguous names such as Georgia or Córdoba without a menu.</p>
+<p>Every list prints numbered rows, and typing a number then <kbd>Enter</kbd> opens that row, so <code>WEI</code> then <code>2</code> <kbd>Enter</kbd> opens Portugal. <kbd>Esc</kbd> is the terminal's MENU key and walks back through the jump list.</p>
+<h3>Linked panels</h3>
+<p>Each panel carries a link colour. Panels in the same group change subject together, so a GP chart, a DES page and a market table follow the map cursor while a second group stays pinned to a peer for side-by-side reading. Linking is presentation only.</p>
+<h3>Monitors</h3>
+<p>A monitor is a saved table of subjects with live columns, the WEI or MOST pattern: rows from a query, columns from series with a window (0155), sparklines, sorting by any column, and conditional colours from the semantic tokens. Monitors update each tick and are the natural home for peer sets.</p>
+</div>
+<div>
+<h3>Mnemonics</h3>
+<div class="tbl"><table><tbody>
+<tr><td><code>DES</code></td><td>Describe the subject: the inspector as a page</td></tr>
+<tr><td><code>GP</code> <code>HP</code></td><td>Graph a series; the same series as a table by tick</td></tr>
+<tr><td><code>ECO</code></td><td>Chronicle and shock-tape calendar</td></tr>
+<tr><td><code>TOP</code></td><td>Headlines; on 1 January, the front page (0144)</td></tr>
+<tr><td><code>WEI</code> <code>MOST</code></td><td>Country monitor; largest movers over a window</td></tr>
+<tr><td><code>FA</code> <code>BOP</code></td><td>Fiscal accounts and ledgers; balance of payments</td></tr>
+<tr><td><code>TRD</code></td><td>Trade flows and the route inspector</td></tr>
+<tr><td><code>RV</code></td><td>Relative value: the peer radar (0155)</td></tr>
+<tr><td><code>HR</code></td><td>Headroom gauges (0155)</td></tr>
+<tr><td><code>EQS</code></td><td>Screener: build a query by form, see its text</td></tr>
+<tr><td><code>ALRT</code></td><td>Alerts and auto-pause conditions</td></tr>
+<tr><td><code>BTST</code></td><td>Backtest: sweep a lever over sibling branches</td></tr>
+<tr><td><code>BLAM</code> <code>BSCT</code></td><td>Blame and bisect (0116)</td></tr>
+<tr><td><code>OOB</code> <code>LOGI</code></td><td>Order of battle; logistics (0166)</td></tr>
+<tr><td><code>HELP</code> · <code>HELP HELP</code></td><td>Pedia page for the subject or function; a person-free help desk is out of scope</td></tr>
+</tbody></table></div>
+<p class="muted">An optional amber-on-black terminal theme can sit beside the era themes of 0124, off by default and built from the same tokens.</p>
+</div>
+</div>
+
+<h2>Automation</h2>
+<p>Automation splits into two kinds. Some of it writes state, so it has to live in the edit log and replay the same way every time. The rest only drives the UI, so it is free to do anything and enters no hash.</p>
+<div class="tbl"><table>
+<thead><tr><th>Kind</th><th>Form</th><th>Writes state?</th><th>Replay</th></tr></thead>
+<tbody>
+<tr><td>Macros and <code>.</code></td><td>Recorded keys in a register</td><td>Only through the edits they produce</td><td>The edits replay; the keys never do</td></tr>
+<tr><td>Recipes</td><td><code>recipe.cet</code>: ex commands, run with <code>:source</code> or <code>ceteris source</code></td><td>Through its edits</td><td>As above. The scenario file written by <code>:w</code> is the reproducible artifact, not the recipe</td></tr>
+<tr><td>Edits by query</td><td><code>:where {query} {edit}</code></td><td>Yes</td><td>Predicate re-evaluated at the edit's tick (0155)</td></tr>
+<tr><td>Rule edits</td><td><code>:when {query} {edit} [once|each tick|cooldown 12|until 2012]</code></td><td>Yes, as a new edit type in 14.2</td><td>Evaluated at a fixed point of the tick pipeline on the previous tick's state, inside the sim, so a replay fires at the same ticks</td></tr>
+<tr><td>Sweeps</td><td><code>:sweep tariff 0..10 by 2 on is</code> or <code>BTST</code></td><td>Creates sibling branches</td><td>Each branch is an ordinary branch; the set is an experiment (14.1) and runs headless as <code>ceteris sweep</code></td></tr>
+<tr><td>Watchers</td><td><code>:pauseon default(ARG)</code>, <code>:forkon</code>, <code>:alert</code>, <code>:postcardon</code></td><td>No</td><td>UI only: pause, fork, notify or capture when a condition holds</td></tr>
+<tr><td>External drivers</td><td>Scripts and agents through the CLI and its MCP server (0113, 0125, 0126)</td><td>Through scenario files</td><td>Same as any scenario</td></tr>
+</tbody></table></div>
+<p>Rule edits are the one new mechanism here. A rule fires per target, the first time the target matches from the rule's tick onward (the default "once" policy), and each firing is logged as an ordinary edit with its own tick, so blame, bisect and <kbd>g;</kbd> treat firings like hand-made edits. In seat play a rule may only use the seat's own levers, which makes it a standing policy close to the commitments of 0162. God-mode rules carry the god flag like any god edit. The demo implements <code>:when</code> with the "once" policy.</p>
+
+<h2>Natural-language input</h2>
+<p>Typing a sentence into the palette or the ex line works with AI off. A small controlled-English grammar ships with the app and compiles common forms ("raise tariffs by 4 in coastal Portuguese provinces from 2008", "when GDP falls below 17 in Spanish provinces, raise productivity by 1", "which provinces have GDP below 16") into the same edit and query text a user could type. The demo's palette runs that grammar. Anything the grammar cannot read goes, if the user has turned it on, to the intervention compiler of ADR 0125.</p>
+<div class="grid2">
+<div>
+<h3>The rules</h3>
+<ul>
+<li><b>Compile, preview, commit.</b> The sentence becomes ex text, shown with the matched set lit on the map, the tick it will land on, and whether it is in-world or god mode. <kbd>Enter</kbd> commits it, <kbd>Tab</kbd> edits the compiled text first.</li>
+<li><b>The log stores the compiled text.</b> The sentence is kept as a comment, and for model output so are the model id and a prompt hash, for audit. Replays read only the compiled lines and never call a model.</li>
+<li><b>Ask, never guess.</b> Ambiguous places, goods or dates come back as numbered choices ("Georgia: 1) the country 2) the US state").</li>
+<li><b>Nothing outside 14.2.</b> A sentence that maps to no edit type is refused with the nearest edit types listed.</li>
+<li><b>Teach the grammar.</b> The preview shows the key sequence or ex command that does the same, so the sentence is also a lesson.</li>
+</ul>
+</div>
+<div>
+<h3>What a sentence can be</h3>
+<div class="tbl"><table><tbody>
+<tr><td>Edit</td><td>"Cut the wheat tariff to 0 in Egypt from 2011" → <code>:2011 | where country=EGY tariff(wheat) =0</code></td></tr>
+<tr><td>Rule</td><td>"If reserves drop below 3 months, raise the policy rate 2 points" → <code>:when reserves_months&lt;3 rate +2 cooldown 12</code></td></tr>
+<tr><td>Query</td><td>"Ports with a food deficit" → <code>/port &amp; deficit(food) &gt; 0</code></td></tr>
+<tr><td>Navigation</td><td>"Take me to Lehman" → <code>:2008-09</code> and the event in <code>ECO</code></td></tr>
+<tr><td>Question</td><td>"Why did Sevilla's income fall in 2009?" → <code>BLAM</code> and the explainer, read-only. With the model on, the research assistant of 0125 writes a note whose every number cites a run hash and column.</td></tr>
+<tr><td>Experiment</td><td>"Compare a 10% and a 20% export ban for 32 lanes" → a sweep spec, shown before it runs</td></tr>
+</tbody></table></div>
+</div>
+</div>
+
+<h2>Fitting the other surfaces</h2>
+<div class="grid2">
+<div>
+<h3>Branch verbs (0116)</h3>
+<p><code>:bisect</code> loads its probes into the quickfix list as they finish; <kbd>]q</kbd> steps through them and the map shows each probe's subset. The answer lands on the edit log line, highlighted. <code>:blame</code> fills the same list ranked by channel-shutdown effect, and <kbd>Enter</kbd> on an entry jumps to the edit's place and tick. <code>:rebase onto main</code> reports skipped edits in the list instead of a dialog. Cherry-pick is yank and put across branches: <kbd>"ayy</kbd> in one edit log, <kbd>"ap</kbd> in another.</p>
+<h3>Economic lenses (0155)</h3>
+<p><kbd>gmb</kbd> turns on the bottleneck lens; <kbd>Ctrl-]</kbd> on a rationed cell walks the shortfall one link upstream and <kbd>Ctrl-t</kbd> walks back. <kbd>t</kbd> then a label opens the route inspector; <kbd>x</kbd> on an edge forks a branch with it closed. Peer sets are saved queries (<code>:peers</code>). Tap <kbd>Alt</kbd> or <code>:set nu</code> for map numbers. Headroom crossings are <kbd>]a</kbd> targets.</p>
+<h3>Seat chrome (0140)</h3>
+<p>Keys never change with the seat. The focus ring and the cursor use the seat accent; edits stay proof magenta and forks violet. Panel titles change by regime register; the palette matches both the register title and the canonical name.</p>
+</div>
+<div>
+<h3>War surfaces (0145-0166)</h3>
+<p>Orders are typed objects with a mission verb and an objective (0147), which maps onto an operator grammar. Select formations with <kbd>gf</kbd> hints or <kbd>v</kbd>, then:</p>
+<div class="tbl"><table><tbody>
+<tr><td><kbd>o</kbd> verb target</td><td><kbd>oa</kbd> attack, <kbd>od</kbd> defend, <kbd>oh</kbd> hold, <kbd>os</kbd> screen, <kbd>oe</kbd> encircle, <kbd>ol</kbd> delay; target by motion, text object or hint. <kbd>oafsk</kbd>: attack the province labelled <i>sk</i>.</td></tr>
+<tr><td><kbd>v</kbd> path <kbd>of</kbd></td><td>Draw a front or phase line by walking the cursor in visual mode, then assign it.</td></tr>
+<tr><td><kbd>]u</kbd> <kbd>[u</kbd></td><td>Next formation with no order, or whose order went stale after HQ latency.</td></tr>
+<tr><td><i>n</i><kbd>gL</kbd></td><td>Set the delegation level of the HQ under the cursor (L0 to L4).</td></tr>
+<tr><td><kbd>.</kbd></td><td>Repeat the last order on the next formation.</td></tr>
+<tr><td><code>:plan</code></td><td>Open the battle planner with the selection as the force.</td></tr>
+</tbody></table></div>
+<p>Time motions use the daily clock while a war runs, so <kbd>)</kbd> is one day. An order issued by keys and the same order from a planner produce the same state (0147 test).</p>
+</div>
+</div>
+
+<h2>Building it on winit and Slint (ADR 0088)</h2>
+<div class="grid2">
+<div>
+<ul>
+<li><b>One input router ahead of Slint.</b> winit <code>KeyEvent</code> goes to a keymap engine (mode state machine, pending-key trie, counts, registers) that emits registry commands. Slint gets a key only when a Slint text field has focus; even then <kbd>Esc</kbd> and <kbd>Ctrl-[</kbd> go to the engine.</li>
+<li><b>Logical and physical keys.</b> Vim and most bindings match <code>logical_key</code> (the character), so <kbd>{</kbd> and <kbd>$</kbd> work on any layout. Camera panning matches <code>physical_key</code>. Dead keys and IME composition pass through untouched in insert and command-line modes.</li>
+<li><b>Timeouts.</b> <code>timeoutlen</code> (default 700 ms) for ambiguous prefixes; the which-key panel opens after 400 ms.</li>
+<li><b>Keymap files.</b> TOML per keymap plus <code>ceterisrc</code> for ex commands, in the config folder; never in a pack or a run.</li>
+</ul>
+</div>
+<div>
+<pre class="block"># keymaps/vim.toml
+[normal]
+"gm"   = { menu = "map-mode" }
+"&lt;C-a&gt;" = "field.step +1"
+"&lt;C-Space&gt;b" = "branch.bisect"
+
+[visual]
+"J" = { cmd = "province.transfer", god = true }
+
+[context.war]
+"o" = { menu = "order" }</pre>
+</div>
+</div>
+<ul>
+<li><b>Tests.</b> Every registry command is reachable from the palette. No two bindings collide within a context. Replaying a recorded key log on a fixture produces the same edit log, and the same state hash, on every platform. Changing keymap or entering hint mode changes no state hash.</li>
+<li><b>Accessibility.</b> Slint's AccessKit tree names every hint target, so the keyboard path is also the screen-reader path. All labels and the which-key panel follow the reduced-motion setting.</li>
+<li><b>Phasing.</b> Registry, palette, standard keymap and hints with the P3 workbench; vim mode once the edit log and branch manager exist, since it is mostly a grammar over them; war bindings with the W2-W5 surfaces.</li>
+</ul>
+
+<h2>Open questions</h2>
+<div class="qa"><p><b>Leader key (decided).</b> <kbd>Space</kbd> stays pause in both keymaps and the vim leader is <kbd>Ctrl Space</kbd> (ADR 0188). On macOS, <kbd>Ctrl Space</kbd> switches input source by default; the first launch in vim mode says so and offers to rebind.</p></div>
+<div class="qa"><p><b>Does <kbd>c</kbd> commit at once or open a draft?</b> Recommended: commit on <kbd>Enter</kbd>, since <kbd>u</kbd> is free and the edit is only a log entry. The standard keymap keeps the explicit draft panel with Apply and Fork-then-apply.</p></div>
+<div class="qa"><p><b>Edits while the clock runs.</b> Recommended: autopause on any prompt, on by default. With autopause off, the prompt freezes the view tick it shows, and the edit lands there.</p></div>
+<div class="qa"><p><b>Word motions.</b> <kbd>w</kbd> as "next state in the last direction" is a guess. The alternative is <kbd>w</kbd> walking the current ranked list (search hits, query results). Worth a quick playtest in the demo above.</p></div>
+<div class="qa"><p><b>Recorded.</b> This design is ADR 0188 (proposed), merged 28 Oct 2026, with the defaults above.</p></div>
+</div>
+
+<script>
+"use strict";
+// ---------- data ----------
+const PROV = [
+ ["A Coruña",-8.4,43.2,"Galicia","Spain"],["Lugo",-7.6,43.0,"Galicia","Spain"],["Ourense",-7.9,42.2,"Galicia","Spain"],["Pontevedra",-8.6,42.4,"Galicia","Spain"],
+ ["Asturias",-5.9,43.3,"Asturias","Spain"],["Cantabria",-4.0,43.2,"Cantabria","Spain"],
+ ["Bizkaia",-2.9,43.2,"País Vasco","Spain"],["Gipuzkoa",-2.1,43.15,"País Vasco","Spain"],["Álava",-2.7,42.85,"País Vasco","Spain"],
+ ["Navarra",-1.65,42.7,"Navarra","Spain"],["La Rioja",-2.5,42.3,"La Rioja","Spain"],
+ ["Huesca",-0.1,42.2,"Aragón","Spain"],["Zaragoza",-1.1,41.6,"Aragón","Spain"],["Teruel",-0.9,40.6,"Aragón","Spain"],
+ ["Lleida",0.9,41.9,"Cataluña","Spain"],["Girona",2.6,42.1,"Cataluña","Spain"],["Barcelona",2.0,41.6,"Cataluña","Spain"],["Tarragona",0.9,41.0,"Cataluña","Spain"],
+ ["León",-5.8,42.6,"Castilla y León","Spain"],["Palencia",-4.5,42.4,"Castilla y León","Spain"],["Burgos",-3.6,42.3,"Castilla y León","Spain"],["Soria",-2.5,41.7,"Castilla y León","Spain"],
+ ["Zamora",-6.0,41.7,"Castilla y León","Spain"],["Valladolid",-4.7,41.6,"Castilla y León","Spain"],["Segovia",-4.1,41.1,"Castilla y León","Spain"],["Salamanca",-6.0,40.8,"Castilla y León","Spain"],["Ávila",-4.9,40.6,"Castilla y León","Spain"],
+ ["Madrid",-3.7,40.45,"Madrid","Spain"],
+ ["Guadalajara",-2.6,40.8,"Castilla-La Mancha","Spain"],["Cuenca",-2.1,39.9,"Castilla-La Mancha","Spain"],["Toledo",-4.2,39.8,"Castilla-La Mancha","Spain"],["Ciudad Real",-3.9,38.9,"Castilla-La Mancha","Spain"],["Albacete",-1.9,38.8,"Castilla-La Mancha","Spain"],
+ ["Cáceres",-6.2,39.6,"Extremadura","Spain"],["Badajoz",-6.3,38.7,"Extremadura","Spain"],
+ ["Castellón",-0.2,40.2,"Valencia","Spain"],["Valencia",-0.6,39.4,"Valencia","Spain"],["Alicante",-0.6,38.5,"Valencia","Spain"],
+ ["Murcia",-1.4,38.0,"Murcia","Spain"],
+ ["Huelva",-6.9,37.6,"Andalucía","Spain"],["Sevilla",-5.7,37.4,"Andalucía","Spain"],["Córdoba",-4.8,37.9,"Andalucía","Spain"],["Jaén",-3.5,38.0,"Andalucía","Spain"],
+ ["Granada",-3.2,37.3,"Andalucía","Spain"],["Almería",-2.3,37.2,"Andalucía","Spain"],["Málaga",-4.6,36.8,"Andalucía","Spain"],["Cádiz",-5.8,36.5,"Andalucía","Spain"],
+ ["Illes Balears",2.9,39.6,"Illes Balears","Spain"],
+ ["Viana do Castelo",-8.5,41.9,"Norte","Portugal"],["Braga",-8.3,41.6,"Norte","Portugal"],["Vila Real",-7.6,41.4,"Norte","Portugal"],["Bragança",-6.8,41.6,"Norte","Portugal"],["Porto",-8.4,41.2,"Norte","Portugal"],
+ ["Aveiro",-8.5,40.7,"Centro","Portugal"],["Viseu",-7.8,40.8,"Centro","Portugal"],["Guarda",-7.1,40.6,"Centro","Portugal"],["Coimbra",-8.3,40.2,"Centro","Portugal"],["Leiria",-8.8,39.7,"Centro","Portugal"],["Castelo Branco",-7.4,39.9,"Centro","Portugal"],
+ ["Lisboa",-9.1,38.9,"Lisboa","Portugal"],["Setúbal",-8.7,38.3,"Lisboa","Portugal"],
+ ["Santarém",-8.5,39.3,"Alentejo","Portugal"],["Portalegre",-7.6,39.2,"Alentejo","Portugal"],["Évora",-7.9,38.6,"Alentejo","Portugal"],["Beja",-7.9,37.9,"Alentejo","Portugal"],
+ ["Faro",-8.0,37.2,"Algarve","Portugal"],
+ ["Pyrénées-Atlantiques",-0.8,43.25,"Nouvelle-Aquitaine","France"],["Hautes-Pyrénées",0.15,43.1,"Occitanie","France"],["Haute-Garonne",1.15,43.4,"Occitanie","France"],["Ariège",1.5,42.95,"Occitanie","France"],["Pyrénées-Orientales",2.5,42.6,"Occitanie","France"]
+];
+const IBERIA = [[-9.3,43.15],[-8.2,43.75],[-7.0,43.6],[-5.8,43.65],[-4.5,43.5],[-3.0,43.45],[-1.8,43.4],[-1.5,43.55],[-1.35,43.78],[3.1,43.78],[3.15,43.2],[3.05,42.75],[3.2,42.4],[3.2,41.9],[2.2,41.4],[1.0,41.05],[0.75,40.65],[0.0,40.0],[-0.3,39.45],[0.2,38.75],[-0.5,38.3],[-0.75,37.6],[-1.6,37.35],[-2.0,36.75],[-3.0,36.72],[-4.4,36.7],[-5.0,36.45],[-5.4,36.05],[-6.0,36.2],[-6.35,36.6],[-6.9,37.15],[-7.4,37.18],[-8.0,36.98],[-8.95,37.0],[-8.8,37.9],[-9.0,38.4],[-9.5,38.75],[-9.35,39.4],[-8.95,40.1],[-8.75,40.65],[-8.7,41.2],[-8.9,41.9],[-8.9,42.4],[-9.3,42.9]];
+const MALLORCA = [[2.35,39.55],[2.6,39.95],[3.2,39.95],[3.48,39.7],[3.25,39.3],[2.75,39.35]];
+const CAPITAL = {Spain:"Madrid", Portugal:"Lisboa", France:"Haute-Garonne"};
+const CBASE = {Spain:20, Portugal:17, France:24}, CGROW = {Spain:.028, Portugal:.012, France:.013}, CDEPTH = {Spain:.09, Portugal:.07, France:.03};
+const SF = {"Madrid":1.35,"País Vasco":1.3,"Navarra":1.27,"Cataluña":1.22,"La Rioja":1.12,"Aragón":1.08,"Illes Balears":1.15,"Cantabria":.98,"Castilla y León":.95,"Asturias":.92,"Valencia":.95,"Galicia":.85,"Murcia":.85,"Castilla-La Mancha":.83,"Andalucía":.77,"Extremadura":.68,"Lisboa":1.35,"Algarve":1.0,"Alentejo":.88,"Centro":.85,"Norte":.8,"Nouvelle-Aquitaine":.95,"Occitanie":.97};
+const EVENTS = [[20,"9/11 attacks"],[24,"Euro notes and coins"],[52,"EU enlargement to 25"],[104,"Lehman Brothers fails"],[124,"Greek bailout"],[136,"Portugal bailout"],[149,"Spanish bank rescue"],[197,"Brexit referendum"],[242,"COVID-19 lockdowns"]];
+const MAXT = 371;
+const FIELDS = {tariff:{step:1,unit:"pp",kind:"policy"}, tfp:{step:1,unit:"steps",kind:"god"}};
+const MODES = {political:"Political", gdp:"GDP per capita", wheat:"Wheat price", tariff:"Tariff", edits:"Edits", compare:"Diff vs alternate"};
+const MODEKEY = {p:"political",g:"gdp",w:"wheat",t:"tariff",e:"edits",d:"compare",c:"compare"};
+
+const norm = s => s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
+const date = t => `${2000+Math.floor(t/12)}-${String(t%12+1).padStart(2,"0")}`;
+const parseDate = s => { const m = /^(\d{4})(?:-(\d{1,2}))?$/.exec(s.trim()); if(!m) return null; const t=(+m[1]-2000)*12+(m[2]?+m[2]-1:0); return t>=0&&t<=MAXT?t:null; };
+function hash(s){ let h=2166136261; for(const c of s){h^=c.charCodeAt(0); h=Math.imul(h,16777619);} return ((h>>>0)%1000)/1000; }
+
+// ---------- geometry ----------
+const KX = 0.766, HS = 0.1, HW = Math.sqrt(3)*HS, RH = 1.5*HS;
+const X0 = -9.6*KX, Y0 = -43.85, COLS = Math.ceil((3.6*KX - X0)/HW)+1, ROWS = Math.ceil((43.85-35.95)/RH)+1;
+function inPoly(p, poly){ let c=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const [xi,yi]=poly[i],[xj,yj]=poly[j]; if(((yi>p[1])!==(yj>p[1])) && p[0] < (xj-xi)*(p[1]-yi)/(yj-yi)+xi) c=!c; } return c; }
+const P = PROV.map(([name,lon,lat,state,country],i)=>({id:i,name,lon,lat,state,country,sx:lon*KX,sy:-lat,cells:[],nb:new Set(),coastal:false}));
+const cellOwner = new Int16Array(COLS*ROWS).fill(-1);
+const cellXY = (c,r)=>[X0 + HW*(c + 0.5*(r&1)), Y0 + RH*r];
+for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+  const [x,y] = cellXY(c,r), ll=[x/KX,-y];
+  if(!inPoly(ll,IBERIA) && !inPoly(ll,MALLORCA)) continue;
+  let best=-1, bd=1e9;
+  for(const p of P){ const d=(p.sx-x)**2+(p.sy-y)**2; if(d<bd){bd=d;best=p.id;} }
+  cellOwner[r*COLS+c]=best; P[best].cells.push([c,r]);
+}
+// neighbour offsets for odd-r rows; order E, SE, SW, W, NW, NE matches canvas angles 0,60,...,300
+const NB_EVEN = [[1,0],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1]], NB_ODD = [[1,0],[1,1],[0,1],[-1,0],[0,-1],[1,-1]];
+const owner = (c,r)=> (c<0||r<0||c>=COLS||r>=ROWS) ? -1 : cellOwner[r*COLS+c];
+const corner = (x,y,deg,s=HS)=>[x+s*Math.cos(deg*Math.PI/180), y+s*Math.sin(deg*Math.PI/180)];
+const paths = {fill:[], outline:[], prov:new Path2D(), state:new Path2D(), country:new Path2D(), coast:new Path2D()};
+for(const p of P){
+  const f = new Path2D(), o = new Path2D();
+  let sx=0, sy=0;
+  for(const [c,r] of p.cells){
+    const [x,y]=cellXY(c,r); sx+=x; sy+=y;
+    for(let k=0;k<6;k++){ const [a,b]=corner(x,y,60*k-30,HS*1.06); k?f.lineTo(a,b):f.moveTo(a,b); } f.closePath();
+    const nb = (r&1)?NB_ODD:NB_EVEN;
+    for(let k=0;k<6;k++){
+      const o2 = owner(c+nb[k][0], r+nb[k][1]);
+      if(o2===p.id) continue;
+      const [a1,b1]=corner(x,y,60*k-30), [a2,b2]=corner(x,y,60*k+30);
+      o.moveTo(a1,b1); o.lineTo(a2,b2);
+      if(o2<0){ p.coastal=true; paths.coast.moveTo(a1,b1); paths.coast.lineTo(a2,b2); continue; }
+      p.nb.add(o2);
+      if(o2<p.id) continue;
+      const q=P[o2], tgt = q.country!==p.country ? paths.country : q.state!==p.state ? paths.state : paths.prov;
+      tgt.moveTo(a1,b1); tgt.lineTo(a2,b2);
+    }
+  }
+  p.cx = sx/p.cells.length; p.cy = sy/p.cells.length;
+  paths.fill[p.id]=f; paths.outline[p.id]=o;
+}
+const byName = n => P.find(p=>norm(p.name)===norm(n));
+const BOUNDS = {x0:-9.55*KX, x1:3.55*KX, y0:-43.9, y1:-35.95};
+const HINTCH = "asdfghjkl";
+const HINTS = new Map(); [...P].sort((a,b)=> Math.round(a.cy*4)-Math.round(b.cy*4) || a.cx-b.cx).forEach((p,i)=>{ HINTS.set(HINTCH[Math.floor(i/9)]+HINTCH[i%9], p.id); });
+const HINTOF = new Map([...HINTS].map(([k,v])=>[v,k]));
+const BASE = P.map(p=> CBASE[p.country]*SF[p.state]*(1+0.12*(hash(p.name)-0.5)));
+
+// ---------- model ----------
+let STAMP = 0, EDIT_ID = 1;
+const branches = new Map();
+function mkBranch(name,parent,forkTick){ const b={name,parent,forkTick,edits:[],undo:[],redo:[],dirty:false}; branches.set(name,b); return b; }
+function effective(b){ const own=b.edits; if(!b.parent) return own; return effective(branches.get(b.parent)).filter(e=>e.tick<b.forkTick).concat(own); }
+const sortedEff = b => effective(b).map((e,i)=>[e,i]).sort((x,y)=>x[0].tick-y[0].tick||x[1]-y[1]).map(x=>x[0]);
+function crisis(c,t){
+  let f=1; const d=CDEPTH[c];
+  if(t>=105) f = t<135 ? 1-d*(t-105)/30 : 1-d*Math.max(.35, 1-.65*(t-135)/84);
+  if(t>=243) f *= t<246 ? .88 : t<258 ? .88+.1*(t-246)/12 : .98;
+  return f;
+}
+const cache = new Map();
+function compute(edits, t, key){
+  const k = key && `${key}|${STAMP}|${t}`;
+  if(k && cache.has(k)) return cache.get(k);
+  const n=P.length, tariff=new Float64Array(n), tfp=new Float64Array(n), touched=new Uint16Array(n), crisisF=new Float64Array(n);
+  edits.forEach((e,i)=>{
+    if(e.tick>t) return;
+    const fired = e.rule ? ruleFires(edits,i,key) : null;
+    const tg = fired ? [...fired].filter(([,ft])=>ft<=t).map(([id])=>id) : targetsOf(edits,i,key);
+    for(const id of tg){
+      const t0 = fired ? fired.get(id) : e.tick;
+      touched[id]++;
+      if(e.field==="tariff") tariff[id] = e.op==="=" ? e.val : tariff[id]+e.val;
+      else { const ramp=Math.min(1,(t-t0+1)/12); tfp[id] = e.op==="=" ? e.val : tfp[id]+e.val*ramp; }
+    }
+  });
+  const gdp=new Float64Array(n), wheat=new Float64Array(n);
+  for(const p of P){ const i=p.id;
+    crisisF[i]=crisis(p.country,t);
+    gdp[i]=BASE[i]*Math.pow(1+CGROW[p.country],t/12)*crisisF[i]*Math.pow(1.02,tfp[i])*(1-.004*tariff[i]);
+    wheat[i]=100*Math.pow(1.025,t/12)*(1+.03*Math.sin(2*Math.PI*(t%12)/12))*(1+tariff[i]/100)*(p.coastal?1:1.06);
+  }
+  const out={gdp,wheat,tariff,tfp,touched,crisisF,t};
+  if(k){ if(cache.size>6000) cache.clear(); cache.set(k,out); }
+  return out;
+}
+// A rule edit fires once per province, at the first tick from its own tick on which the province
+// matches; the match is read from the state without the rule, so replay needs no model and no wall-clock.
+function ruleFires(edits,i,key){
+  const e=edits[i], k=`${key}|${STAMP}|rule${e.id}|${i}`;
+  if(key && cache.has(k)) return cache.get(k);
+  const fired=new Map(), prior=edits.slice(0,i);
+  for(let tt=e.tick; tt<=MAXT && fired.size<P.length; tt++){
+    for(const id of evalQuery(e.pred, compute(prior, tt, key && `${key}#r${i}`))) if(!fired.has(id)) fired.set(id,tt);
+  }
+  if(key) cache.set(k,fired);
+  return fired;
+}
+function targetsOf(edits,i,key){
+  const e=edits[i];
+  if(e.rule) return [...ruleFires(edits,i,key).keys()];
+  if(!e.pred) return e.targets;
+  const k = `${key}|${STAMP}|pred${e.id}|${i}`;
+  if(key && cache.has(k)) return cache.get(k);
+  const before = compute(edits.slice(0,i), e.tick, key && `${key}#${i}`);
+  const r = [...evalQuery(e.pred, before)];
+  if(key) cache.set(k,r);
+  return r;
+}
+const vals = (bname,t)=> compute(sortedEff(branches.get(bname)), t, bname);
+function resolvedTargets(bname){ const ed=sortedEff(branches.get(bname)); return ed.map((e,i)=>({e,tg:targetsOf(ed,i,bname)})); }
+
+// ---------- query language ----------
+function evalQuery(src, V){
+  const toks = src.match(/\s*(near\([^)]*\)|[()&|!]|[^()&|!]+)/g)?.map(s=>s.trim()).filter(Boolean) || [];
+  let i=0;
+  const all = ()=> new Set(P.map(p=>p.id));
+  function expr(){ let s=term(); while(toks[i]==="&"||toks[i]==="|"){ const op=toks[i++], r=term(); s = op==="&" ? new Set([...s].filter(x=>r.has(x))) : new Set([...s,...r]); } return s; }
+  function term(){ if(toks[i]==="!"){ i++; const s=term(); return new Set([...all()].filter(x=>!s.has(x))); } if(toks[i]==="("){ i++; const s=expr(); if(toks[i]===")") i++; else throw Error("missing )"); return s; } return atom(toks[i++]); }
+  function atom(a){
+    if(a===undefined) throw Error("query ends early");
+    const na = norm(a);
+    let m;
+    if(na==="coastal") return new Set(P.filter(p=>p.coastal).map(p=>p.id));
+    if(na==="inland") return new Set(P.filter(p=>!p.coastal).map(p=>p.id));
+    if(na==="edited") return new Set(P.filter(p=>V.touched[p.id]>0).map(p=>p.id));
+    if(na==="capital") return new Set(Object.values(CAPITAL).map(n=>byName(n).id));
+    if((m=/^near\(\s*([^,]+?)\s*,\s*(\d+)\s*\)$/.exec(a))){ const p=byName(m[1]); if(!p) throw Error(`no province "${m[1]}"`); return ring(new Set([p.id]),+m[2]); }
+    if((m=/^(country|state|name)\s*=\s*"?([^"]+?)"?$/.exec(na))){ const key=m[1], v=m[2]; const r=new Set(P.filter(p=>norm(p[key])===v).map(p=>p.id)); if(!r.size) throw Error(`no ${key} "${v}"`); return r; }
+    if((m=/^(gdp|wheat|tariff|tfp)\s*(<=|>=|!=|<|>|=)\s*(-?[\d.]+)k?$/.exec(na))){ const arr=V[m[1]], x=+m[3]; const f={"<":(a,b)=>a<b,">":(a,b)=>a>b,"<=":(a,b)=>a<=b,">=":(a,b)=>a>=b,"=":(a,b)=>Math.abs(a-b)<1e-9,"!=":(a,b)=>Math.abs(a-b)>1e-9}[m[2]]; return new Set(P.filter(p=>f(arr[p.id],x)).map(p=>p.id)); }
+    throw Error(`unknown term "${a}"`);
+  }
+  const s = expr(); if(i<toks.length) throw Error(`unexpected "${toks[i]}"`); return s;
+}
+const isQuery = s => /[=<>&|!()]/.test(s) || /^(coastal|inland|edited|capital)\b/i.test(s.trim());
+function ring(set,k){ let s=new Set(set); for(let j=0;j<k;j++){ const n=new Set(s); for(const id of s) for(const x of P[id].nb) n.add(x); s=n; } return s; }
+
+// ---------- engine state ----------
+const S = {
+  keymap:"vim", mode:"normal", vkind:"v", buf:[], focus:"map",
+  cursor:byName("Madrid").id, anchor:null, sel:new Set(), lastSel:null, lastObj:null,
+  view:84, head:84, running:false, speed:2, autopause:true, wasRunning:false,
+  mapmode:"political", prevMode:"gdp", field:"tariff", nu:false, rnu:false, altHeld:false,
+  cur:"demo", alt:"main", marks:{}, regs:{}, jumps:[], jidx:0,
+  matches:[], hls:true, lastDir:"l",
+  lastChange:null, pendingChange:null, recording:null, recKeys:[], replaying:0,
+  line:null, // {type:':'|'/'|'?'|'prompt'|'palette', text, label, submit, idx}
+  hint:null, msg:"", msgs:null, tab:"insp", logIdx:0, maps:{}, help:false,
+  hist:{":":[],"/":[]}, histIdx:null, groups:{}, watch:null, zoom:1, panX:null, panY:null
+};
+mkBranch("main",null,0);
+const demoB = mkBranch("demo","main",24);
+demoB.edits = [
+  {id:EDIT_ID++, tick:24, field:"tfp", op:"+", val:2, targets:null, pred:"coastal & country=Portugal", label:"where coastal & country=Portugal"},
+  {id:EDIT_ID++, tick:62, field:"tariff", op:"+", val:6, targets:P.filter(p=>p.state==="Andalucía").map(p=>p.id), pred:null, label:"Andalucía (is)"}
+];
+
+// ---------- helpers ----------
+const here = ()=>({pid:S.cursor, tick:S.view, branch:S.cur});
+const curP = ()=>P[S.cursor];
+function say(m){ S.msg=m; S.msgs=null; }
+function sayLines(lines){ S.msgs=lines.join("\n"); S.msg=""; }
+function setView(t){ t=Math.max(0,Math.min(MAXT,t)); S.view=t; if(t>S.head) S.head=t; }
+function pushJump(){ S.jumps=S.jumps.slice(0,S.jidx); S.jumps.push(here()); if(S.jumps.length>100) S.jumps.shift(); S.jidx=S.jumps.length; }
+function go(pos,withTick=true){ if(pos.branch!==S.cur && branches.has(pos.branch)){ S.alt=S.cur; S.cur=pos.branch; } S.cursor=pos.pid; if(withTick) setView(pos.tick); }
+function jumpTo(pos,withTick=true){ pushJump(); go(pos,withTick); }
+function neighbourIn(dir){
+  const p=curP(), want={h:[-1,0],l:[1,0],k:[0,-1],j:[0,1]}[dir];
+  let best=null, bs=1e9;
+  for(const id of p.nb){ const q=P[id], dx=q.cx-p.cx, dy=q.cy-p.cy, d=Math.hypot(dx,dy); const cos=(dx*want[0]+dy*want[1])/d; const ang=Math.acos(Math.max(-1,Math.min(1,cos))); if(ang>75*Math.PI/180) continue; const sc=ang+0.4*d; if(sc<bs){bs=sc;best=id;} }
+  return best;
+}
+const opposite = {h:"l",l:"h",j:"k",k:"j"};
+function borderMove(dir,level){
+  const start=curP(); const path=[S.cursor];
+  for(let n=0;n<40;n++){ const nx=neighbourIn(dir); if(nx==null) break; S.cursor=nx; path.push(nx); if(P[nx][level]!==start[level]) break; }
+  return path;
+}
+function objSet(ch,around,count){
+  const p=curP(); let s;
+  if(ch==="p") s=new Set([S.cursor]);
+  else if(ch==="s") s=new Set(P.filter(q=>q.state===p.state).map(q=>q.id));
+  else if(ch==="c") s=new Set(P.filter(q=>q.country===p.country).map(q=>q.id));
+  else if(ch==="/") s=new Set(S.matches);
+  else if(ch==="e"){ const r=resolvedTargets(S.cur).filter(x=>x.tg.includes(S.cursor)).pop(); s=new Set(r?r.tg:[S.cursor]); }
+  else return null;
+  if(around) s=ring(s, count||1);
+  return s;
+}
+const OBJNAME = {p:"province",s:"state",c:"country","/":"search hits",e:"edit target"};
+function describe(set){
+  const ids=[...set]; if(ids.length===1) return P[ids[0]].name;
+  const st=new Set(ids.map(i=>P[i].state)), co=new Set(ids.map(i=>P[i].country));
+  const full = s=> P.filter(q=>q.state===s).every(q=>set.has(q.id));
+  if(st.size===1 && full([...st][0])) return [...st][0];
+  if(co.size===1 && P.filter(q=>q.country===[...co][0]).every(q=>set.has(q.id))) return [...co][0];
+  return `${ids.length} provinces`;
+}
+function mutate(fn){ const b=branches.get(S.cur); b.undo.push(b.edits); b.redo=[]; b.edits=fn(b.edits.slice()); b.dirty=true; STAMP++; }
+function snapNote(t){ const snap=Math.floor(t/12)*12; return t<S.head ? ` · replay from snapshot ${date(snap)} (${S.head-snap} ticks)` : ""; }
+function addEdit(set,field,op,val,label,tick=S.view){
+  if(!set.size){ say("E: empty target set"); return false; }
+  const ids=[...set].sort((a,b)=>a-b);
+  mutate(ed=>{
+    const last=ed[ed.length-1];
+    if(op==="+" && last && !last.pred && last.op==="+" && last.field===field && last.tick===tick && last.targets.join()===ids.join()){ ed[ed.length-1]={...last,val:last.val+val}; return ed; }
+    ed.push({id:EDIT_ID++, tick, field, op, val, targets:ids, pred:null, label}); return ed;
+  });
+  const sign = op==="=" ? "=" : val>=0 ? "+" : "";
+  say(`${field} ${sign}${val} on ${label} at ${date(tick)}${tick===0?" (ex ante)":tick<S.head?" (ex post)":""}${snapNote(tick)}`);
+  return true;
+}
+function parseAmount(txt){
+  let t=txt.trim(), field=S.field;
+  const m0=/^(tariff|tfp)\s+(.*)$/.exec(t); if(m0){ field=m0[1]; t=m0[2]; }
+  const m=/^([+=-]?)\s*(\d+(?:\.\d+)?)$/.exec(t); if(!m) return null;
+  const op = m[1]==="=" || m[1]==="" ? "=" : "+", val = m[1]==="-" ? -m[2] : +m[2];
+  return {field,op,val};
+}
+function deleteEditsOn(set){
+  const b=branches.get(S.cur); const res=resolvedTargets(S.cur); const own=new Set(b.edits.map(e=>e.id));
+  const kill=res.filter(r=>own.has(r.e.id) && r.tg.some(x=>set.has(x))).map(r=>r.e.id);
+  if(!kill.length){ say("no edits of this branch touch that set"); return false; }
+  const removed=b.edits.filter(e=>kill.includes(e.id));
+  mutate(ed=>ed.filter(e=>!kill.includes(e.id)));
+  storeDeleted(removed); say(`${removed.length} edit${removed.length>1?"s":""} deleted into "1`); return true;
+}
+function storeDeleted(edits){ for(let i=9;i>1;i--) if(S.regs[String(i-1)]) S.regs[String(i)]=S.regs[String(i-1)]; S.regs["1"]={type:"edits",edits}; S.regs['"']=S.regs["1"]; }
+function yank(set,reg,desc){
+  const V=vals(S.cur,S.view), ids=[...set]; const mean=ids.reduce((a,i)=>a+V[S.field][i],0)/ids.length;
+  const r={type:"values",field:S.field,value:+mean.toFixed(2),n:ids.length,desc,tick:S.view};
+  S.regs['"']=r; S.regs["0"]=r; if(reg){ if(/[A-Z]/.test(reg)&&S.regs[reg.toLowerCase()]?.type==="values") r.n+=S.regs[reg.toLowerCase()].n; S.regs[reg.toLowerCase()]=r; }
+  say(`yanked ${S.field} ${r.value} from ${desc}${reg?` into "${reg}`:""}`);
+}
+function put(set,reg,before){
+  const r=S.regs[reg||'"'];
+  if(!r){ say(`E353: Nothing in register ${reg||'"'}`); return false; }
+  if(r.type==="values") return addEdit(set,r.field,"=",r.value,describe(set),before?0:S.view);
+  if(r.type==="edits"){ mutate(ed=>ed.concat(r.edits.map(e=>({...e,id:EDIT_ID++})))); say(`cherry-picked ${r.edits.length} edit${r.edits.length>1?"s":""} into ${S.cur} at their ticks`); return true; }
+  say(`E: register ${reg} holds ${r.type}, not values or edits`); return false;
+}
+function selectSet(set,kind="v"){ S.mode="visual"; S.vkind=kind; S.sel=new Set(set); S.anchor=S.cursor; }
+function exitVisual(){ if(S.sel.size) S.lastSel={sel:new Set(S.sel),kind:S.vkind}; S.sel=new Set(); S.mode="normal"; }
+function similar(){
+  const p=curP();
+  if(S.mapmode==="political"||S.mapmode==="edits") return P.filter(q=>q.state===p.state).map(q=>q.id);
+  const arr=modeValues(); const v=arr[p.id]; return P.filter(q=>Math.abs(arr[q.id]-v)<=Math.abs(v)*0.05+1e-9).map(q=>q.id);
+}
+function modeValues(){
+  const V=vals(S.cur,S.view);
+  if(S.mapmode==="compare"){ const A=vals(S.alt,S.view); return P.map(p=>100*(V.gdp[p.id]/A.gdp[p.id]-1)); }
+  if(S.mapmode==="edits") return P.map(p=>V.touched[p.id]);
+  const k = S.mapmode==="political" ? "gdp" : S.mapmode; return P.map(p=>V[k][p.id]);
+}
+function sortedMatches(){ return [...S.matches].sort((a,b)=>P[a].cy-P[b].cy||P[a].cx-P[b].cx); }
+function nextMatch(dir){
+  const m=sortedMatches(); if(!m.length){ say("E486: Pattern not found"); return; }
+  const i=m.indexOf(S.cursor); const n = i<0 ? 0 : (i+dir+m.length)%m.length;
+  jumpTo({pid:m[n],tick:S.view,branch:S.cur},false); say(`[${n+1}/${m.length}] ${P[m[n]].name}`);
+}
+function doSearch(text,dir=1){
+  if(!text) return;
+  S.regs["/"]={type:"text",text};
+  try{
+    const set = isQuery(text) ? evalQuery(text, vals(S.cur,S.view)) : new Set(P.filter(p=>norm(p.name).includes(norm(text))||norm(p.state).includes(norm(text))).map(p=>p.id));
+    S.matches=[...set]; S.hls=true; nextMatch(dir);
+  }catch(e){ say("E: "+e.message); }
+}
+const eventTicks = ()=> [...new Set(EVENTS.map(e=>e[0]).concat(effective(branches.get(S.cur)).map(e=>e.tick)))].sort((a,b)=>a-b);
+function eventAt(t){ const e=EVENTS.find(x=>x[0]===t); const ed=effective(branches.get(S.cur)).filter(x=>x.tick===t); return [e?e[1]:null, ...ed.map(x=>`edit: ${x.field} ${x.op==="="?"=":x.val>=0?"+":""}${x.val} ${x.label}`)].filter(Boolean).join("; "); }
+function explain(){
+  const p=curP(), V=vals(S.cur,S.view), t=S.view, i=p.id;
+  const trend=Math.pow(1+CGROW[p.country],t/12), tf=Math.pow(1.02,V.tfp[i]), td=1-.004*V.tariff[i];
+  sayLines([`GDP per capita, ${p.name}, ${date(t)}, branch ${S.cur} (toy model)`,
+    `  base 2000         ${BASE[i].toFixed(1)}k`, `  × trend           ${trend.toFixed(3)}  (${(CGROW[p.country]*100).toFixed(1)}%/yr, ${p.country})`,
+    `  × shock tape      ${V.crisisF[i].toFixed(3)}  (2008 crisis, 2020 lockdowns)`, `  × tfp edits       ${tf.toFixed(3)}  (${V.tfp[i].toFixed(2)} steps)`,
+    `  × tariff drag     ${td.toFixed(3)}  (${V.tariff[i].toFixed(0)} pp)`, `  = ${V.gdp[i].toFixed(2)}k`]);
+}
+function blame(){
+  const p=curP(), t=S.view, ed=sortedEff(branches.get(S.cur)), full=compute(ed,t,null).gdp[p.id];
+  const rows=[];
+  ed.forEach((e,i)=>{ if(e.tick>t) return; const without=compute(ed.filter((_,j)=>j!==i),t,null).gdp[p.id]; const d=100*(full/without-1); if(Math.abs(d)>1e-6) rows.push([d,`  ${date(e.tick)}  ${e.field} ${e.op==="="?"=":e.val>=0?"+":""}${e.val} ${e.label}`]); });
+  const cf=crisis(p.country,t); if(cf!==1) rows.push([100*(cf-1),`  shock tape  2008 crisis and 2020 lockdowns`]);
+  rows.sort((a,b)=>Math.abs(b[0])-Math.abs(a[0]));
+  sayLines([`blame gdp_pc ${p.name} at ${date(t)} (remove-one effect, toy):`, ...(rows.length?rows.map(([d,s])=>`${(d>=0?"+":"")+d.toFixed(2).padStart(6)}%${s}`):["  nothing moved this series"])]);
+}
+function scenarioText(b){
+  const lines=[`# ${b.name}.toml  ·  ceteris run ${b.name}.toml reproduces this branch`,`[branch]`,`name = "${b.name}"`];
+  if(b.parent) lines.push(`parent = "${b.parent}"`,`fork = "${date(b.forkTick)}"`);
+  for(const e of b.edits){ lines.push("",`[[edit]]`, ...(e.nl?[`# typed: "${e.nl}"  (compiled without a model; replay reads only the lines below)`]:[]),`tick = "${date(e.tick)}"`,`kind = "${FIELDS[e.field].kind}"`, e.rule?`when = "${e.pred}"   # fires once per province`:e.pred?`where = "${e.pred}"`:`target = [${e.targets.map(i=>`"${P[i].name}"`).join(", ")}]`, `${e.field} = "${e.op==="="?"=":e.val>=0?"+":""}${e.val}"`); }
+  return lines;
+}
+
+// ---------- key notation ----------
+function keysFrom(str){ const out=[]; const re=/<([^<>]+)>|./g; let m; while((m=re.exec(str))){ if(m[1]){ const k=m[1]; out.push(/^c-/i.test(k)?`<C-${k.slice(2).toLowerCase()}>`:`<${k[0].toUpperCase()+k.slice(1).toLowerCase()}>`.replace("<Cr>","<CR>")); } else out.push(m[0]===" "?"<Space>":m[0]); } return out; }
+
+// ---------- dispatch ----------
+const INCOMPLETE = {};
+function feed(k){ // top-level user key
+  if(S.recording && !(S.mode==="normal" && S.buf.length===0 && k==="q")) S.recKeys.push(k);
+  dispatch(k);
+}
+function dispatch(k){
+  if(S.replaying>4000) return;
+  if(S.help && k!==":" ){ S.help=false; if(k==="<Esc>"||k==="q") return; }
+  if(S.line) return lineKey(k);
+  if(S.hint) return hintKey(k);
+  if(S.focus==="log") return logKey(k);
+  S.buf.push(k);
+  const userMap = Object.keys(S.maps).find(l=>l===S.buf.join(""));
+  if(userMap){ const rhs=S.maps[userMap]; S.buf=[]; replay(rhs); return; }
+  if(Object.keys(S.maps).some(l=>l.startsWith(S.buf.join("")))) return;
+  const cur=S.buf; S.buf=[];
+  let r;
+  try{ r=parseRun(cur); }catch(e){ say("E: "+e.message); r=null; }
+  if(r===INCOMPLETE){ S.buf=cur; return; }
+  if(r && r.change && !S.replayingDot) S.lastChange=cur;
+}
+function replay(keys){ S.replaying++; for(const k of keys){ if(S.replaying>4000) break; dispatch(k);} S.replaying--; }
+
+function parseRun(b){
+  let i=0, reg=null, count=null;
+  const need = ()=> { if(i>=b.length) throw INCOMPLETE; return b[i++]; };
+  const tryr = f => { try{ return f(); }catch(e){ if(e===INCOMPLETE) return INCOMPLETE; throw e; } };
+  return tryr(()=>{
+    if(b[i]==='"'){ i++; reg=need(); }
+    let ds=""; while(i<b.length && /^[0-9]$/.test(b[i]) && !(ds===""&&b[i]==="0")) ds+=b[i++];
+    if(ds) count=+ds;
+    const k=need(); const n=count||1; const vis=S.mode==="visual";
+    // motions
+    const motion = mk=>{
+      const path=[S.cursor];
+      if("hjkl".includes(mk)){ S.lastDir=mk; for(let j=0;j<n;j++){ const nx=neighbourIn(mk); if(nx==null) break; S.cursor=nx; path.push(nx);} return path; }
+      if(mk==="w"||mk==="W"){ const lv=mk==="w"?"state":"country"; let all=[]; for(let j=0;j<n;j++) all=all.concat(borderMove(S.lastDir,lv)); return path.concat(all); }
+      if(mk==="b"||mk==="B"){ const lv=mk==="b"?"state":"country"; let all=[]; for(let j=0;j<n;j++) all=all.concat(borderMove(opposite[S.lastDir],lv)); return path.concat(all); }
+      return null;
+    };
+    if("hjklwWbB".includes(k) && k.length===1){
+      const path=motion(k);
+      if(vis) extendSel(path);
+      return {};
+    }
+    const op = k==="c"||k==="y"||k==="d"||k===">"||k==="<";
+    if(op){
+      if(vis){ const set=new Set(S.sel), desc=describe(set); const obj=S.lastObj; exitVisual(); return applyOp(k,set,desc,reg,n,obj?["i",obj]:null,b); }
+      const k2=need();
+      let set, desc, objKeys=null;
+      if(k2===k){ set=new Set([S.cursor]); desc=P[S.cursor].name; }
+      else {
+        let c2=null; let j=i-1; let ds2=""; let kk=k2;
+        while(/^[1-9]$/.test(kk)||(ds2&&kk==="0")){ ds2+=kk; kk=need(); }
+        const cnt2 = ds2?+ds2:null;
+        if(kk==="i"||kk==="a"){ c2=need(); set=objSet(c2,kk==="a",cnt2); if(!set) { say(`E: unknown object ${kk}${c2}`); return null; } desc = kk==="i" ? `${describe(set)} (i${c2})` : `${describe(set)} (a${c2})`; objKeys=[kk,c2]; }
+        else if("hjklwWbB".includes(kk)){ const save=S.cursor; const nn=cnt2||1; const path=[]; const c0=count; count=nn; const old=n; // motion count
+          S.cursor=save; let p2=[S.cursor];
+          for(let r=0;r<nn;r++){ const pp = "hjkl".includes(kk) ? (()=>{S.lastDir=kk; const nx=neighbourIn(kk); if(nx!=null){S.cursor=nx; return [nx];} return [];})() : borderMove("wW".includes(kk)?S.lastDir:opposite[S.lastDir], "wb".includes(kk)?"state":"country"); p2=p2.concat(pp); }
+          set=new Set(p2); desc=describe(set); S.cursor=save; count=c0; }
+        else { say(`E: ${k}${kk} is not a target`); return null; }
+      }
+      return applyOp(k,set,desc,reg,n,objKeys,b);
+    }
+    switch(k){
+      case "<Esc>": if(vis){ exitVisual(); } S.matches = S.hls?S.matches:[]; S.msgs=null; return {};
+      case "v": case "V": case "<C-v>": { const kind = k==="v"?"v":k==="V"?"V":"block"; if(vis && S.vkind===kind){ exitVisual(); return {}; } if(!vis){ S.mode="visual"; S.anchor=S.cursor; S.sel=new Set(); } S.vkind=kind; S.lastObj=null; extendSel([S.cursor]); return {}; }
+      case "o": if(vis){ const a=S.anchor; S.anchor=S.cursor; S.cursor=a; } else say("o: order pending is for war surfaces (not in this demo)"); return {};
+      case "i": case "a": if(vis){ const c2=need(); const set=objSet(c2,k==="a",count); if(!set){ say(`E: unknown object ${k}${c2}`); return null; } S.sel=set; S.lastObj=c2; return {}; } if(k==="i") say("i: a note pinned to this place and tick (not in this demo)"); return {};
+      case "x": { const res=resolvedTargets(S.cur), own=new Set(branches.get(S.cur).edits.map(e=>e.id)); const last=res.filter(r=>own.has(r.e.id)&&r.tg.includes(S.cursor)).pop(); if(!last){ say("no edit of this branch on "+curP().name); return null; } const ed=branches.get(S.cur).edits.find(e=>e.id===last.e.id); mutate(es=>es.filter(e=>e.id!==ed.id)); storeDeleted([ed]); say(`deleted ${ed.field} edit "${ed.label}"`); return {change:true}; }
+      case "p": case "P": { const set = vis?new Set(S.sel):new Set([S.cursor]); if(vis) exitVisual(); return put(set,reg,k==="P")?{change:true}:null; }
+      case "u": { const bb=branches.get(S.cur); if(!bb.undo.length){ say("Already at oldest change"); return {}; } bb.redo.push(bb.edits); bb.edits=bb.undo.pop(); STAMP++; say(`undo: ${bb.edits.length} edits on ${S.cur}`); return {}; }
+      case "<C-r>": { const bb=branches.get(S.cur); if(!bb.redo.length){ say("Already at newest change"); return {}; } bb.undo.push(bb.edits); bb.edits=bb.redo.pop(); STAMP++; say(`redo: ${bb.edits.length} edits on ${S.cur}`); return {}; }
+      case ".": { if(!S.lastChange){ say("nothing to repeat"); return {}; } const keys=S.lastChange; S.replayingDot=true; for(let j=0;j<n;j++) replay(keys); S.replayingDot=false; return {}; }
+      case "<C-a>": case "<C-x>": { const set=vis?new Set(S.sel):new Set([S.cursor]); const desc=describe(set); if(vis) exitVisual(); const st=FIELDS[S.field].step*n*(k==="<C-a>"?1:-1); return addEdit(set,S.field,"+",st,desc)?{change:true}:null; }
+      case "m": { const c2=need(); if(!/^[a-zA-Z]$/.test(c2)){ say("E191: Argument must be a letter"); return null; } S.marks[c2]=here(); say(`mark ${c2}: ${curP().name} ${date(S.view)} on ${S.cur}`); return {}; }
+      case "'": case "`": { const c2=need(); if(c2===k){ jumpBack(); return {}; } const mk=S.marks[c2]; if(!mk){ say("E20: Mark not set"); return null; } if(/[a-z]/.test(c2) && mk.branch!==S.cur){ say(`E20: mark ${c2} belongs to ${mk.branch}; uppercase marks cross branches`); return null; } jumpTo(mk,k==="`"); return {}; }
+      case "<C-o>": jumpBack(); return {};
+      case "<C-i>": case "<Tab>": if(S.jidx<S.jumps.length-1){ S.jidx++; go(S.jumps[S.jidx]); } return {};
+      case "q": { if(S.recording){ S.regs[S.recording]={type:"keys",keys:S.recKeys.slice()}; say(`recorded ${S.recKeys.length} keys into "${S.recording}`); S.recording=null; return {}; } const c2=need(); if(!/^[a-z]$/.test(c2)) return null; S.recording=c2; S.recKeys=[]; return {}; }
+      case "@": { let c2=need(); if(c2==="@") c2=S.lastMacro; const r=S.regs[c2]; if(!r||r.type!=="keys"){ say(`E: register ${c2} holds no macro`); return null; } S.lastMacro=c2; for(let j=0;j<n;j++) replay(r.keys); return {}; }
+      case ":": S.line={type:":",text: vis?"'<,'>":"" ,label:":"}; pauseForInput(); return {};
+      case "/": case "?": S.line={type:k,text:"",label:k}; pauseForInput(); return {};
+      case "n": nextMatch(1); return {};
+      case "N": nextMatch(-1); return {};
+      case "*": case "#": S.matches=similar(); nextMatch(k==="*"?1:-1); return {};
+      case "f": { S.hint={typed:"",add:vis}; pauseForInput(); return {}; }
+      case "<Space>": toggleRun(); return {};
+      case "+": case "-": S.speed=Math.max(1,Math.min(5,S.speed+(k==="+"?1:-1))); say(`speed ${S.speed}`); restartClock(); return {};
+      case ")": case "(": setView(S.view+(k===")"?n:-n)); return {};
+      case "}": case "{": { const ts=eventTicks(); let t=S.view; for(let j=0;j<n;j++){ const nx = k==="}" ? ts.find(x=>x>t) : [...ts].reverse().find(x=>x<t); if(nx==null) break; t=nx; } if(t!==S.view){ pushJump(); setView(t); say(`${date(t)}: ${eventAt(t)}`);} return {}; }
+      case "G": pushJump(); if(count){ const t=count>=2000?(count-2000)*12:null; if(t==null||t>MAXT){ say("E: give a year, e.g. 2008G"); return null; } setView(t); } else setView(S.head); return {};
+      case "<C-^>": case "<C-6>": { const a=S.alt; S.alt=S.cur; S.cur=a; say(`"${S.cur}" ${branchInfo(S.cur)}  (alternate: ${S.alt})`); return {}; }
+      case "<C-k>": openPalette(""); return {};
+      case "<CR>": S.tab="insp"; return {};
+      case "K": explain(); return {};
+      case "\\": { const c2=need(); if(c2==="l"){ S.focus="log"; S.tab="log"; S.logIdx=Math.max(0,branches.get(S.cur).edits.length-1); say("edit log focused: j k dd yy p u, Esc back to the map"); } else if(c2==="b") S.tab="br"; else if(c2==="r") S.tab="reg"; else if(c2==="i") S.tab="insp"; else if(c2==="f"){ S.line={type:":",text:"fork ",label:":"}; pauseForInput(); } else { say(`\\${c2} is not mapped`); return null; } return {}; }
+      case "[": case "]": { const c2=need(); const fw=k==="]";
+        if(c2==="y"){ let t=S.view; for(let j=0;j<n;j++) t = fw ? (Math.floor(t/12)+1)*12 : (t%12? Math.floor(t/12)*12 : t-12); setView(t); return {}; }
+        if(c2==="Y"){ let t=S.view; for(let j=0;j<n;j++) t = fw ? (Math.floor(t/120)+1)*120 : (t%120? Math.floor(t/120)*120 : t-120); setView(t); return {}; }
+        if(c2==="e"||c2==="c"){ const ticks = c2==="e" ? effective(branches.get(S.cur)).map(e=>e.tick) : diffTicks(); const ts=[...new Set(ticks)].sort((a,b)=>a-b); const nx = fw ? ts.find(x=>x>S.view) : ts.reverse().find(x=>x<S.view); if(nx==null){ say(c2==="c"?"no more divergences from "+S.alt:"no more edits"); return null; } pushJump(); setView(nx); say(`${date(nx)}: ${c2==="c"?"branches diverge here":eventAt(nx)}`); return {}; }
+        say(`${k}${c2} not in demo`); return null; }
+      case "g": { const c2=need();
+        switch(c2){
+          case "g": pushJump(); setView(branches.get(S.cur).forkTick); return {};
+          case "c": jumpTo({pid:byName(CAPITAL[curP().country]).id,tick:S.view,branch:S.cur},false); if(curP().country==="France") say("Paris is off this map; Toulouse stands in"); return {};
+          case "v": if(!S.lastSel){ say("no previous selection"); return null; } S.mode="visual"; S.sel=new Set(S.lastSel.sel); S.vkind=S.lastSel.kind; return {};
+          case "m": { const c3=need(); const m=MODEKEY[c3]; if(!m){ say(`gm${c3}: unknown map mode`); return null; } setMode(m); return {}; }
+          case "M": setMode(S.prevMode); return {};
+          case "s": S.speed=Math.max(1,Math.min(5,count||S.speed)); say(`speed ${S.speed}`); restartClock(); return {};
+          case "d": explain(); return {};
+          case "b": blame(); return {};
+          case ";": case ",": { const own=branches.get(S.cur).edits; if(!own.length){ say("E664: change list is empty"); return null; } S.chIdx = S.chIdx==null||S.chIdx>=own.length ? own.length : S.chIdx; S.chIdx = c2===";" ? Math.max(0,S.chIdx-1) : Math.min(own.length-1,S.chIdx+1); const e=own[S.chIdx]; const tg=resolvedTargets(S.cur).find(r=>r.e.id===e.id)?.tg||[]; jumpTo({pid:tg[0]??S.cursor,tick:e.tick,branch:S.cur}); say(`change ${S.chIdx+1}/${own.length}: ${date(e.tick)} ${e.field} ${e.label}`); return {}; }
+          case "?": S.help=true; return {};
+        }
+        say(`g${c2} not in demo`); return null; }
+      case "z": { const c2=need();
+        if(c2==="z"){ const p=curP(); S.panX=p.cx; S.panY=p.cy; return {}; }
+        if(c2==="+"||c2==="i"){ S.zoom=Math.min(4,S.zoom*1.4); if(S.panX==null){} centreIfNeeded(); return {}; }
+        if(c2==="-"){ S.zoom=Math.max(1,S.zoom/1.4); return {}; }
+        if(c2==="x"){ S.zoom=1; S.panX=null; return {}; }
+        if(c2==="h"||c2==="l"){ centreIfNeeded(); S.panX += (c2==="l"?1:-1)*1.2/S.zoom; return {}; }
+        if(c2==="s"){ const set=S.sel.size?S.sel:(S.lastSel?.sel||new Set([S.cursor])); fitTo(set); return {}; }
+        say(`z${c2} not in demo`); return null; }
+      case "<C-e>": case "<C-y>": centreIfNeeded(); S.panY += (k==="<C-e>"?1:-1)*0.8/S.zoom; return {};
+      case "H": case "M": case "L": { const ps=P.filter(p=>p.cells.length); const ys=ps.map(p=>p.cy); const lo=Math.min(...ys), hi=Math.max(...ys); const target = k==="H"?lo:k==="L"?hi:(lo+hi)/2; let best=ps[0],bd=1e9; for(const p of ps){ const d=Math.abs(p.cy-target)*3+Math.abs(p.cx-curP().cx); if(d<bd){bd=d;best=p;} } jumpTo({pid:best.id,tick:S.view,branch:S.cur},false); return {}; }
+    }
+    say(`${b.join("")} is not mapped`); return null;
+  });
+}
+function extendSel(path){
+  if(S.vkind==="v") path.forEach(id=>S.sel.add(id));
+  else if(S.vkind==="V") path.forEach(id=>P.filter(q=>q.state===P[id].state).forEach(q=>S.sel.add(q.id)));
+  else { const a=P[S.anchor], c=curP(); const x0=Math.min(a.cx,c.cx), x1=Math.max(a.cx,c.cx), y0=Math.min(a.cy,c.cy), y1=Math.max(a.cy,c.cy); S.sel=new Set(P.filter(p=>p.cx>=x0-.01&&p.cx<=x1+.01&&p.cy>=y0-.01&&p.cy<=y1+.01).map(p=>p.id)); }
+  S.lastObj=null;
+}
+function applyOp(op,set,desc,reg,n,objKeys,b){
+  if(op==="y"){ yank(set,reg,desc); return {}; }
+  if(op==="d") return deleteEditsOn(set)?{change:true}:null;
+  if(op===">"||op==="<") return addEdit(set,S.field,"+",FIELDS[S.field].step*n*(op===">"?1:-1),desc)?{change:true}:null;
+  if(op==="c"){
+    const keysSoFar = objKeys ? [ "c", ...objKeys ] : ["c","c"];
+    S.pendingChange = S.replayingDot ? null : keysSoFar;
+    S.line={type:"prompt",text:"",label:`[${date(S.view)}] change ${S.field} on ${desc} (${set.size}): `, submit:txt=>{
+      const a=parseAmount(txt); if(!a){ say("E: type +5, -2, =12, or tfp +1"); return false; }
+      return addEdit(set,a.field,a.op,a.val,desc);
+    }};
+    pauseForInput(); return {};
+  }
+}
+function branchInfo(n){ const b=branches.get(n); return `${b.edits.length} edit${b.edits.length===1?"":"s"}${b.parent?`, forked from ${b.parent} at ${date(b.forkTick)}`:", root"}`; }
+function diffTicks(){ const a=effective(branches.get(S.cur)), b=effective(branches.get(S.alt)); const ka=new Set(a.map(e=>e.id)), kb=new Set(b.map(e=>e.id)); return a.filter(e=>!kb.has(e.id)).concat(b.filter(e=>!ka.has(e.id))).map(e=>e.tick); }
+function jumpBack(){ if(S.jidx>=S.jumps.length){ S.jumps.push(here()); S.jidx=S.jumps.length-1; } if(S.jidx<=0){ say("start of jump list"); return; } S.jidx--; go(S.jumps[S.jidx]); }
+function setMode(m){ if(m!==S.mapmode){ S.prevMode=S.mapmode; S.mapmode=m; } if(m==="tariff") S.field="tariff"; say(`map mode: ${MODES[m]}${m==="compare"?` (${S.cur} vs ${S.alt})`:""}`); }
+function centreIfNeeded(){ if(S.panX==null){ S.panX=(BOUNDS.x0+BOUNDS.x1)/2; S.panY=(BOUNDS.y0+BOUNDS.y1)/2; } }
+function fitTo(set){ const ps=[...set].map(i=>P[i]); const xs=ps.map(p=>p.cx), ys=ps.map(p=>p.cy); S.panX=(Math.min(...xs)+Math.max(...xs))/2; S.panY=(Math.min(...ys)+Math.max(...ys))/2; const w=Math.max(.6,Math.max(...xs)-Math.min(...xs)+.6), h=Math.max(.6,Math.max(...ys)-Math.min(...ys)+.6); S.zoom=Math.max(1,Math.min(4,Math.min((BOUNDS.x1-BOUNDS.x0)/w,(BOUNDS.y1-BOUNDS.y0)/h))); }
+
+// ---------- clock ----------
+let clock=null;
+const SPEEDMS=[0,900,500,260,120,50];
+function toggleRun(){ S.running=!S.running; restartClock(); say(S.running?`running at speed ${S.speed}`:"paused"); }
+function restartClock(){ clearInterval(clock); if(S.running) clock=setInterval(()=>{ if(S.head>=MAXT){ S.running=false; clearInterval(clock); return; } const atHead=S.view===S.head; S.head++; if(atHead) S.view=S.head; const ev=EVENTS.find(e=>e[0]===S.view); if(ev&&atHead) say(`${date(ev[0])}: ${ev[1]}`);
+    if(S.watch){ const v=vals(S.cur,S.view).gdp[S.watch.pid]; if(Math.abs(v/S.watch.base-1)>=0.02){ S.running=false; clearInterval(clock); say(`watch hit at ${date(S.view)}: GDP per capita in ${P[S.watch.pid].name} moved ${(100*(v/S.watch.base-1)).toFixed(1)}% (F9 clears it)`); S.watch.base=v; } } render(); }, SPEEDMS[S.speed]); }
+function pauseForInput(){ if(S.autopause && S.running){ S.wasRunning=true; S.running=false; restartClock(); } }
+function resumeAfterInput(){ if(S.wasRunning){ S.wasRunning=false; S.running=true; restartClock(); } }
+
+// ---------- command line, prompt, palette ----------
+function lineKey(k){
+  const L=S.line;
+  if(S.pendingChange && L.type==="prompt" && !S.replayingDot) S.pendingChange.push(k);
+  if(k==="<Esc>"){ S.line=null; S.pendingChange=null; S.matches = L.type==="/"||L.type==="?" ? (S.preSearch||S.matches) : S.matches; resumeAfterInput(); return; }
+  if(L.type==="palette") return paletteKey(k);
+  if(k==="<CR>"){
+    S.line=null; resumeAfterInput();
+    if(L.type===":"){ S.hist[":"].push(L.text); S.regs[":"]={type:"text",text:L.text}; ex(L.text); }
+    else if(L.type==="/"||L.type==="?"){ S.hist["/"].push(L.text); doSearch(L.text, L.type==="/"?1:-1); }
+    else if(L.type==="prompt"){ const ok=L.submit(L.text); if(ok && S.pendingChange){ S.lastChange=S.pendingChange.slice(); } S.pendingChange=null; }
+    S.histIdx=null; return;
+  }
+  if(k==="<BS>"){ if(!L.text && L.type!=="prompt"){ S.line=null; resumeAfterInput(); return; } L.text=L.text.slice(0,-1); }
+  else if(k==="<C-u>") L.text="";
+  else if(k==="<Up>"||k==="<Down>"){ const h=S.hist[L.type===":"?":":"/"]||[]; if(!h.length) return; S.histIdx = S.histIdx==null ? h.length : S.histIdx; S.histIdx=Math.max(0,Math.min(h.length-1,S.histIdx+(k==="<Up>"?-1:1))); L.text=h[S.histIdx]; }
+  else if(k==="<Space>") L.text+=" ";
+  else if(k.length===1) L.text+=k;
+  else if(/^<C-/.test(k) || k==="<Tab>") L.text+=k; // literal key notation, e.g. :g/.../normal 3<C-a>
+  if(L.type==="/"||L.type==="?"){ if(S.preSearch==null) S.preSearch=S.matches; try{ const t=L.text.trim(); S.matches = !t ? [] : isQuery(t) ? [...evalQuery(t,vals(S.cur,S.view))] : P.filter(p=>norm(p.name).includes(norm(t))||norm(p.state).includes(norm(t))).map(p=>p.id); }catch(e){} }
+}
+function hintKey(k){
+  if(k==="<Esc>"){ S.hint=null; resumeAfterInput(); return; }
+  if(k.length!==1 || !HINTCH.includes(k)) return;
+  S.hint.typed+=k;
+  if(S.hint.typed.length<2) return;
+  const id=HINTS.get(S.hint.typed); const add=S.hint.add; S.hint=null; resumeAfterInput();
+  if(id==null){ say("no such label"); return; }
+  if(add){ S.sel.has(id)?S.sel.delete(id):S.sel.add(id); S.cursor=id; }
+  else jumpTo({pid:id,tick:S.view,branch:S.cur},false);
+}
+function logKey(k){
+  const b=branches.get(S.cur), n=b.edits.length;
+  S.buf.push(k); const s=S.buf.join("");
+  const done=()=>{ S.buf=[]; };
+  if(s==="d"||s==="y"||s==="g") return;
+  if(k==="<Esc>"||s==="\\m"||s==="q"){ S.focus="map"; S.tab="insp"; say("map focused"); return done(); }
+  if(s==="\\") return;
+  if(s==="j"){ S.logIdx=Math.min(n-1,S.logIdx+1); return done(); }
+  if(s==="k"){ S.logIdx=Math.max(0,S.logIdx-1); return done(); }
+  if(s==="gg"){ S.logIdx=0; return done(); }
+  if(s==="G"){ S.logIdx=n-1; return done(); }
+  if(s==="dd"||s==="x"){ if(!n) return done(); const e=b.edits[S.logIdx]; mutate(es=>es.filter(x=>x.id!==e.id)); storeDeleted([e]); S.logIdx=Math.max(0,Math.min(S.logIdx,n-2)); say(`deleted ${e.label} into "1`); return done(); }
+  if(s==="yy"){ if(!n) return done(); const r={type:"edits",edits:[b.edits[S.logIdx]]}; S.regs['"']=r; S.regs["0"]=r; say(`yanked edit "${b.edits[S.logIdx].label}"; :b main then \\l p to cherry-pick`); return done(); }
+  if(s==="p"||s==="P"){ put(null,null,false); S.logIdx=branches.get(S.cur).edits.length-1; return done(); }
+  if(s==="u"||s==="<C-r>"){ S.focus="map"; dispatch(k); S.focus="log"; S.tab="log"; return done(); }
+  if(s==="<CR>"){ const e=b.edits[S.logIdx]; if(e){ const tg=resolvedTargets(S.cur).find(r=>r.e.id===e.id)?.tg||[]; jumpTo({pid:tg[0]??S.cursor,tick:e.tick,branch:S.cur}); S.focus="map"; S.tab="insp"; } return done(); }
+  if(s===":"){ S.line={type:":",text:"",label:":"}; return done(); }
+  say(`${s} is not mapped in the edit log`); done();
+}
+
+// ---------- ex ----------
+function ex(src){
+  let s=src.trim(); if(!s) return;
+  let range=null;
+  if(s.startsWith("'<,'>")){ range=S.lastSel?.sel||S.sel; s=s.slice(5).trim(); if(S.mode==="visual") exitVisual(); }
+  if(/^\d{4}(-\d{1,2})?$/.test(s)){ const t=parseDate(s); if(t==null) return say("E: date outside 2000-01..2030-12"); pushJump(); setView(t); return; }
+  const m=/^(\S+)\s*(.*)$/.exec(s); const cmd=m[1], arg=m[2];
+  const target = ()=> range && range.size ? new Set(range) : new Set([S.cursor]);
+  try{
+  if(cmd.startsWith("g/")){ const parts=s.slice(2).split("/"); const pred=parts[0], rest=parts.slice(1).join("/").trim(); const set=evalQuery(pred,vals(S.cur,S.view));
+    if(!rest){ selectSet(set); S.lastSel={sel:new Set(set),kind:"v"}; return say(`${set.size} provinces match; selected`); }
+    const nm=/^norm(?:al)?!?\s+(.*)$/.exec(rest);
+    if(nm){ const keys=keysFrom(nm[1]); const save=S.cursor; const ids=[...set].sort((a,b)=>P[a].cy-P[b].cy||P[a].cx-P[b].cx); for(const id of ids){ S.cursor=id; S.mode="normal"; S.buf=[]; replay(keys); S.buf=[]; } S.cursor=save; return say(`:g ran "${nm[1]}" at ${ids.length} provinces (fixed set)`); }
+    const a=parseAmount(rest); if(!a) return say("E: :g/pred/ then tariff +3, or normal {keys}");
+    addEdit(set,a.field,a.op,a.val,`${set.size} provinces (fixed, from :g/${pred}/)`); return; }
+  switch(cmd){
+    case "w": case "write": { const b=branches.get(S.cur); b.dirty=false; return sayLines(scenarioText(b).concat([``,`"${b.name}.toml" written, ${b.edits.length} edits`])); }
+    case "wa": branches.forEach(b=>b.dirty=false); return say("all branches written");
+    case "q": case "quit": case "x": case "wq": { if(cmd==="q"){ const d=[...branches.values()].find(b=>b.dirty); if(d) return say(`E37: No write since last change in "${d.name}" (add ! to override)`); } return say("In the app this closes the window. Here it does nothing."); }
+    case "q!": return say("In the app this closes the window without writing.");
+    case "h": case "help": S.help=true; return;
+    case "fork": { let name=arg||`fork-${date(S.view)}`; while(branches.has(name)) name+="'"; mkBranch(name,S.cur,S.view); S.alt=S.cur; S.cur=name; STAMP++; return say(`forked "${name}" from ${S.alt} at ${date(S.view)}; Ctrl-^ flips back`); }
+    case "b": case "buffer": { const b=[...branches.keys()].find(n=>n===arg)||[...branches.keys()].find(n=>n.startsWith(arg)); if(!b) return say(`E94: No matching branch for ${arg}`); if(b!==S.cur){ pushJump(); S.alt=S.cur; S.cur=b; } return say(`"${b}" ${branchInfo(b)}`); }
+    case "bn": case "bp": { const ks=[...branches.keys()]; const i=ks.indexOf(S.cur); const nb=ks[(i+(cmd==="bn"?1:-1)+ks.length)%ks.length]; S.alt=S.cur; S.cur=nb; return say(`"${nb}" ${branchInfo(nb)}`); }
+    case "ls": case "branches": return sayLines([...branches.keys()].map((n,i)=>`${String(i+1).padStart(3)} ${n===S.cur?"%a":n===S.alt?"# ":"  "} "${n}"${" ".repeat(Math.max(1,14-n.length))}${branchInfo(n)}${branches.get(n).dirty?"  [+]":""}`));
+    case "diffsplit": case "diff": case "diffthis": { if(arg){ if(!branches.has(arg)) return say(`E94: No matching branch for ${arg}`); if(arg!==S.cur) S.alt=arg; } setMode("compare"); return; }
+    case "diffoff": return setMode(S.prevMode==="compare"?"political":S.prevMode);
+    case "set": case "se": return setOpt(arg);
+    case "noh": case "nohlsearch": S.matches=[]; return;
+    case "mode": { if(!arg) return sayLines(Object.entries(MODES).map(([k,v])=>`  ${k.padEnd(10)} ${v}`)); const mm=Object.keys(MODES).find(x=>x.startsWith(norm(arg))); if(!mm) return say(`E: unknown map mode ${arg}`); return setMode(mm); }
+    case "goto": case "run": { const t=parseDate(arg); if(t==null) return say("E: give a date like 2008-09"); pushJump(); setView(t); return say(cmd==="run"?`ran to ${date(t)}`:`at ${date(t)}`); }
+    case "where": { const mm=/^(.*)\s+(tariff|tfp)\s+([+=-]?\s*\d+(?:\.\d+)?)$/.exec(arg); if(!mm) return say("E: :where {query} tariff +3"); const a=parseAmount(`${mm[2]} ${mm[3]}`); const V=vals(S.cur,S.view); const now=evalQuery(mm[1],V); mutate(ed=>ed.concat([{id:EDIT_ID++,tick:S.view,field:a.field,op:a.op,val:a.val,targets:null,pred:mm[1].trim(),label:`where ${mm[1].trim()}`,nl:S.pendingNL||null}])); S.pendingNL=null; return say(`edit by query at ${date(S.view)}: ${a.field} ${a.op==="="?"=":a.val>=0?"+":""}${a.val} where ${mm[1].trim()} (${now.size} provinces now; re-evaluated on replay)${snapNote(S.view)}`); }
+    case "when": { const mm=/^(.*)\s+(tariff|tfp)\s+([+=-]?\s*\d+(?:\.\d+)?)$/.exec(arg); if(!mm) return say("E: :when {query} tfp +1"); const a=parseAmount(`${mm[2]} ${mm[3]}`); evalQuery(mm[1],vals(S.cur,S.view)); const id=EDIT_ID++; mutate(ed=>ed.concat([{id,tick:S.view,field:a.field,op:a.op,val:a.val,targets:null,pred:mm[1].trim(),rule:true,label:`when ${mm[1].trim()}`,nl:S.pendingNL||null}])); S.pendingNL=null; const res=resolvedTargets(S.cur).find(r=>r.e.id===id); return say(`rule from ${date(S.view)}: ${a.field} ${a.op==="="?"=":a.val>=0?"+":""}${a.val} when ${mm[1].trim()} · fires in ${res.tg.length} province${res.tg.length===1?"":"s"} by 2030`); }
+    case "DES": case "GP": case "ECO": case "MOST": case "WEI": case "BLAM": case "des": case "gp": case "eco": case "most": case "wei": case "blam": return terminal(arg, cmd.toUpperCase());
+    case "select": { const set=evalQuery(arg,vals(S.cur,S.view)); selectSet(set); return say(`${set.size} provinces selected`); }
+    case "tariff": case "tfp": { const a=parseAmount(`${cmd} ${arg}`); if(!a) return say(`E: :${cmd} +3 or :${cmd} =10`); const t=target(); addEdit(t,a.field,a.op,a.val,describe(t)); return; }
+    case "marks": return sayLines(["mark  place               tick     branch", ...Object.entries(S.marks).sort().map(([k,v])=>` ${k}    ${P[v.pid].name.padEnd(19)} ${date(v.tick)}  ${v.branch}`)]);
+    case "reg": case "registers": case "di": case "display": return sayLines(["type  name  content", ...Object.entries(S.regs).sort().map(([k,r])=>`  ${r.type.padEnd(7)}"${k}  ${regText(r)}`), `  text   "%  ${S.cur}`, `  text   "#  ${S.alt}`]);
+    case "jumps": case "ju": return sayLines([" jump  place               tick     branch", ...S.jumps.map((j,i)=>`${i===S.jidx?">":" "}${String(Math.abs(i-S.jidx)).padStart(4)}  ${P[j.pid].name.padEnd(19)} ${date(j.tick)}  ${j.branch}`), S.jidx>=S.jumps.length?">":""]);
+    case "changes": return sayLines(["change  tick     edit", ...branches.get(S.cur).edits.map((e,i)=>`${String(i+1).padStart(6)}  ${date(e.tick)}  ${e.field} ${e.op==="="?"=":e.val>=0?"+":""}${e.val}  ${e.label}`)]);
+    case "blame": return blame();
+    case "explain": return explain();
+    case "nmap": case "nnoremap": case "map": { const mm=/^(\S+)\s+(.+)$/.exec(arg); if(!mm) return sayLines(Object.entries(S.maps).map(([l,r])=>`n  ${l}  ${r.join("")}`).concat(Object.keys(S.maps).length?[]:["No mappings found"])); S.maps[mm[1]]=keysFrom(mm[2]); return say(`mapped ${mm[1]}`); }
+    case "normal": case "norm": { replay(keysFrom(arg)); return; }
+    case "bisect": case "rebase": case "cherry-pick": case "ensemble": case "goalseek": case "leverage": case "peers": case "receipt": case "cartogram": return say(`:${cmd} is part of the design (see below) but not of this demo`);
+  }
+  say(`E492: Not an editor command: ${src}`);
+  }catch(e){ say("E: "+e.message); }
+}
+function regText(r){ if(r.type==="values") return `${r.field} = ${r.value} from ${r.desc} @ ${date(r.tick)}`; if(r.type==="edits") return r.edits.map(e=>`${date(e.tick)} ${e.field} ${e.op==="="?"=":e.val>=0?"+":""}${e.val} ${e.label}`).join(" | "); if(r.type==="keys") return r.keys.join(""); return r.text; }
+function setOpt(a){
+  const opts={nu:["nu",true],number:["nu",true],nonu:["nu",false],nonumber:["nu",false],rnu:["rnu",true],relativenumber:["rnu",true],nornu:["rnu",false],norelativenumber:["rnu",false],hls:["hls",true],nohls:["hls",false],autopause:["autopause",true],noautopause:["autopause",false]};
+  if(!a) return sayLines([`  field=${S.field}  speed=${S.speed}  ${S.nu?"":"no"}number  ${S.rnu?"":"no"}relativenumber  ${S.autopause?"":"no"}autopause`]);
+  for(const o of a.split(/\s+/)){
+    if(opts[o]){ S[opts[o][0]]=opts[o][1]; continue; }
+    let m;
+    if((m=/^field=(tariff|tfp)$/.exec(o))){ S.field=m[1]; continue; }
+    if((m=/^speed=([1-5])$/.exec(o))){ S.speed=+m[1]; restartClock(); continue; }
+    return say(`E518: Unknown option: ${o}`);
+  }
+  say(`${S.nu?"number":"nonumber"} ${S.rnu?"relativenumber":""} field=${S.field}`.trim());
+}
+
+// palette
+function registry(){
+  const k = (v,s)=> S.keymap==="vim"?v:s;
+  return [
+    ["Pause or resume", "pause", k("Space","Space"), ()=>toggleRun()],
+    ["Faster", "set speed+", k("+","+"), ()=>replay(["+"])], ["Slower", "set speed-", k("-","-"), ()=>replay(["-"])],
+    ["Step one tick forward", "run +1", k(")","F10"), ()=>replay([")"])], ["Step one tick back", "goto -1", k("(","Shift F10"), ()=>replay(["("])],
+    ["Next chronicle event", "", k("}","PgDn"), ()=>replay(["}"])], ["Previous chronicle event", "", k("{","PgUp"), ()=>replay(["{"])],
+    ["Go to head", "", k("G","Ctrl End"), ()=>replay(["G"])], ["Go to fork point", "", k("gg","Ctrl Home"), ()=>replay(["g","g"])],
+    ["Fork here", "fork", k("C-Space f","Ctrl Shift S"), ()=>ex("fork")],
+    ["Toggle alternate branch", "b #", k("Ctrl-^","Ctrl Tab"), ()=>replay(["<C-^>"])],
+    ["Compare with alternate branch", "diffsplit", k("gmd","Ctrl \\"), ()=>ex("diffsplit")],
+    ["List branches", "ls", "", ()=>ex("ls")],
+    ...Object.entries(MODES).map(([m,t])=>[`Map mode: ${t}`, `mode ${m}`, k("gm"+Object.entries(MODEKEY).find(e=>e[1]===m)[0], "Shift "+(Object.keys(MODES).indexOf(m)+1)), ()=>setMode(m)]),
+    ["Toggle map numbers", "set nu!", k(":set nu","Alt"), ()=>{ S.nu=!S.nu; }],
+    ["Relative numbers (vs cursor)", "set rnu!", "", ()=>{ S.rnu=!S.rnu; S.nu=true; }],
+    ["Undo edit", "undo", k("u","Ctrl Z"), ()=>replay(["u"])], ["Redo edit", "redo", k("Ctrl-r","Ctrl Y"), ()=>replay(["<C-r>"])],
+    ["Raise active field on cursor", "", k("Ctrl-a","]"), ()=>replay(["<C-a>"])], ["Lower active field on cursor", "", k("Ctrl-x","["), ()=>replay(["<C-x>"])],
+    ["Change field on this state", "", k("cis","Shift Space, F2"), ()=>replay(["c","i","s"])],
+    ["Select this state", "", k("vis","Shift Space"), ()=>replay(["v","i","s"])], ["Select this country", "", k("vic","Ctrl Space"), ()=>replay(["v","i","c"])],
+    ["Jump with hint labels", "", k("f",";"), ()=>replay(["f"])],
+    ["Search provinces", "", k("/","Ctrl F"), ()=>replay(["/"])],
+    ["Explain this number", "explain", k("gd","F12"), ()=>explain()], ["Blame this province", "blame", k("gb",""), ()=>blame()],
+    ["Write branch as scenario", "w", k("","Ctrl S"), ()=>ex("w")],
+    ["Show marks", "marks", "", ()=>ex("marks")], ["Show registers", "reg", "", ()=>ex("reg")], ["Show jump list", "jumps", "", ()=>ex("jumps")], ["Show edit list", "changes", "", ()=>ex("changes")],
+    ["Focus edit log", "", k("C-Space l","Ctrl Shift E"), ()=>{ S.focus="log"; S.tab="log"; }],
+    ["Paste values ex post (at view tick)", "", k("p","Ctrl V"), ()=>replay(["p"])], ["Paste values ex ante (at branch start)", "", k("P","Ctrl Alt V"), ()=>replay(["P"])],
+    ["Copy values at cursor", "", k("yy","Ctrl C, Q"), ()=>replay(["y","y"])], ["Repeat last edit", "", k(".","F4"), ()=>replay(["."])],
+    ["Help", "h", k("g?","Shift F1"), ()=>{ S.help=true; }],
+  ].map(([title,exs,keys,run])=>({title,ex:exs,keys,run}));
+}
+function fuzzy(q,s){ q=norm(q); s=norm(s); if(!q) return 1; if(s.includes(q)) return 100-s.indexOf(q); let j=0,sc=0; for(const c of s){ if(c===q[j]){ j++; sc++; } } return j===q.length ? sc : -1; }
+function paletteItems(q){
+  const items=[];
+  const tm=terminalItem(q); if(tm) items.push(tm);
+  if(q.trim().split(/\s+/).length>=3){ try{ const c=compileNL(q); if(c) items.push({title:`Compiled, no model: :${c.ex}`, ex:"", keys:"Enter", run:()=>runCompiled(c,q.trim())}); else items.push({title:"Not understood by the built-in grammar. With the optional model on (ADR 0125) it would go to the intervention compiler.", ex:"", keys:"", run:()=>{}}); }catch(e){ items.push({title:`Compiler: ${e.message}`, ex:"", keys:"", run:()=>{}}); } }
+  const t=parseDate(q.trim()); if(t!=null){ items.push({title:`Go to ${date(t)}`,ex:date(t),keys:S.keymap==="vim"?`${2000+Math.floor(t/12)}G`:"Ctrl G",run:()=>{ pushJump(); setView(t);} }); items.push({title:`Fork at ${date(t)}`,ex:`fork`,keys:"",run:()=>{ setView(t); ex("fork"); }}); }
+  if(/^where\s+/.test(q)){ const pred=q.replace(/^where\s+/,""); try{ const set=evalQuery(pred,vals(S.cur,S.view)); items.push({title:`Select ${set.size} provinces where ${pred}`,ex:`select ${pred}`,keys:"",run:()=>{ selectSet(set); }}); items.push({title:`Raise ${S.field} by 1 where ${pred} (edit by query)`,ex:`where ${pred} ${S.field} +1`,keys:"",run:()=>ex(`where ${pred} ${S.field} +1`)}); }catch(e){ items.push({title:`Query: ${e.message}`,ex:"",keys:"",run:()=>{}}); } return items; }
+  const scored=[];
+  for(const it of registry()){ const sc=fuzzy(q,it.title+" "+it.ex); if(sc>=0) scored.push([sc+5,it]); }
+  if(q.length>=2) for(const p of P){ const sc=fuzzy(q,p.name); if(sc>=0) scored.push([sc+(norm(p.name).startsWith(norm(q))?60:0),{title:`Go to ${p.name}`,ex:`${p.state}, ${p.country}`,keys:S.keymap==="vim"?`f${HINTOF.get(p.id)}`:`; ${HINTOF.get(p.id)}`,run:()=>jumpTo({pid:p.id,tick:S.view,branch:S.cur},false)}]); }
+  for(const n of branches.keys()){ const sc=fuzzy(q,"branch "+n); if(q&&sc>=0) scored.push([sc,{title:`Switch to branch ${n}`,ex:`b ${n}`,keys:"",run:()=>ex(`b ${n}`)}]); }
+  scored.sort((a,b)=>b[0]-a[0]);
+  return items.concat(scored.slice(0,9).map(x=>x[1]));
+}
+// ---------- controlled English (no model) ----------
+const ADJ = {portuguese:"Portugal",spanish:"Spain",french:"France"};
+const FIELDWORD = {tariff:"tariff",tariffs:"tariff",tfp:"tfp",productivity:"tfp"};
+function placeQuery(phrase){
+  let rest=` ${norm(phrase)} `; const terms=[];
+  const cond=/\b(gdp|wheat|wheat price|tariff)\s+(?:is\s+|falls\s+|drops\s+|rises\s+|goes\s+)?(below|under|less than|above|over|more than|greater than|exceeds)\s+(\d+(?:\.\d+)?)k?/;
+  let m;
+  while((m=cond.exec(rest))){ const f=m[1].startsWith("wheat")?"wheat":m[1]; const op=/below|under|less/.test(m[2])?"<":">"; terms.push(`${f}${op}${m[3]}`); rest=rest.replace(m[0]," "); }
+  for(const w of ["coastal","inland","edited"]) if(rest.includes(` ${w} `)){ terms.push(w); rest=rest.replace(` ${w} `," "); }
+  for(const [a,c] of Object.entries(ADJ)) if(rest.includes(` ${a} `)){ terms.push(`country=${c}`); rest=rest.replace(` ${a} `," "); }
+  rest=rest.replace(/\b(provinces?|regions?|the|all|of|in|on|across|with|where|that|have|has|whose|and|every)\b/g," ").replace(/\s+/g," ").trim();
+  if(rest){
+    const hit = ["country","state","name"].map(k=>[k,P.find(p=>norm(p[k])===rest)]).find(x=>x[1]);
+    if(!hit) throw Error(`could not read "${rest}" as a place`);
+    terms.push(hit[0]==="name"?`near(${hit[1].name},0)`:`${hit[0]}=${hit[1][hit[0]]}`);
+  }
+  if(!terms.length) throw Error("no place or condition found");
+  return terms.join(" & ");
+}
+function compileNL(src){
+  const s=src.trim().replace(/[.!]$/,"");
+  let m=/^(raise|increase|lift|cut|lower|reduce|decrease|set)\s+(?:the\s+)?(tariffs?|tfp|productivity)\s+(?:by|to)\s+(\d+(?:\.\d+)?)\s*(?:pp|points?|steps?|%)?\s+(?:in|on|for|across)\s+(.+?)(?:\s+(?:from|starting|at|in)\s+(\d{4}(?:-\d{1,2})?))?$/i.exec(s);
+  const amount=(v,n)=> /set/i.test(v)?`=${n}`:/cut|lower|reduce|decrease/i.test(v)?`-${n}`:`+${n}`;
+  if(m){ const when=m[5]?`${m[5]} | `:""; return {ex:`${when}where ${placeQuery(m[4])} ${FIELDWORD[norm(m[2])]} ${amount(m[1],m[3])}`}; }
+  m=/^(?:when|whenever|if)\s+(.+?),?\s+(?:then\s+)?(raise|increase|lift|cut|lower|reduce|decrease|set)\s+(?:the\s+|its\s+|their\s+)?(tariffs?|tfp|productivity)\s+(?:by|to)\s+(\d+(?:\.\d+)?)\s*(?:pp|points?|steps?|%)?$/i.exec(s);
+  if(m) return {ex:`when ${placeQuery(m[1])} ${FIELDWORD[norm(m[3])]} ${amount(m[2],m[4])}`};
+  m=/^(?:show|select|find|which|highlight)\s+(.+?)\??$/i.exec(s);
+  if(m) return {ex:`select ${placeQuery(m[1])}`};
+  m=/^(?:go to|jump to|take me to)\s+(.+)$/i.exec(s);
+  if(m){ const t=parseDate(m[1]); if(t!=null) return {ex:date(t)}; const p=P.find(q=>norm(q.name)===norm(m[1])); if(p) return {go:p.id, ex:`DES ${p.name}`}; }
+  m=/^why\s+(?:is|did|does)\s+(.+?)\s+(?:gdp|income|output)/i.exec(s);
+  if(m){ const p=P.find(q=>norm(q.name)===norm(m[1])); if(p) return {go:p.id, ex:"blame"}; }
+  return null;
+}
+function runCompiled(c,src){
+  if(c.go!=null) jumpTo({pid:c.go,tick:S.view,branch:S.cur},false);
+  let x=c.ex;
+  const at=/^(\d{4}(?:-\d{1,2})?) \| (.*)$/.exec(x);
+  if(at){ const t=parseDate(at[1]); if(t!=null) setView(t); x=at[2]; }
+  S.pendingNL=src; ex(x); S.pendingNL=null;
+}
+
+// ---------- terminal mnemonics ----------
+const MNEM = {DES:"Describe the subject",GP:"Graph: GDP map over the subject",ECO:"Chronicle calendar",MOST:"Most-moved provinces, last 12 months",WEI:"Country monitor",BLAM:"Blame the subject's GDP"};
+function subjectOf(txt){
+  const t=norm(txt.trim()); if(!t) return {ids:[S.cursor],name:curP().name,pid:S.cursor};
+  for(const k of ["name","state","country"]){ const hit=P.filter(p=>norm(p[k])===t); if(hit.length){ const cap = k==="country"?byName(CAPITAL[hit[0].country]).id : hit[0].id; return {ids:hit.map(p=>p.id),name:hit[0][k],pid:cap}; } }
+  return null;
+}
+function terminal(subj,fn){
+  const sb=subjectOf(subj||""); if(!sb) return say(`E: no subject "${subj}"`);
+  const V=vals(S.cur,S.view), Y=vals(S.cur,Math.max(0,S.view-12));
+  const yoy=id=>100*(V.gdp[id]/Y.gdp[id]-1);
+  if(fn==="DES"){ jumpTo({pid:sb.pid,tick:S.view,branch:S.cur},false); S.tab="insp"; const mean=sb.ids.reduce((a,i)=>a+V.gdp[i],0)/sb.ids.length; return sayLines([`${sb.name.toUpperCase()}  DES  ${date(S.view)}  branch ${S.cur}`,`  provinces ${sb.ids.length}   gdp_pc mean ${mean.toFixed(2)}k   1) GP  2) BLAM  3) MOST`]); }
+  if(fn==="GP"){ setMode("gdp"); selectSet(sb.ids); S.mode="normal"; S.lastSel={sel:new Set(sb.ids),kind:"v"}; S.sel=new Set(); fitTo(new Set(sb.ids)); return; }
+  if(fn==="BLAM"){ jumpTo({pid:sb.pid,tick:S.view,branch:S.cur},false); return blame(); }
+  if(fn==="ECO") return sayLines(["ECO  chronicle", ...eventTicks().map((t,i)=>`${String(i+1).padStart(3)}) ${date(t)}${t===S.view?" <":"  "} ${eventAt(t)}`)]);
+  if(fn==="MOST"){ const rows=sb.ids.length>1?sb.ids:P.map(p=>p.id); return sayLines([`MOST  gdp_pc change ${date(Math.max(0,S.view-12))} to ${date(S.view)}`, ...rows.sort((a,b)=>Math.abs(yoy(b))-Math.abs(yoy(a))).slice(0,10).map((id,i)=>`${String(i+1).padStart(3)}) ${P[id].name.padEnd(22)}${(yoy(id)>=0?"+":"")+yoy(id).toFixed(2)}%`)]); }
+  if(fn==="WEI") return sayLines([`WEI  ${date(S.view)}  country       gdp_pc   1y      edits`, ...["Spain","Portugal","France"].map((c,i)=>{ const ids=P.filter(p=>p.country===c).map(p=>p.id); const g=ids.reduce((a,x)=>a+V.gdp[x],0)/ids.length, y=ids.reduce((a,x)=>a+Y.gdp[x],0)/ids.length; return `${String(i+1).padStart(3)})       ${c.padEnd(13)} ${g.toFixed(2).padStart(6)}k ${((g/y-1)*100>=0?"+":"")+((g/y-1)*100).toFixed(2)}%  ${ids.filter(x=>V.touched[x]).length}`; })]);
+}
+function terminalItem(q){
+  const m=/^(.*?)\s*\b([A-Za-z]{2,4})$/.exec(q.trim()); if(!m) return null;
+  const fn=m[2].toUpperCase(); if(!MNEM[fn]) return null;
+  if(m[2]!==fn && m[1]) return null; // lowercase only when the mnemonic stands alone
+  const sb=subjectOf(m[1]); if(!sb) return null;
+  return {title:`${sb.name.toUpperCase()} ${fn} · ${MNEM[fn]}`, ex:`${fn} ${m[1]}`.trim(), keys:"Enter = GO", run:()=>terminal(m[1],fn)};
+}
+
+function openPalette(text){ S.line={type:"palette",text,label:">",idx:0}; pauseForInput(); }
+function paletteKey(k){
+  const L=S.line; const items=paletteItems(L.text);
+  if(k==="<CR>"){ const it=items[L.idx]; S.line=null; resumeAfterInput(); if(it) it.run(); return; }
+  if(k==="<Down>"||k==="<C-n>"||k==="<Tab>"){ L.idx=Math.min(items.length-1,L.idx+1); return; }
+  if(k==="<Up>"||k==="<C-p>"){ L.idx=Math.max(0,L.idx-1); return; }
+  if(k==="<BS>") L.text=L.text.slice(0,-1); else if(k==="<Space>") L.text+=" "; else if(k.length===1) L.text+=k; else return;
+  L.idx=0;
+}
+
+// ---------- standard keymap ----------
+function stdKey(e,k){
+  if(S.line||S.hint||S.focus==="log") return [k];
+  const c=e.ctrlKey||e.metaKey, sh=e.shiftKey, al=e.altKey, key=e.key, lk=key.length===1?key.toLowerCase():key, code=e.code||"";
+  const vis=S.mode==="visual";
+  const arrows={ArrowLeft:"h",ArrowRight:"l",ArrowUp:"k",ArrowDown:"j"};
+  const run = s=>{ ex(s); return []; };
+  const line = (t)=>{ S.line={type:":",text:t,label:":"}; pauseForInput(); return []; };
+  if(arrows[key]){
+    if(al && (key==="ArrowLeft"||key==="ArrowRight")) return [key==="ArrowLeft"?"<C-o>":"<C-i>"];
+    const d=arrows[key];
+    if(c){ S.lastDir=d; return sh ? (vis?["w"]:["v","w"]) : (vis?["<Esc>","w"]:["w"]); }
+    if(sh) return vis?[d]:["v",d];
+    return vis?["<Esc>",d]:[d];
+  }
+  const digit=/^Digit([1-9])$/.exec(code);
+  if(digit && c){ S.groups[digit[1]]={sel:new Set(vis?S.sel:[S.cursor]),cursor:S.cursor,zoom:S.zoom,panX:S.panX,panY:S.panY}; say(`group ${digit[1]} saved (${S.groups[digit[1]].sel.size} provinces)`); return []; }
+  if(digit && al){ const g=S.groups[digit[1]]; if(!g){ say(`group ${digit[1]} is empty; Ctrl ${digit[1]} saves one`); return []; } pushJump(); Object.assign(S,{cursor:g.cursor,zoom:g.zoom,panX:g.panX,panY:g.panY}); if(g.sel.size>1) selectSet(g.sel); S.cursor=g.cursor; return []; }
+  if(digit && sh){ const m=["political","gdp","wheat","tariff","edits","compare"][+digit[1]-1]; if(m) setMode(m); return []; }
+  if(/^[1-5]$/.test(key) && !c && !al) return [key,"g","s"];
+  if(c){
+    if(sh && lk==="p" || key==="F1") return ["<C-k>"];
+    if(lk==="p"){ openPalette(""); return []; }
+    if(lk==="k") return ["<C-k>"];
+    if(lk==="f") return sh ? (say("search across every branch's edit log: not in this demo"),[]) : ["/"];
+    if(lk==="h") return line("where ");
+    if(lk==="g") return line("goto ");
+    if(lk==="z") return sh?["<C-r>"]:["u"];
+    if(lk==="y") return ["<C-r>"];
+    if(lk==="c") return vis?["y"]:["y","y"];
+    if(lk==="v") { if(al){ openPalette("paste "); return []; } return ["p"]; }
+    if(lk==="x"){ say("cut moves edits: not in this demo; copy with Ctrl C"); return []; }
+    if(lk==="a"){ selectSet(P.map(p=>p.id)); return []; }
+    if(lk==="d"){ if(!vis){ say("select provinces first; Ctrl D copies the anchor's value to the rest"); return []; } const set=new Set(S.sel); const anchor=S.anchor??S.cursor; yank(new Set([anchor]),null,P[anchor].name); exitVisual(); put(set,null,false); return []; }
+    if(lk==="s") return sh ? run("fork") : run("w");
+    if(key==="Tab") return ["<C-^>"];
+    if(key==="PageDown"||key==="PageUp") return run(key==="PageDown"?"bn":"bp");
+    if(key==="\\") return run(S.mapmode==="compare"?"diffoff":"diffsplit");
+    if(key==="Home") return ["g","g"];
+    if(key==="End") return ["G"];
+    if(key===" ") { const set=objSet("c",false); selectSet(set); return []; }
+    if(key==="=") return ["z","+"]; if(key==="-") return ["z","-"]; if(key==="0") return ["z","x"];
+    if(key==="Enter"){ return vis?["c"]:["c","c"]; }
+    if(key==="F10"){ say("run to cursor: pick a date in the timeline (not in this demo); Ctrl G goes to a date"); return []; }
+    if(lk==="e"&&sh){ S.focus="log"; S.tab="log"; return []; }
+    if(lk==="g"&&sh){ S.tab="br"; return []; }
+    if(lk==="b"){ return []; }
+    return [];
+  }
+  if(sh && key===" "){ selectSet(objSet("s",false)); return []; }
+  if(key==="F1"){ if(sh) return ["g","?"]; return ["<C-k>"]; }
+  if(key==="F2") return vis?["c"]:["c","c"];
+  if(key==="F3") return [sh?"N":"n"];
+  if(key==="F4") return ["."];
+  if(key==="F5"){ if(sh){ if(S.running) toggleRun(); } else if(!S.running) toggleRun(); return []; }
+  if(key==="F6"){ S.focus = S.focus==="map"?"log":"map"; S.tab = S.focus==="log"?"log":"insp"; return []; }
+  if(key==="F8") return [sh?"{":"}"];
+  if(key==="F9"){ if(S.watch && S.watch.pid===S.cursor){ S.watch=null; say("watch removed"); } else { S.watch={pid:S.cursor,base:vals(S.cur,S.view).gdp[S.cursor]}; say(`watching GDP per capita in ${curP().name}: pause on a 2% move`); } return []; }
+  if(key==="F10") return [sh?"(":")"];
+  if(key==="F12"){ if(sh) return terminal("", "MOST"),[]; return ["g","d"]; }
+  if(/^Key[WASD]$/.test(code) && !sh){ centreIfNeeded(); const st=0.9/S.zoom; if(code==="KeyW") S.panY-=st; if(code==="KeyS") S.panY+=st; if(code==="KeyA") S.panX-=st; if(code==="KeyD") S.panX+=st; return []; }
+  if(lk==="q") return ["y","y"];
+  if(lk==="m"){ openPalette("map mode "); return []; }
+  const map={" ":["<Space>"],"+":["+"],"-":["-"],"=":["+"],"Home":["g","c"],"End":["G"],"PageDown":["}"],"PageUp":["{"],
+    "]":vis?["<C-a>","g","v"]:["<C-a>"],"[":vis?["<C-x>","g","v"]:["<C-x>"],";":["f"],"Escape":["<Esc>"],"Enter":["<CR>"],"Delete":vis?["d"]:["d","d"]};
+  return map[key]||[];
+}
+
+// ---------- input ----------
+const stage=document.getElementById("stage");
+function keyName(e){
+  const k=e.key;
+  if(["Shift","Control","Alt","Meta","CapsLock"].includes(k)) return null;
+  const named={" ":"<Space>",Enter:"<CR>",Escape:"<Esc>",Backspace:"<BS>",Tab:"<Tab>",ArrowUp:"<Up>",ArrowDown:"<Down>",ArrowLeft:"<Left>",ArrowRight:"<Right>"};
+  if(e.ctrlKey && !e.altKey){ if(k===" ") return "\\"; if(k==="6"||k==="^") return "<C-^>"; if(k==="[") return "<Esc>"; if(k.length===1) return `<C-${k.toLowerCase()}>`; }
+  if(named[k]) return named[k];
+  return k.length===1 ? k : null;
+}
+stage.addEventListener("keydown",e=>{
+  if(e.key==="Alt"){ S.altTap=true; e.preventDefault(); return; }
+  S.altTap=false;
+  if(e.metaKey && S.keymap==="vim") return;
+  let keys;
+  if(S.keymap==="std" && !S.line && !S.hint) keys=stdKey(e,keyName(e));
+  else { const k=keyName(e); if(e.key==="F1"){ keys=["g","?"]; } else keys = k?[k]:[]; }
+  if(!keys.length && !(S.keymap==="std" && (e.ctrlKey||e.metaKey||e.altKey||/^F\d+$/.test(e.key)||/^Key[WASDQM]$/.test(e.code)||e.key===" "))) return;
+  e.preventDefault(); e.stopPropagation();
+  for(const k of keys) if(k) feed(k);
+  render();
+});
+stage.addEventListener("keyup",e=>{ if(e.key==="Alt" && S.altTap){ S.altTap=false; S.nu=!S.nu; say(S.nu?"map numbers on (Alt toggles)":"map numbers off"); render(); } });
+stage.addEventListener("focus",()=>{ document.getElementById("focusNote").hidden=true; });
+stage.addEventListener("blur",()=>{ document.getElementById("focusNote").hidden=false; S.altHeld=false; render(); });
+stage.addEventListener("mousedown",e=>{ stage.focus(); const id=pick(e); if(id!=null){ if(e.shiftKey){ if(S.mode!=="visual") selectSet([S.cursor]); S.sel.add(id); S.cursor=id; } else { jumpTo({pid:id,tick:S.view,branch:S.cur},false); } render(); } });
+document.getElementById("km-vim").onclick=()=>setKeymap("vim");
+document.getElementById("km-std").onclick=()=>setKeymap("std");
+function setKeymap(k){ S.keymap=k; document.getElementById("km-vim").setAttribute("aria-pressed",k==="vim"); document.getElementById("km-std").setAttribute("aria-pressed",k==="std"); S.buf=[]; buildTry(); say(k==="vim"?"vim keymap":"standard keymap: arrows move like an Excel cell, F2 edits, F5/F10 run and step, F1 palette"); render(); stage.focus(); }
+for(const [id,t] of [["tab-insp","insp"],["tab-log","log"],["tab-br","br"],["tab-reg","reg"]]) document.getElementById(id).onclick=()=>{ S.tab=t; render(); };
+
+// ---------- try list ----------
+const TRY_VIM = [
+  ["f then a label","Jump with hint labels",[]],
+  ["vis5<C-a>","Select Madrid's state, raise tariff 5 pp","vis5<C-a>"],
+  ["llll","Move east province by province","llll"],
+  ["cis+3<CR>w.","Change a state, move to the next state, repeat","cis+3<CR>w."],
+  ["2008G gmg :set nu<CR>","Jump to 2008, GDP map mode, map numbers","2008Ggmg:set nu<CR>"],
+  [":where coastal & country=Portugal tariff +4<CR>","Edit by query, re-evaluated on replay",":where coastal & country=Portugal tariff +4<CR>"],
+  ["<C-^> gmd [c","Flip to the alternate branch, diff mode, previous divergence","<C-^>gmd[c"],
+  ["qaj<C-a>q 5@a","Record a macro, run it five times","qaj<C-a>q5@a"],
+  ["ma }}} 'a `a <C-o>","Mark, jump in time, back by place, by place and tick, jump list","ma}}}'a`a<C-o>"],
+  [":g/inland & gdp<16/normal 2<C-a><CR>","Global command over a query",":g/inland & gdp<16/normal 2<C-a><CR>"],
+  ["<C-k>raise tariffs by 4 in coastal Portuguese provinces<CR>","Plain English, compiled without a model","<C-k>raise tariffs by 4 in coastal Portuguese provinces<CR>"],
+  [":when gdp<17 & country=Spain tfp +1<CR>","Rule edit: fires per province when the condition first holds",":when gdp<17 & country=Spain tfp +1<CR>gme"],
+  ["<C-k>WEI<CR>","Terminal mnemonic: country monitor","<C-k>WEI<CR>"],
+  [":fork test<CR> :ls<CR>","Fork here and list branches",":fork test<CR>:ls<CR>"],
+  ["<C-k>sev","Palette: go to Sevilla","<C-k>sev"],
+];
+const TRY_STD = [
+  ["; then a label","Jump with hint labels",[]],
+  ["→ → → · Ctrl →","Move east like an Excel cell; jump to the state border",["ArrowRight","ArrowRight","ArrowRight",["ArrowRight",{ctrlKey:true}]]],
+  ["Shift Space · ] ] ]","Select the state, raise tariff three steps",[[" ",{shiftKey:true}],"]","]","]"]],
+  ["F2 +3 Enter · ↓ · F4","Edit the cursor, move, repeat (Excel)",["F2","+","3","Enter","ArrowDown","F4"]],
+  ["Shift 2 · Alt · Ctrl Space","GDP map mode, map numbers, select the country",[["@",{shiftKey:true,code:"Digit2"}],["Alt",{}],[" ",{ctrlKey:true}]]],
+  ["Ctrl Shift P, \"compare\"","Command palette (VS Code)",[["P",{ctrlKey:true,shiftKey:true}],..."compare".split("")]],
+  ["F9 · F5","Watch the GDP here, run until it moves 2%",["F9","F5"]],
+  ["F10 F10 · Shift F10","Step two ticks, step back",["F10","F10",["F10",{shiftKey:true}]]],
+  ["Ctrl Shift S · Ctrl Tab","Fork here (Save As), flip back to the other branch",[["S",{ctrlKey:true,shiftKey:true}],["Tab",{ctrlKey:true}]]],
+  ["Ctrl H","Find and replace: edit by query",[["h",{ctrlKey:true}],..."coastal & country=Spain tariff +2".split(""),"Enter"]],
+  ["F1, \"cut tariff by 2 in Andalucía\"","Plain English in the palette",["F1",..."cut tariff by 2 in Andalucía".split(""),"Enter"]],
+  ["Ctrl Z","Undo the last edit",[["z",{ctrlKey:true}]]],
+];
+function buildTry(){
+  const el=document.getElementById("try"); el.innerHTML="";
+  const list=S.keymap==="vim"?TRY_VIM:TRY_STD;
+  list.forEach(([keys,desc,seq])=>{
+    const d=document.createElement("div");
+    const b=document.createElement("button"); b.textContent="Play"; b.setAttribute("aria-label",`Play: ${desc}`);
+    if(!seq.length){ b.textContent="Try"; b.onclick=()=>{ stage.focus(); feed(S.keymap==="vim"?"f":"f"); render(); }; }
+    else b.onclick=()=>play(seq);
+    const c=document.createElement("code"); c.textContent=keys;
+    const s=document.createElement("span"); s.className="muted"; s.style.fontSize=".82rem"; s.textContent=desc;
+    const w=document.createElement("span"); w.style.minWidth="0"; w.append(c," ",s);
+    d.append(b,w); el.append(d);
+  });
+}
+let playing=null;
+function play(seq){
+  stage.focus(); clearInterval(playing);
+  const keys = typeof seq==="string" ? keysFrom(seq) : seq;
+  let i=0;
+  playing=setInterval(()=>{
+    if(i>=keys.length){ clearInterval(playing); return; }
+    const k=keys[i++];
+    if(S.keymap==="std"){ const [key,mods]=Array.isArray(k)?k:[k,{}]; const ev={key,code:mods.code||(/^[a-z]$/i.test(key)?"Key"+key.toUpperCase():/^[0-9]$/.test(key)?"Digit"+key:""),ctrlKey:!!mods.ctrlKey,shiftKey:!!mods.shiftKey,altKey:false,metaKey:false};
+      if(key==="Alt"){ S.nu=!S.nu; return; } const ks=(S.line||S.hint)?[keyName(ev)]:stdKey(ev,keyName(ev)); ks.filter(Boolean).forEach(feed); }
+    else feed(k);
+    render();
+  }, 170);
+}
+
+// ---------- render ----------
+const cv=document.getElementById("map"), ctx=cv.getContext("2d");
+let T={}, view={k:1,ox:0,oy:0};
+function tokens(){ const cs=getComputedStyle(document.documentElement); for(const n of ["paper","panel","ink","muted","rule","sea","edit","fork","accent","on-accent","es","pt","fr","ramp-lo","ramp-hi","neg","pos","mid","sel"]) T[n]=cs.getPropertyValue("--"+n).trim(); }
+function rgb(h){ if(h.startsWith("rgb")){ const m=h.match(/[\d.]+/g).map(Number); return m.slice(0,3);} const x=h.replace("#",""); return [0,2,4].map(i=>parseInt(x.slice(i,i+2),16)); }
+function mix(a,b,t){ const A=rgb(a),B=rgb(b); return `rgb(${A.map((v,i)=>Math.round(v+(B[i]-v)*t)).join(",")})`; }
+const DOMAIN = {gdp:[10,50], wheat:[95,210], tariff:[0,15], compare:[-6,6], edits:[0,3]};
+function fillFor(p,V,A){
+  const i=p.id;
+  switch(S.mapmode){
+    case "political": { const base=T[{Spain:"es",Portugal:"pt",France:"fr"}[p.country]]; return mix(base,T.ink,0.05+0.1*hash(p.state)); }
+    case "gdp": case "wheat": case "tariff": { const [lo,hi]=DOMAIN[S.mapmode]; const v=S.mapmode==="gdp"?V.gdp[i]:S.mapmode==="wheat"?V.wheat[i]:V.tariff[i]; return mix(T["ramp-lo"],T["ramp-hi"],Math.max(0,Math.min(1,(v-lo)/(hi-lo)))); }
+    case "edits": return V.touched[i] ? mix(T.mid,T.edit,Math.min(1,.45+.25*V.touched[i])) : T.mid;
+    case "compare": { const d=100*(V.gdp[i]/A.gdp[i]-1); if(Math.abs(d)<.05) return T.mid; return mix(T.mid, d>0?T.pos:T.neg, Math.min(1,Math.abs(d)/6)); }
+  }
+}
+function fmtVal(p,V,A){
+  const i=p.id; let v;
+  if(S.mapmode==="compare") v=100*(V.gdp[i]/A.gdp[i]-1);
+  else if(S.mapmode==="wheat") v=V.wheat[i]; else if(S.mapmode==="tariff") v=V.tariff[i]; else if(S.mapmode==="edits") v=V.touched[i]; else v=V.gdp[i];
+  if(S.rnu){ const c=S.cursor; const base = S.mapmode==="compare"?100*(V.gdp[c]/A.gdp[c]-1):S.mapmode==="wheat"?V.wheat[c]:S.mapmode==="tariff"?V.tariff[c]:S.mapmode==="edits"?V.touched[c]:V.gdp[c]; if(i!==c){ const d=v-base; return (d>=0?"+":"")+(Math.abs(d)<10?d.toFixed(1):d.toFixed(0)); } }
+  if(S.mapmode==="compare") return (v>=0?"+":"")+v.toFixed(1);
+  return S.mapmode==="wheat"?v.toFixed(0):S.mapmode==="tariff"||S.mapmode==="edits"?v.toFixed(0):v.toFixed(1);
+}
+function layout(){
+  const w=stage.clientWidth, h=Math.round(Math.min(600,Math.max(300,w*0.66)));
+  const dpr=window.devicePixelRatio||1;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){ cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); cv.style.height=h+"px"; }
+  const bw=BOUNDS.x1-BOUNDS.x0, bh=BOUNDS.y1-BOUNDS.y0;
+  const k=Math.min(w/bw,h/bh)*S.zoom;
+  const cx = S.panX==null?(BOUNDS.x0+BOUNDS.x1)/2:S.panX, cy = S.panY==null?(BOUNDS.y0+BOUNDS.y1)/2:S.panY;
+  view={k,ox:w/2-cx*k,oy:h/2-cy*k,w,h,dpr};
+}
+function pick(e){ const r=cv.getBoundingClientRect(); const x=(e.clientX-r.left-view.ox)/view.k, y=(e.clientY-r.top-view.oy)/view.k; const lon=x/KX, lat=-y; const r0=Math.round((y-Y0)/RH), c0=Math.round((x-X0)/HW-0.5*(r0&1)); for(const [dc,dr] of [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){ const o=owner(c0+dc,r0+dr); if(o>=0) return o; } return null; }
+function render(){
+  if(!T.ink) tokens();
+  layout();
+  const {k,ox,oy,dpr,w,h}=view;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle=T.sea; ctx.fillRect(0,0,w,h);
+  const V=vals(S.cur,S.view), A=S.mapmode==="compare"?vals(S.alt,S.view):null;
+  ctx.setTransform(dpr*k,0,0,dpr*k,dpr*ox,dpr*oy);
+  for(const p of P){ ctx.fillStyle=fillFor(p,V,A); ctx.fill(paths.fill[p.id]); }
+  if(S.sel.size){ ctx.fillStyle=T.sel; for(const id of S.sel) ctx.fill(paths.fill[id]); }
+  const lw=px=>px/k;
+  ctx.lineCap="round";
+  ctx.strokeStyle=mix(T.ink,T.paper,.72); ctx.lineWidth=lw(.6); ctx.stroke(paths.prov);
+  ctx.strokeStyle=mix(T.ink,T.paper,.45); ctx.lineWidth=lw(1.1); ctx.stroke(paths.state);
+  ctx.strokeStyle=T.ink; ctx.lineWidth=lw(2); ctx.stroke(paths.country);
+  ctx.strokeStyle=mix(T.ink,T.sea,.35); ctx.lineWidth=lw(1.1); ctx.stroke(paths.coast);
+  if(S.matches.length && S.hls){ ctx.setLineDash([lw(4),lw(3)]); ctx.strokeStyle=T.fork; ctx.lineWidth=lw(2); for(const id of S.matches) ctx.stroke(paths.outline[id]); ctx.setLineDash([]); }
+  if(S.sel.size){ ctx.strokeStyle=T.accent; ctx.lineWidth=lw(1.4); for(const id of S.sel) ctx.stroke(paths.outline[id]); }
+  ctx.strokeStyle=T.paper; ctx.lineWidth=lw(5.5); ctx.stroke(paths.outline[S.cursor]);
+  ctx.strokeStyle=T.accent; ctx.lineWidth=lw(3); ctx.stroke(paths.outline[S.cursor]);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const sx=x=>ox+x*k, sy=y=>oy+y*k;
+  // atlas lettering
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle=mix(T.ink,T.sea,.45); ctx.font=`italic ${Math.round(11+2*S.zoom)}px "Source Serif 4", Georgia, serif`;
+  ctx.fillText("Mediterranean Sea", sx(1.6*KX), sy(-38.6)); ctx.fillText("Atlantic Ocean", sx(-9.0*KX), sy(-36.4)); ctx.fillText("Bay of Biscay", sx(-4.2*KX), sy(-43.75));
+  if(w>520){ ctx.fillStyle=mix(T.ink,T.paper,.35); ctx.font=`600 ${Math.round(12*Math.min(1.6,S.zoom))}px "Source Serif 4", Georgia, serif`;
+    for(const [n,lon,lat] of [["S P A I N",-3.2,39.3],["P O R T U G A L",-7.95,39.55],["F R A N C E",0.6,43.62]]) ctx.fillText(n,sx(lon*KX),sy(-lat)); }
+  const numbers = S.nu;
+  if(numbers || S.zoom>=1.9){
+    for(const p of P){
+      const x=sx(p.cx), y=sy(p.cy); if(x<0||x>w||y<0||y>h) continue;
+      if(numbers){ ctx.font=`500 ${w<520?9:10.5}px "IBM Plex Mono", monospace`; const t=fmtVal(p,V,A); ctx.lineWidth=3; ctx.strokeStyle=T.paper; ctx.strokeText(t,x,y); ctx.fillStyle=T.ink; ctx.fillText(t,x,y); }
+      else { ctx.font=`${Math.round(9+S.zoom)}px "IBM Plex Sans Condensed", sans-serif`; ctx.fillStyle=mix(T.ink,T.paper,.2); ctx.fillText(p.name,x,y); }
+    }
+  }
+  { const p=curP(); const x=sx(p.cx), y=sy(p.cy)-(numbers?14:0); ctx.font=`600 13px "Source Serif 4", Georgia, serif`; const t=p.name; const tw=ctx.measureText(t).width; ctx.fillStyle=T.paper; ctx.globalAlpha=.85; ctx.fillRect(x-tw/2-4,y-17,tw+8,15); ctx.globalAlpha=1; ctx.fillStyle=T.ink; ctx.fillText(t,x,y-9.5); }
+  if(S.hint){
+    ctx.font=`600 11px "IBM Plex Mono", monospace`;
+    for(const [lab,id] of HINTS){ if(S.hint.typed && !lab.startsWith(S.hint.typed)) continue; const p=P[id]; const x=sx(p.cx), y=sy(p.cy); ctx.fillStyle=T.accent; ctx.fillRect(x-10,y-8,20,16); ctx.fillStyle=T["on-accent"]; ctx.fillText(lab,x,y+.5); }
+  }
+  renderChrome(V,A);
+}
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+const WHICH = {
+  g:[["g","fork tick"],["c","capital"],["m","map mode…"],["M","previous mode"],["d","explain"],["b","blame"],["v","reselect"],[";","older edit"],[",","newer edit"],["s","speed (count)"],["?","help"]],
+  gm:[["p","political"],["g","GDP per capita"],["w","wheat price"],["t","tariff"],["e","edits"],["d","diff vs alternate"]],
+  z:[["z","centre"],["+","zoom in"],["-","zoom out"],["h","pan west"],["l","pan east"],["s","fit selection"],["x","reset"]],
+  "]":[["y","next year"],["Y","next decade"],["e","next edit"],["c","next divergence"]],
+  "[":[["y","prev year"],["Y","prev decade"],["e","prev edit"],["c","prev divergence"]],
+  "\\":[["l","edit log"],["b","branches"],["r","registers"],["i","inspector"],["f","fork…"]],
+  op:[["ip ap","province ±ring"],["is as","state"],["ic ac","country"],["i/","search hits"],["ie","edit target"],["hjkl wb","motion path"],["(same)","cursor"]],
+  vis:[["ip is ic","replace selection"],["c y d","act on selection"],["> < C-a C-x","step field"],["o","swap ends"],["f","toggle by hint"],[":","ex on '<,'>"]],
+  "\"":[["a-z","named"],["0","last yank"],["1-9","deleted edits"],["\"","unnamed"]],
+  m:[["a-z","mark in branch"],["A-Z","mark across branches"]],
+  "'":[["a-z","place"],["'","before last jump"]], "`":[["a-z","place and tick"],["`","before last jump"]],
+  q:[["a-z","record into register"]], "@":[["a-z","run macro"],["@","run last"]]
+};
+function whichFor(){
+  if(S.line||S.hint||S.focus!=="map") return null;
+  const b=S.buf.filter(x=>!/^[0-9]$/.test(x)); if(!b.length) return S.mode==="visual"?["visual",WHICH.vis]:null;
+  let s=b.join(""); if(s.startsWith('"')&&s.length>2) s=s.slice(2);
+  if(s==="g"||s==="z"||s==="]"||s==="["||s==="\\"||s==="m"||s==="'"||s==="`"||s==="q"||s==="@"||s==='"') return [s,WHICH[s]];
+  if(s==="gm") return ["gm",WHICH.gm];
+  if(/^[cyd<>]$/.test(s)) return [s,WHICH.op];
+  if(/^[cyd<>][ia]$/.test(s)) return [s,[["p","province"],["s","state"],["c","country"],["/","search hits"],["e","edit target"]]];
+  return null;
+}
+function renderChrome(V,A){
+  const p=curP(), b=branches.get(S.cur);
+  // legend
+  const lg=document.getElementById("legend");
+  let lh=`<b style="color:var(--ink)">${MODES[S.mapmode]}</b>`;
+  if(["gdp","wheat","tariff","compare"].includes(S.mapmode)){ const [lo,hi]=DOMAIN[S.mapmode]; const u={gdp:"k$ PPP",wheat:"index 2000=100",tariff:"pp",compare:`% ${S.cur} vs ${S.alt}`}[S.mapmode]; const grad = S.mapmode==="compare" ? `linear-gradient(90deg,var(--neg),var(--mid),var(--pos))` : `linear-gradient(90deg,var(--ramp-lo),var(--ramp-hi))`; lh+=` <span class="mono">${lo}</span><span class="ramp" style="background:${grad}"></span><span class="mono">${hi}</span> ${u}`; }
+  else if(S.mapmode==="edits") lh+=` <span class="ramp" style="background:linear-gradient(90deg,var(--mid),var(--edit))"></span> provinces touched by edits up to ${date(S.view)}`;
+  else lh+=` <span class="muted">country tint, state shade · seat: Spain</span>`;
+  if(S.nu) lh+=` · numbers${S.rnu?" relative to cursor":""}`;
+  lg.innerHTML=lh;
+  // status
+  const modeName = S.focus==="log"?"EDIT LOG": S.line?.type==="palette"?"PALETTE": S.line?.type==="prompt"?"INSERT": S.line?"COMMAND": S.hint?"HINT": S.mode==="visual"?({v:"VISUAL",V:"V-STATE",block:"V-BLOCK"}[S.vkind]):"NORMAL";
+  const cls = S.mode==="visual"&&!S.line?"visual":S.line||S.hint?"cmd":"";
+  const fv = S.field==="tariff"?V.tariff[p.id].toFixed(0)+" pp":V.tfp[p.id].toFixed(2)+" steps";
+  document.getElementById("status").innerHTML =
+    `<span class="mode ${cls}">${S.keymap==="std"&&modeName==="NORMAL"?"STANDARD":modeName}</span>`+
+    (S.recording?`<span class="rec">recording @${S.recording}</span>`:"")+
+    `<span>${esc(S.buf.join(""))}</span><span class="grow"></span>`+
+    `<span>%${esc(S.cur)}${b.dirty?" [+]":""} #${esc(S.alt)}</span>`+
+    `<span>${date(S.view)}${S.view<S.head?` / head ${date(S.head)}`:""}</span>`+
+    `<span>${S.running?"▶ "+S.speed:"❚❚ "+S.speed}</span>`+
+    `<span>${esc(p.name)} · ${S.field} ${fv}</span>`+
+    (S.sel.size?`<span>${S.sel.size} sel</span>`:"");
+  // cmdline
+  const cmd=document.getElementById("cmd");
+  if(S.line && S.line.type!=="palette"){ cmd.innerHTML=`${esc(S.line.label)}${esc(S.line.text)}<span class="caret"> </span>`; }
+  else cmd.textContent = S.msg || (S.keymap==="vim" ? "Type : for commands, / to search, f for hints, Ctrl-k for the palette." : "Arrows move, Shift extends, F2 edits, F5 runs, F10 steps, F1 or Ctrl Shift P for the palette.");
+  const msgs=document.getElementById("msgs"); msgs.hidden=!S.msgs; msgs.textContent=S.msgs||"";
+  // which-key
+  const wk=document.getElementById("whichkey"), wf=whichFor();
+  if(wf){ wk.hidden=false; wk.innerHTML=`<span style="grid-column:1/-1;color:var(--muted)">${esc(wf[0]==="\\"?"leader (Ctrl-Space)":wf[0])}</span>`+wf[1].map(([a,d])=>`<b>${esc(a)}</b><span>${esc(d)}</span>`).join(""); } else wk.hidden=true;
+  // palette
+  const pal=document.getElementById("palette");
+  if(S.line?.type==="palette"){ const items=paletteItems(S.line.text); pal.hidden=false; pal.innerHTML=`<div class="in">&gt; ${esc(S.line.text)}<span class="cmd caret" style="padding:0;border:0"> </span></div>`+items.map((it,i)=>`<div class="it${i===S.line.idx?" on":""}"><span>${esc(it.title)}</span><span class="ex">${it.ex?":"+esc(it.ex):""}</span><span>${it.keys?`<kbd>${esc(it.keys)}</kbd>`:""}</span></div>`).join(""); } else pal.hidden=true;
+  // help
+  const hc=document.getElementById("helpcard"); hc.hidden=!S.help;
+  if(S.help) hc.innerHTML = S.keymap==="vim" ? `<b>Demo keys (vim)</b> · any key closes<br><br>
+  <b>Move</b> h j k l, w b (state border), W B (country), gc capital, f + label, / search, n N, * #, H M L<br>
+  <b>Time</b> ) ( tick, } { event, ]y [y year, ]e [e edit, ]c [c divergence, G head, gg fork, 2008G, :2008-09, Space, + -, 3gs<br>
+  <b>Select</b> v V Ctrl-v, then motions or ip ap is as ic ac i/ ie; o swap; gv reselect<br>
+  <b>Edit</b> c{obj} then +3 / -2 / =10 / tfp +1, &gt;{obj} &lt;{obj}, Ctrl-a Ctrl-x, y{obj} p P, d{obj}, x, ., u, Ctrl-r<br>
+  <b>Registers, marks, macros</b> "a, ma 'a \`a '' Ctrl-o Ctrl-i, qa…q @a @@<br>
+  <b>Branches</b> :fork name, :ls, :b name, Ctrl-^, :diffsplit main, gmd<br>
+  <b>Views</b> gmp gmg gmw gmt gme gmd, gM, :set nu, :set rnu, tap Alt, gd K explain, gb blame, z+ z- zz zh zl zs zx<br>
+  <b>Panels</b> Ctrl-Space then l edit log (j k dd yy p Enter Esc), b branches, r registers, f fork<br>
+  <b>Ex</b> :where {query} tariff +3, :g/{query}/, :g/{query}/normal {keys}, :select, :tariff +2, :w, :marks, :reg, :jumps, :changes, :nmap \\t :tariff +1&lt;CR&gt;<br>
+  <b>Query</b> coastal inland edited capital, country=Spain, state=Andalucía, gdp&lt;16, tariff&gt;=5, near(Madrid,2), &amp; | ! ( )` :
+  `<b>Demo keys (standard)</b> · any key closes<br><br><b>Time</b> Space, 1–5, + -, F5 run, Shift F5 pause, F10 step, Shift F10 step back, F9 watch the value here, PgUp PgDn events, F8 next alert, Ctrl Home / Ctrl End, Ctrl G go to date<br><b>Map</b> arrows (Excel cell), Ctrl+arrows state border, Shift+arrows extend, Shift Space state, Ctrl Space country, Ctrl A all, WASD pan, Ctrl = - 0 zoom, Home capital, Alt+← →, Ctrl 1–9 save group, Alt 1–9 recall, Shift 1–6 map modes, M picker, Alt tap numbers, ; hints<br><b>Edit</b> F2, Enter, Esc, Ctrl Enter (fill selection), Ctrl D (fill from anchor), F4 repeat, ] [ step, Delete, Ctrl Z / Ctrl Y, Ctrl C / Q copy, Ctrl V paste, Ctrl Alt V paste special<br><b>Find</b> Ctrl Shift P or F1 palette, Ctrl P go to, Ctrl F, F3, Ctrl H edit by query, F12 explain, Shift F12 movers<br><b>Branches</b> Ctrl S write, Ctrl Shift S fork, Ctrl Tab alternate, Ctrl PgUp/PgDn cycle, Ctrl \\ diff, F6 or Ctrl Shift E edit log<br><br><span class="muted">Your browser keeps some of these (Ctrl Tab, Ctrl PgUp/PgDn, Ctrl 1–9, F11); the app gets them all.</span>`;
+  // side pane
+  for(const [id,t] of [["tab-insp","insp"],["tab-log","log"],["tab-br","br"],["tab-reg","reg"]]) document.getElementById(id).setAttribute("aria-selected",S.tab===t);
+  const pane=document.getElementById("pane");
+  if(S.tab==="insp"){
+    const res=resolvedTargets(S.cur).filter(r=>r.tg.includes(p.id));
+    const marks=Object.entries(S.marks).filter(([,m])=>m.pid===p.id).map(([k])=>k);
+    const dv = A ? `<dt>vs ${esc(S.alt)}</dt><dd>${(100*(V.gdp[p.id]/A.gdp[p.id]-1)).toFixed(2)}%</dd>` : "";
+    pane.innerHTML=`<h4>${esc(p.name)}</h4><div class="muted">${esc(p.state)} · ${esc(p.country)}${p.coastal?" · coastal":""} · hint <span class="mono">${HINTOF.get(p.id)}</span></div>
+    <dl class="kv"><dt>Date</dt><dd>${date(S.view)}</dd><dt>GDP per capita</dt><dd>${V.gdp[p.id].toFixed(2)}k</dd><dt>Wheat price</dt><dd>${V.wheat[p.id].toFixed(1)}</dd><dt>Tariff</dt><dd>${V.tariff[p.id].toFixed(0)} pp</dd><dt>TFP edits</dt><dd>${V.tfp[p.id].toFixed(2)}</dd>${dv}</dl>
+    <div class="eyebrow" style="margin-top:.6rem">Edits here (${esc(S.cur)})</div>${res.length?res.map(r=>`<div class="row"><span class="t">${date(r.e.tick)}</span><span>${r.e.field} ${r.e.op==="="?"=":r.e.val>=0?"+":""}${r.e.val} · ${esc(r.e.label)}</span></div>`).join(""):`<div class="muted">None. Try <kbd>Ctrl-a</kbd> or <kbd>cip</kbd>.</div>`}
+    ${marks.length?`<div class="eyebrow" style="margin-top:.6rem">Marks</div><div class="mono">${marks.join(" ")}</div>`:""}
+    <div class="eyebrow" style="margin-top:.6rem">Chronicle</div>${EVENTS.filter(e=>Math.abs(e[0]-S.view)<=18).map(e=>`<div class="row${e[0]===S.view?" cur":""}"><span>${date(e[0])}</span><span>${esc(e[1])}</span></div>`).join("")||`<div class="muted">Nothing within 18 months. <kbd>}</kbd> jumps to the next event.</div>`}`;
+  } else if(S.tab==="log"){
+    const own=new Set(b.edits.map(e=>e.id)); const eff=effective(b);
+    pane.innerHTML=`<div class="muted" style="margin-bottom:.4rem">${esc(S.cur)}: ${branchInfo(S.cur)}. ${S.focus==="log"?"<b>Focused</b>: j k, dd, yy, p, Enter, Esc.":"<kbd>\\l</kbd> focuses this list."}</div>`+
+      eff.map(e=>{ const i=b.edits.findIndex(x=>x.id===e.id); const mine=own.has(e.id); return `<div class="row${mine?"":" inh"}${S.focus==="log"&&mine&&i===S.logIdx?" cur":""}"><span class="t">${date(e.tick)}</span><span>${e.field} ${e.op==="="?"=":e.val>=0?"+":""}${e.val} · ${esc(e.label)}${mine?"":" · from "+esc(b.parent)}</span></div>`; }).join("") || `<div class="muted">No edits on this branch yet.</div>`;
+  } else if(S.tab==="br"){
+    pane.innerHTML=[...branches.values()].map(x=>`<div class="row${x.name===S.cur?" cur":""}"><span class="mono">${x.name===S.cur?"%":x.name===S.alt?"#":" "} ${esc(x.name)}</span><span>${branchInfo(x.name)}${x.dirty?" [+]":""}</span></div>`).join("")+`<p class="muted">:b name switches, Ctrl-^ flips to the alternate, :fork name forks at the view tick, :diffsplit name compares.</p>`;
+  } else {
+    const rs=Object.entries(S.regs).sort();
+    pane.innerHTML=(rs.length?rs.map(([k,r])=>`<div class="row"><span class="mono">"${esc(k)} ${r.type}</span><span>${esc(regText(r))}</span></div>`).join(""):`<div class="muted">Empty. <kbd>yip</kbd> yanks values, <kbd>qa…q</kbd> records a macro.</div>`)+
+    `<div class="row"><span class="mono">"% text</span><span>${esc(S.cur)}</span></div><div class="row"><span class="mono">"# text</span><span>${esc(S.alt)}</span></div>`;
+  }
+}
+window.addEventListener("resize",()=>render());
+const mq=matchMedia("(prefers-color-scheme: dark)"); mq.addEventListener?.("change",()=>{ tokens(); render(); });
+new MutationObserver(()=>{ tokens(); render(); }).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+document.fonts?.ready.then(()=>render());
+buildTry(); tokens(); render();
+window.__ceteris={S,feed,render,P,ex};
+</script>

@@ -1,0 +1,409 @@
+<title>Identity Change in Ceteris</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single atlas-yearbook column, tables and figures as plates, sober throughout. */
+:root {
+  --paper: #f2f4f3; --sheet: #fbfcfb; --ink: #1d2a2e; --muted: #5b6a6e; --rule: #cfd8d7;
+  --accent: #2f6672; --accent-soft: #dbe8ea; --warn: #8a5a2b; --warn-soft: #f1e6da;
+  --s-h: #8e6c3a; --s-b: #6f9aa3; --s-d: #3a4f73;
+  --display: "Spectral", Georgia, "Times New Roman", serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #11181b; --sheet: #172025; --ink: #dfe7e8; --muted: #93a3a6; --rule: #2c3a3f;
+  --accent: #7fb4bf; --accent-soft: #1f343a; --warn: #d4a575; --warn-soft: #33281d;
+  --s-h: #c19a5f; --s-b: #79a8b1; --s-d: #8ea2cf; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --paper: #11181b; --sheet: #172025; --ink: #dfe7e8; --muted: #93a3a6; --rule: #2c3a3f;
+  --accent: #7fb4bf; --accent-soft: #1f343a; --warn: #d4a575; --warn-soft: #33281d;
+  --s-h: #c19a5f; --s-b: #79a8b1; --s-d: #8ea2cf; color-scheme: dark }
+body { background: var(--paper); color: var(--ink); font: 15px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; }
+main { max-width: 860px; margin: 0 auto; display: grid; gap: 40px; }
+section { display: grid; gap: 14px; min-width: 0; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 2.3rem; }
+h2 { font-size: 1.55rem; border-top: 1px solid var(--rule); padding-top: 22px; }
+h3 { font-size: 1.15rem; margin-top: 6px; }
+p, ul, ol { margin: 0; max-width: 68ch; }
+ul, ol { padding-left: 1.2em; display: grid; gap: 4px; }
+.eyebrow { font: 500 0.72rem/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-family: var(--display); font-size: 1.18rem; line-height: 1.5; }
+.meta { color: var(--muted); font-size: 0.85rem; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+.plate { background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 16px; min-width: 0; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th, td { text-align: left; vertical-align: top; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--rule); }
+th { font: 500 0.72rem/1.3 var(--mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+td:first-child { font-weight: 500; white-space: nowrap; }
+.pill { display: inline-block; font: 500 0.7rem/1 var(--mono); padding: 4px 6px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.pill.w { background: var(--warn-soft); color: var(--warn); }
+.eq { font-family: var(--mono); font-size: 0.86rem; background: var(--sheet); border-left: 2px solid var(--accent); padding: 10px 14px; overflow-x: auto; white-space: pre; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.note { border-left: 2px solid var(--warn); padding: 4px 0 4px 14px; color: var(--ink); }
+.answer { display: grid; gap: 10px; }
+.answer dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.answer dt { font: 500 0.78rem/1.6 var(--mono); color: var(--accent); }
+.answer dd { margin: 0; min-width: 0; }
+@media (max-width: 560px) { .answer dl { grid-template-columns: 1fr; } .answer dd { margin-bottom: 8px; } td:first-child { white-space: normal; } }
+.sim { display: grid; gap: 12px; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; }
+.controls label { display: grid; gap: 4px; font-size: 0.82rem; color: var(--muted); }
+.controls input[type=range] { width: 170px; }
+.controls select { font: inherit; font-size: 0.85rem; padding: 3px 4px; background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px; }
+.check { display: flex !important; grid-auto-flow: column; align-items: center; gap: 6px; }
+canvas { width: 100%; height: 220px; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.8rem; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+svg text { fill: var(--ink); font-family: var(--body); font-size: 12px; }
+svg .m { fill: var(--muted); font-size: 11px; }
+svg .box { fill: var(--sheet); stroke: var(--rule); }
+svg .hl { fill: var(--accent-soft); stroke: var(--accent); }
+svg .wb { fill: var(--warn-soft); stroke: var(--warn); }
+svg .ln { stroke: var(--muted); fill: none; stroke-width: 1.2; }
+</style>
+
+<main>
+<header style="display:grid;gap:10px">
+  <span class="eyebrow">Design note · population and politics · 28 October 2026</span>
+  <h1>Identity change in Ceteris</h1>
+  <p class="lede">How culture, language and religion change over time, how states push them, and how mass atrocities arise and what they leave behind. Grounded in DESIGN 6.4, ADRs 0055, 0058, 0154 and 0189, and in the demographic and genocide-studies literature.</p>
+  <p class="meta">Status: proposal, no ADR yet. Proposed numbers 0223 to 0226 (main is through 0222, PR #59 holds 0208 and 0209).</p>
+</header>
+
+<section class="answer">
+  <h2>Short answer</h2>
+  <p>Treat identity as slow-moving pop state with four separate engines, each measured against data. Paradox games spend a currency to flip a province; Ceteris should move shares at rates people have actually measured, so most change comes from births, deaths and moves rather than conversion.</p>
+  <dl>
+    <dt>Composition</dt><dd>Groups grow at different rates through fertility, mortality and migration. This is most of the observed change in religion since 2010, and it comes free in 1.0 once P4 keys pops by ethnic group.</dd>
+    <dt>Language</dt><dd>Each pop holds a repertoire per heritage language: monolingual, bilingual, or shifted. Children inherit with a probability set by status, schooling and local share. Adults add the dominant language for wages. The Abrams-Strogatz model is the limiting case.</dd>
+    <dt>Religion</dt><dd>Affiliation shares plus a religiosity intensity. Intergenerational retention, adult switching (ADR 0058) and cohort secularization (ADR 0055) act on them. Calibrated on Wittgenstein Centre and Pew estimates.</dd>
+    <dt>Boundaries</dt><dd>The EPR group list is fixed, but people can re-identify between existing groups, and identity salience (0058) moves with threat, elections and cueing.</dd>
+    <dt>Atrocities</dt><dd>Three layers: structural risk (Harff), wartime escalation and restraints (Straus, Valentino), then the act as an order (0154). Consequences run through existing modules. The engine records acts; legal labels come from courts or cited bodies.</dd>
+  </dl>
+  <p><span class="pill">1.0</span> composition only, shares within pops frozen at 2000 (ADR 0207). <span class="pill">2.0-alpha</span> language, religion, boundaries, policy levers, atrocity risk. <span class="pill">2.0-beta</span> atrocity orders, expulsion, consequences. <span class="pill">3.0</span> new groups forming, pre-2000 history as live state.</p>
+</section>
+
+<section>
+  <h2>What the specs already say</h2>
+  <div class="plate scroll">
+  <table>
+    <tr><th>Source</th><th>What it gives</th><th>Gap this note fills</th></tr>
+    <tr><td>DESIGN 6.1</td><td>Pop key includes ethnic group (GeoEPR). Religion and language are share vectors inside pops.</td><td>No definition of a language share or of bilingualism.</td></tr>
+    <tr><td>DESIGN 6.4</td><td>EPR status, horizontal inequality to grievance, Bisin-Verdier transmission for language and religiosity.</td><td>Bisin-Verdier is named but has no equations, levers or targets.</td></tr>
+    <tr><td>ADR 0055</td><td>Secular and emancipative value scores per age band, formed at 15-25.</td><td>Covers continuous culture drift; nothing to add.</td></tr>
+    <tr><td>ADR 0058</td><td>Conversion hazard (switch S20) and identity salience vector.</td><td>No transmission side, no religiosity, data source unresolved (Pew terms).</td></tr>
+    <tr><td>ADR 0154</td><td>Atrocities and banned weapons are player and AI orders with full consequences (decided).</td><td>Says the AI acts when payoff exceeds cost. Nothing on risk factors, onset rates, or the slow consequences.</td></tr>
+    <tr><td>ADR 0189</td><td>Organizations grow from identity and ideology, free riding limited by salience.</td><td>Churches, language movements and militias need the identity state to recruit from.</td></tr>
+    <tr><td>ADRs 0191-0194</td><td>Wellbeing reference group is region and ethnic group; ethnic tie in vote choice.</td><td>Need the group and salience fields this note defines.</td></tr>
+    <tr><td>ADR 0141</td><td>Never ethnicity or religion as a visual skin.</td><td>Holds. Identity appears only as statistics and map modes.</td></tr>
+    <tr><td>ADR 0207</td><td>P4 keeps culture and religion at 2000 shares until P6.</td><td>Holds. This note is P6 and P7 work.</td></tr>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Identity state per pop</h2>
+  <p>The pop key stays (province, ethnic group, education, labour status). Everything else is a small vector inside the pop, updated yearly except salience, which updates monthly.</p>
+  <div class="plate scroll">
+  <svg viewBox="0 0 780 250" width="780" height="250" role="img" aria-label="Diagram of identity fields per pop and the processes that move them">
+    <rect class="hl" x="270" y="20" width="240" height="210" rx="4"/>
+    <text x="290" y="46" style="font-weight:600">Pop (province, group, edu, status)</text>
+    <text x="290" y="76">Age-sex bands</text><text class="m" x="290" y="92">composition engine</text>
+    <text x="290" y="118">Language repertoire</text><text class="m" x="290" y="134">per heritage language: H, HD, D</text>
+    <text x="290" y="160">Religion shares + religiosity</text><text class="m" x="290" y="176">affiliation vector, intensity 0-1</text>
+    <text x="290" y="202">Values (0055), salience (0058)</text><text class="m" x="290" y="218">continuous, existing ADRs</text>
+    <rect class="box" x="10" y="30" width="220" height="56" rx="4"/><text x="22" y="54">Births, deaths, moves</text><text class="m" x="22" y="72">6.2, 6.5, 0032</text>
+    <rect class="box" x="10" y="100" width="220" height="56" rx="4"/><text x="22" y="124">Transmission at birth</text><text class="m" x="22" y="142">status, schooling, homogamy</text>
+    <rect class="box" x="10" y="170" width="220" height="56" rx="4"/><text x="22" y="194">Adult change</text><text class="m" x="22" y="212">acquisition, switching, attrition</text>
+    <path class="ln" d="M230 58 H270"/><path class="ln" d="M230 128 H270"/><path class="ln" d="M230 198 H270"/>
+    <rect class="box" x="550" y="30" width="220" height="56" rx="4"/><text x="562" y="54">State levers</text><text class="m" x="562" y="72">schooling medium, official status, bans</text>
+    <rect class="box" x="550" y="100" width="220" height="56" rx="4"/><text x="562" y="124">Re-identification</text><text class="m" x="562" y="142">flows between existing groups</text>
+    <rect class="wb" x="550" y="170" width="220" height="56" rx="4"/><text x="562" y="194">Atrocity and expulsion</text><text class="m" x="562" y="212">deaths, displacement, transfers</text>
+    <path class="ln" d="M550 58 H510"/><path class="ln" d="M550 128 H510"/><path class="ln" d="M550 198 H510"/>
+  </svg>
+  </div>
+  <p>Cost: about 30 floats per pop and a yearly pass over roughly 25,000 (province, group) cells. Under 0.2 ms per monthly tick amortized, against a 35 ms budget.</p>
+</section>
+
+<section>
+  <h2>1. Composition: the demographic engine</h2>
+  <p>Most identity change in the 2000-2025 window is demographic, not conversion. Pew's 2025 study of 2010-2020 finds Muslims grew fastest mainly through a young age structure and higher fertility, while Christianity's share fell mainly through people leaving it in a few regions. Hout, Greeley and Wilde (2001) found that fertility differences explain most of the long shift from mainline to conservative Protestant churches in the United States.</p>
+  <p>Ceteris gets this for free once P4 keys pops by ethnic group: group-specific fertility (through education, income, urbanization in 6.2), mortality, and migration (6.5) move the national mix while shares inside each pop stay fixed. That is the only identity dynamic in 1.0, and it is already in the plan.</p>
+  <p>One data change is worth making in P4: initialize religion shares from the Wittgenstein Centre religion-by-age-and-sex estimates (CC BY 4.0) instead of the CIA Factbook's national totals, so that age structure differences between religious groups are present from the start.</p>
+</section>
+
+<section>
+  <h2>2. Language: repertoires and shift</h2>
+  <p>A share vector over all languages cannot represent the usual path of shift, which runs through bilingualism over two or three generations (Fishman 1991; Alba et al. 2002 find Spanish rarely survives into the third generation in the United States). So each pop carries, for its heritage language H and the dominant language D of its state, three shares: H only, bilingual HD, and D only. Groups with no heritage language distinct from D skip the field. Languages come from CLDR territory data and Glottolog codes.</p>
+  <h3>Transmission at birth</h3>
+  <div class="eq">P(child acquires H) = h + b · τ
+τ = σ( k0 + k_s (s_H − s_D) + k_x logit(x_H) + k_e school_H + k_m homogamy + k_f backlash )</div>
+  <p>Here s is language status (official use, share of income earned in it, media), x_H is the local share of H speakers in the province, school_H is 1 when H is a medium of instruction, homogamy is the in-group marriage rate, and backlash is the salience term below. The child acquires D from schooling and exposure.</p>
+  <h3>Adult change</h3>
+  <div class="eq">H → HD : rate α · (1 − x_H) · wage premium of D        (Chiswick-Miller)
+HD → D : rate β · (1 − s_H) · (1 − x_H)^a                 (attrition)</div>
+  <p>With no bilinguals and status fixed, the population share of H obeys Abrams and Strogatz (2003), <span class="mono">dx/dt = c(1−x)x^a s − c x(1−x)^a(1−s)</span>, with a ≈ 1.31 across 42 languages. That model always ends in extinction of one language. The bilingual extension (Mira and Paredes 2005; Minett and Wang 2008) allows stable coexistence when status is high enough or the state supports the minority language, which matches Catalan, Welsh and Basque in the data.</p>
+
+  <div class="plate sim">
+    <span class="eyebrow">Illustrative, uncalibrated parameters</span>
+    <div class="controls">
+      <label for="sH">Status of heritage language <span id="sHv" class="mono">0.35</span><input type="range" id="sH" min="0" max="1" step="0.05" value="0.35"></label>
+      <label for="school">Schooling medium<select id="school"><option value="D">Dominant only</option><option value="B" selected>Bilingual</option><option value="H">Heritage</option></select></label>
+      <label for="ban" class="check"><input type="checkbox" id="ban"> Ban heritage language in public</label>
+      <label for="bk" class="check"><input type="checkbox" id="bk" checked> Backlash term on</label>
+    </div>
+    <canvas id="cv" width="800" height="220" aria-label="Stacked shares of heritage-only, bilingual and dominant-only speakers over 100 years"></canvas>
+    <div class="legend"><span><i style="background:var(--s-h)"></i>Heritage only</span><span><i style="background:var(--s-b)"></i>Bilingual</span><span><i style="background:var(--s-d)"></i>Dominant only</span><span id="out" class="mono"></span></div>
+  </div>
+
+  <h3>Calibration and validation</h3>
+  <p>Census and survey series with repeated language questions: Welsh (2001, 2011, 2021), Irish, Basque (sociolinguistic surveys 1991-2021, where schooling raised young speakers), Catalan, Quebec French, Russian in Latvia and Estonia, Kazakh in Kazakhstan, Spanish in the US ACS by generation, and Ukraine. Ukraine is the strongest in-window test: surveys show adults switching everyday use toward Ukrainian after 2014 and much faster after 2022, a salience-driven shift that the bilingual stock makes possible.</p>
+</section>
+
+<section>
+  <h2>3. Assimilation policy and backlash</h2>
+  <p>States move these rates through levers that already exist as policy variables or are cheap to add. The sign of each effect is not always the obvious one, which is why they belong in the lab.</p>
+  <div class="plate scroll">
+  <table>
+    <tr><th>Lever</th><th>Enters</th><th>Evidence</th></tr>
+    <tr><td>Medium of instruction</td><td>school_H, child acquisition of D</td><td>Basque and Catalan revival; Bazzi et al. (2019) on Indonesian transmigration and national-language adoption.</td></tr>
+    <tr><td>Official status, media quotas</td><td>s_H, s_D</td><td>Laitin (1998): Russian speakers in post-Soviet states as a tipping game on expected returns.</td></tr>
+    <tr><td>Citizenship and naturalization</td><td>wage premium, salience</td><td>Baltic citizenship laws; Hainmueller et al. on naturalization and integration in Switzerland.</td></tr>
+    <tr><td>Bans on language or religion</td><td>s_H falls, backlash rises</td><td>Fouka (2020): US state bans on German schooling after 1917 raised German identification among affected children.</td></tr>
+    <tr><td>Autonomy, mother-tongue rights</td><td>s_H, grievance (6.4)</td><td>Cederman et al.: inclusion lowers conflict onset.</td></tr>
+    <tr><td>Forced assimilation (internment, child removal)</td><td>transmission cut, salience, legal exposure</td><td>Treated with atrocities below; consequences include salience that lasts generations.</td></tr>
+  </table>
+  </div>
+  <p>Backlash is a single term: when a policy targets a group's identity, that group's salience (0058) rises and raises τ, so coercion can slow the shift it is meant to speed. Its weight is a register parameter with Fouka's estimate as the prior and a lane that sets it to zero.</p>
+</section>
+
+<section>
+  <h2>4. Religion: transmission, switching, secularization</h2>
+  <p>Each pop carries affiliation shares and a religiosity intensity between 0 and 1. Separating the two follows Voas (2009): much of European secularization runs through "fuzzy fidelity", affiliated people whose practice fades before their children stop affiliating.</p>
+  <ul>
+    <li><b>Transmission.</b> Children take parents' affiliation with a retention probability that rises with parental religiosity and religious homogamy. Voas and Crockett (2005) find two religious parents pass on religiosity about half the time and one parent about a quarter.</li>
+    <li><b>Adult switching.</b> The 0058 hazard, raised by rural-to-urban migration and weak public services (Pentecostal growth in Africa and Latin America), stays behind switch S20.</li>
+    <li><b>Secularization.</b> Religiosity of each cohort forms from existential security through the 0055 value scores (Norris and Inglehart 2004), then drifts slowly. Voas and Chaves (2016) show US decline is cohort-driven, which this reproduces.</li>
+    <li><b>State levers.</b> State religion, religious education, restrictions on minority worship (Pew Government Restrictions Index for calibration), and coerced conversion, which counts as a forced-assimilation act.</li>
+  </ul>
+  <p>Targets: Wittgenstein Centre religion estimates and projections (CC BY 4.0, confirmed), Pew 2010-2020 change by country, European Social Survey for attendance by cohort, Latinobarómetro for Protestant growth.</p>
+</section>
+
+<section>
+  <h2>5. Group boundaries and salience</h2>
+  <p>Constructivist work shows that which identity matters, and sometimes which group people report, shifts with politics: Posner (2005) on Zambia, where language groups mattered nationally and tribes locally; Eifert, Miguel and Posner (2010) on ethnic identification rising near competitive elections; Nagel (1995) on American Indian ethnic renewal in the US census. Ukraine 2001-2022 again shows self-identification moving between existing groups.</p>
+  <p>Proposal: keep the EPR group list fixed for the run and allow re-identification flows between existing groups at a slow rate driven by salience, status gaps and intermarriage. New groups forming (CK3-style divergence) needs a timescale and data the 2000-2100 window does not have, so it waits for the deep-history work in 3.0 (ADR 0131). Continuous culture drift is already ADR 0055.</p>
+</section>
+
+<section>
+  <h2>6. Mass atrocities</h2>
+  <p class="note">This section is about representing the causes, warning signs and consequences of the worst things states and armed groups do, at the fidelity a researcher would need. It is not a mechanic to win with. ADR 0154 already decided that such acts are orders open to player and AI with full consequences; this proposal adds the structural model behind AI behaviour and the slow consequences that 0154 leaves out.</p>
+
+  <h3>Three layers</h3>
+  <div class="plate scroll">
+  <svg viewBox="0 0 780 170" width="780" height="170" role="img" aria-label="Three-layer atrocity model: structural risk, escalation and restraint, act and consequences">
+    <rect class="box" x="10" y="20" width="230" height="130" rx="4"/>
+    <text x="24" y="44" style="font-weight:600">Structural risk</text>
+    <text class="m" x="24" y="66">Harff 2003, Early Warning Project</text>
+    <text class="m" x="24" y="86">annual hazard per state × group</text>
+    <text class="m" x="24" y="106">from existing state only</text>
+    <rect class="box" x="275" y="20" width="230" height="130" rx="4"/>
+    <text x="289" y="44" style="font-weight:600">Escalation and restraint</text>
+    <text class="m" x="289" y="66">Straus 2015, Valentino 2004</text>
+    <text class="m" x="289" y="86">threat in war, exclusionary narrative,</text>
+    <text class="m" x="289" y="106">insurgency drawing on the group,</text>
+    <text class="m" x="289" y="126">cross-cutting ties, outside linkage</text>
+    <rect class="wb" x="540" y="20" width="230" height="130" rx="4"/>
+    <text x="554" y="44" style="font-weight:600">Act and consequences</text>
+    <text class="m" x="554" y="66">order (0154): kill, expel, intern,</text>
+    <text class="m" x="554" y="86">forced assimilation</text>
+    <text class="m" x="554" y="106">effects through demography, economy,</text>
+    <text class="m" x="554" y="126">trust, salience, courts, sanctions</text>
+    <path class="ln" d="M240 85 H275"/><path class="ln" d="M505 85 H540"/>
+  </svg>
+  </div>
+
+  <h3>Structural risk from state Ceteris already has</h3>
+  <div class="plate scroll">
+  <table>
+    <tr><th>Risk factor (literature)</th><th>Ceteris source</th></tr>
+    <tr><td>Prior genocide or politicide</td><td>Initial state from 1945-1999 episode lists; strongest single predictor in Harff (2003)</td></tr>
+    <tr><td>Political upheaval, war</td><td>Civil and interstate war (11.6, P7), irregular transitions (10.8)</td></tr>
+    <tr><td>Ruling elite from an ethnic minority</td><td>EPR status of the group holding the executive</td></tr>
+    <tr><td>Exclusionary ideology</td><td>Platform of ruling party and organizations (10.5, 0189); V-Party nationalism items</td></tr>
+    <tr><td>Autocracy</td><td>V-Dem institution vector (10.1)</td></tr>
+    <tr><td>Low trade openness</td><td>Trade module (8.3)</td></tr>
+    <tr><td>Discrimination of the target group</td><td>EPR status "discriminated", horizontal inequality (6.4)</td></tr>
+    <tr><td>Insurgency supported by the group</td><td>Zones of control and recruitment by group (0154, 0069)</td></tr>
+    <tr><td>State-controlled media cueing</td><td>Information environment (0065), salience cueing (0058)</td></tr>
+    <tr><td>Restraints</td><td>Intermarriage rate, group share in the army, aid and trade dependence on democracies</td></tr>
+  </table>
+  </div>
+  <p>Onset is a logit hazard per (state, target group, year), estimated on episode data the way ADR 0110 does conflict. Once begun, intensity follows a persistence process that ends through military outcome, intervention, regime change or exhaustion, calibrated on UCDP one-sided violence durations. The Early Warning Project publishes annual out-of-sample risk rankings; matching or beating their ranking accuracy is the forecast test, scored like the other benchmarks in ADR 0052.</p>
+
+  <h3>Consequences, through modules that already exist</h3>
+  <ul>
+    <li><b>Demography.</b> Deaths by age and sex profile per act type, displacement into the 6.5 hazard flow, and lost cohorts that echo in fertility for decades.</li>
+    <li><b>Economy.</b> Assets of the target group transfer to the perpetrator state or group (an ownership edit, 0115 and 0201), and their human capital leaves. Acemoglu, Hassan and Robinson (2011) find Russian cities that lost their Jewish middle class in the Holocaust grew more slowly and voted differently decades later.</li>
+    <li><b>Trust and identity.</b> Rohner, Thoenig and Zilibotti (2013) find ethnic violence in Uganda lowered trust and raised ethnic identity. Lupu and Peisakhin (2017) find descendants of Crimean Tatars deported in 1944 still hold stronger group identity three generations later. These set generalized trust (0056) and salience (0058) for survivors and their children.</li>
+    <li><b>Politics and law.</b> Legitimacy at home and abroad, sanctions and alliance hazards, referrals and cases in the courts module (0072), and intervention, which since 2000 has been rare.</li>
+    <li><b>Territory.</b> Expulsion changes who lives where. Settlement weights update from the pops, so the map of groups changes without any separate edit.</li>
+  </ul>
+
+  <h3>Calibration cases in the 2000-2025 window</h3>
+  <div class="plate scroll">
+  <table>
+    <tr><th>Case</th><th>Acts in the record</th><th>Legal or official status (cited, not decided by Ceteris)</th></tr>
+    <tr><td>Darfur 2003-2005</td><td>Mass killing, expulsion</td><td>ICC warrants for al-Bashir include genocide (2010)</td></tr>
+    <tr><td>Sri Lanka 2009</td><td>Civilian deaths in the final offensive</td><td>UN Panel of Experts report (2011)</td></tr>
+    <tr><td>Yazidis, Iraq 2014</td><td>Mass killing, enslavement, forced conversion</td><td>UN Commission of Inquiry found genocide (2016)</td></tr>
+    <tr><td>Rohingya, Myanmar 2017</td><td>Mass killing, expulsion of over 700,000</td><td>ICJ case The Gambia v. Myanmar pending</td></tr>
+    <tr><td>Xinjiang 2017-</td><td>Mass internment, forced assimilation, birth suppression</td><td>OHCHR (2022): may constitute crimes against humanity</td></tr>
+    <tr><td>Tigray 2020-2022</td><td>Mass killing, starvation, expulsions</td><td>UN human rights expert commission reports</td></tr>
+    <tr><td>Ukraine 2022-</td><td>Deportation of children</td><td>ICC warrants (2023)</td></tr>
+    <tr><td>Nagorno-Karabakh 2023</td><td>Flight of over 100,000 Armenians</td><td>Contested characterization</td></tr>
+    <tr><td>Gaza 2023-</td><td>Mass civilian deaths, displacement</td><td>ICJ case South Africa v. Israel pending; provisional measures 2024</td></tr>
+    <tr><td>Sudan 2023-</td><td>Mass killing in West and North Darfur</td><td>US genocide determination (January 2025)</td></tr>
+  </table>
+  </div>
+
+  <h3>Presentation rules</h3>
+  <ul>
+    <li>The engine records acts, counts and evidence of intent. It never applies the word genocide itself; legal labels come from simulated court outcomes or, for history, from the cited body, the same stance as ADR 0222 on disputed borders.</li>
+    <li>No score, objective, achievement, replay hook or music cue ever rewards or highlights an atrocity. The run score (0132, 0129) counts the deaths against the perpetrator.</li>
+    <li>An atrocity order shows its expected cost screen before it is confirmed, like other high-cost orders.</li>
+    <li>A read-only atrocity risk map mode shows the structural hazard by state and group, with its factors, as a warning-signs lens. The lab question it serves is prevention: which levers lower risk.</li>
+    <li>Identity is shown as statistics and map modes only (0141). Groups keep their data names.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>How Paradox games handle this</h2>
+  <div class="plate scroll">
+  <table>
+    <tr><th>Game</th><th>Culture and language</th><th>Religion</th><th>Atrocity</th></tr>
+    <tr><td>EU4</td><td>Province culture converted by spending diplomatic power</td><td>Missionaries convert provinces</td><td>Absent</td></tr>
+    <tr><td>Victoria 2</td><td>Pops assimilate to primary or accepted cultures at modified rates</td><td>Pops convert to state religion</td><td>Absent</td></tr>
+    <tr><td>Victoria 3</td><td>Pop cultures with acceptance set by laws and shared traits; citizenship laws from ethnostate to multicultural</td><td>Pop conversion, religion laws</td><td>Absent; discrimination via laws and migration</td></tr>
+    <tr><td>Europa Universalis V</td><td>Pop-level culture with assimilation over time</td><td>Pop-level religion with conversion</td><td>Absent</td></tr>
+    <tr><td>Crusader Kings III</td><td>County culture promotion; cultures diverge and hybridize</td><td>Faith creation, heresy, conversion</td><td>Absent</td></tr>
+    <tr><td>Hearts of Iron IV</td><td>No pop identity; occupation compliance and resistance</td><td>None</td><td>Absent</td></tr>
+    <tr><td>Stellaris</td><td>Species rights</td><td>Ethics</td><td>Purge policies on fictional species, with diplomatic penalties</td></tr>
+  </table>
+  </div>
+  <p>The pattern: change is a player expenditure or a uniform rate, with no bilingual stage, no generational transmission, no backlash and no measured rates. The historical titles leave atrocities out; only Stellaris includes them, against fictional species. Ceteris has already chosen inclusion for real groups (0154), so its justification has to be fidelity: calibrated causes, rates and consequences, plainly presented.</p>
+</section>
+
+<section>
+  <h2>Data</h2>
+  <div class="plate scroll">
+  <table>
+    <tr><th>Source</th><th>Use</th><th>Licence</th></tr>
+    <tr><td>Wittgenstein Centre religion</td><td>Religion by age and sex, initial shares and projections</td><td><span class="pill">CC BY 4.0</span></td></tr>
+    <tr><td>EPR Core and GeoEPR 2021</td><td>Groups, status, settlement areas</td><td><span class="pill w">CC BY-NC-SA</span> accepted</td></tr>
+    <tr><td>Unicode CLDR territory data</td><td>Language speaker shares by country, instead of Ethnologue</td><td><span class="pill">Unicode v3</span></td></tr>
+    <tr><td>Glottolog</td><td>Language codes and family distance for moving costs</td><td><span class="pill">CC BY 4.0</span></td></tr>
+    <tr><td>IPUMS International</td><td>Census language, religion, intermarriage microdata</td><td><span class="pill w">fetch only</span></td></tr>
+    <tr><td>Pew religion estimates, restrictions index</td><td>2010-2020 validation, policy calibration</td><td><span class="pill w">terms to audit</span></td></tr>
+    <tr><td>UCDP one-sided violence</td><td>Onset, intensity, duration</td><td><span class="pill">CC BY 4.0</span></td></tr>
+    <tr><td>PITF genocide and politicide list, EWP mass killing data</td><td>Prior-episode state at 2000, onset model, forecast benchmark</td><td><span class="pill w">terms to audit</span></td></tr>
+    <tr><td>Ethnologue, World Religion Database, Joshua Project</td><td>Not used</td><td><span class="pill w">subscription or no licence</span></td></tr>
+  </table>
+  </div>
+  <p class="meta">sources.toml still lists EPR Core 2021 as "no licence stated"; ETH confirmed CC BY-NC-SA on 27 October, so that entry needs updating when the ADRs land.</p>
+</section>
+
+<section>
+  <h2>Phasing and cost</h2>
+  <div class="plate scroll">
+  <table>
+    <tr><th>Phase</th><th>Scope</th><th>New parameters</th></tr>
+    <tr><td><span class="pill">1.0 · P4</span></td><td>Composition through group-specific demography and migration; Wittgenstein religion initial shares; fields reserved, no dynamics</td><td>0</td></tr>
+    <tr><td><span class="pill">1.x</span></td><td>Read-only identity map modes (language, religion, group status)</td><td>0</td></tr>
+    <tr><td><span class="pill">2.0-alpha · P6</span></td><td>Language repertoires, religion transmission and religiosity, re-identification, policy levers with backlash, atrocity risk and its map mode</td><td>about 25</td></tr>
+    <tr><td><span class="pill">2.0-beta · P7</span></td><td>Atrocity orders (0154 stage W5), expulsion, consequences, court links</td><td>about 10</td></tr>
+    <tr><td><span class="pill">3.0</span></td><td>New groups forming; pre-2000 episodes as live history (0131)</td><td>open</td></tr>
+  </table>
+  </div>
+  <p>Every new mechanism stays off by default until it passes the ablation test (15.7). The register gains about 35 entries, each with a literature prior.</p>
+</section>
+
+<section>
+  <h2>Proposed ADRs</h2>
+  <ol>
+    <li><b>0223 Language repertoires and shift.</b> Fields, transmission, adult change, levers, CLDR and Glottolog. P6.</li>
+    <li><b>0224 Religious change.</b> Affiliation plus religiosity, transmission, Wittgenstein data; amends 0058. P4 data, P6 dynamics.</li>
+    <li><b>0225 Assimilation policy, backlash and re-identification.</b> Levers, the salience backlash term, flows between EPR groups. P6.</li>
+    <li><b>0226 Atrocity risk, onset and consequences.</b> Three layers, calibrated hazard, presentation rules, cases; amends 0154. P6 risk, P7 acts.</li>
+  </ol>
+  <p class="meta">Open decisions are posed as question cards in the thread.</p>
+</section>
+
+<section>
+  <h2>References</h2>
+  <p class="meta">Abrams and Strogatz 2003 (Nature); Acemoglu, Hassan and Robinson 2011 (QJE); Alba et al. 2002 (Demography); Bazzi, Gaduh, Rothenberg and Wong 2019 (AER); Bisin and Verdier 2001 (JET); Cederman, Gleditsch and Buhaug 2013; Chiswick and Miller 2007; Eifert, Miguel and Posner 2010 (AJPS); Fishman 1991; Fouka 2020 (REStud); Harff 2003 (APSR); Hout, Greeley and Wilde 2001 (AJS); Laitin 1998; Lupu and Peisakhin 2017 (AJPS); Minett and Wang 2008; Mira and Paredes 2005; Nagel 1995 (ASR); Norris and Inglehart 2004; Pew Research Center 2025, How the Global Religious Landscape Changed 2010-2020; Posner 2005; Rohner, Thoenig and Zilibotti 2013 (JEEA); Straus 2015, Making and Unmaking Nations; Valentino 2004, Final Solutions; Valentino, Huth and Balch-Lindsay 2004 (IO); Voas 2009 (ESR); Voas and Chaves 2016 (AJS); Voas and Crockett 2005 (Sociology).</p>
+</section>
+</main>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const cv = $("cv"), ctx = cv.getContext("2d");
+  const sig = z => 1 / (1 + Math.exp(-z));
+  function run() {
+    let sH = +$("sH").value;
+    const school = $("school").value, ban = $("ban").checked, bk = $("bk").checked;
+    $("sHv").textContent = sH.toFixed(2);
+    if (ban) sH = Math.min(sH, 0.05);
+    const schH = school === "H" ? 1 : school === "B" ? 0.5 : 0;
+    const schD = school === "D" ? 1 : school === "B" ? 0.8 : 0.4;
+    let h = 0.3, b = 0.4, d = 0.3, sal = 0;
+    const rows = [[h, b, d]];
+    for (let t = 1; t <= 100; t++) {
+      const x = h + b;
+      sal += 0.1 * ((ban ? 1 : 0) - sal);
+      const lx = Math.log(Math.max(x, 1e-4) / Math.max(1 - x, 1e-4));
+      const tau = sig(-0.6 + 2.2 * (sH - 0.5) + 0.5 * lx + 1.6 * schH + (bk ? 2.0 * sal : 0));
+      const kH = h + b * tau, kD = Math.min(1, d + b + h * schD);
+      let ch = kH * (1 - kD), cb = kH * kD, cd = 1 - ch - cb;
+      const mu = 1 / 30;
+      h = (1 - mu) * h + mu * ch; b = (1 - mu) * b + mu * cb; d = (1 - mu) * d + mu * cd;
+      const acq = 0.03 * (1 - x) * 1.0 * h;
+      const att = 0.04 * (1 - sH) * Math.pow(1 - x, 1.31) * b;
+      h -= acq; b += acq - att; d += att;
+      rows.push([h, b, d]);
+    }
+    draw(rows);
+    const last = rows[100];
+    $("out").textContent = "year 100: H " + Math.round(last[0] * 100) + "%  HD " + Math.round(last[1] * 100) + "%  D " + Math.round(last[2] * 100) + "%";
+  }
+  function draw(rows) {
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, hgt = cv.clientHeight;
+    cv.width = w * dpr; cv.height = hgt * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cs = getComputedStyle(document.documentElement);
+    const col = [cs.getPropertyValue("--s-h"), cs.getPropertyValue("--s-b"), cs.getPropertyValue("--s-d")];
+    const L = 34, B = 20, W = w - L - 6, H = hgt - B - 6;
+    ctx.clearRect(0, 0, w, hgt);
+    const X = i => L + (i / 100) * W, Y = v => 6 + (1 - v) * H;
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      rows.forEach((r, i) => { const top = r.slice(0, k + 1).reduce((a, c) => a + c, 0); i ? ctx.lineTo(X(i), Y(top)) : ctx.moveTo(X(i), Y(top)); });
+      for (let i = 100; i >= 0; i--) { const bot = rows[i].slice(0, k).reduce((a, c) => a + c, 0); ctx.lineTo(X(i), Y(bot)); }
+      ctx.closePath(); ctx.fillStyle = col[k].trim(); ctx.fill();
+    }
+    ctx.fillStyle = cs.getPropertyValue("--muted").trim(); ctx.font = "11px " + cs.getPropertyValue("--mono");
+    [0, 0.5, 1].forEach(v => ctx.fillText(Math.round(v * 100) + "%", 0, Y(v) + 4));
+    [0, 25, 50, 75, 100].forEach(t => ctx.fillText(t + "y", Math.min(X(t) - 6, w - 30), hgt - 4));
+  }
+  ["sH", "school", "ban", "bk"].forEach(id => $(id).addEventListener("input", run));
+  window.addEventListener("resize", run);
+  run();
+})();
+</script>

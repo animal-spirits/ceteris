@@ -1,0 +1,378 @@
+<title>Character Flavour Mocks</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Mrs+Saint+Delafield&family=Herr+Von+Muellerhoff&family=Monsieur+La+Doulaise&family=Pinyon+Script&family=Special+Elite&display=swap">
+<style>
+/* Layout: one column of six numbered mock sections; each shows the same four characters in a row of cards. */
+:root {
+  --paper: #EDEFEA; --paper-2: #E2E6DF; --card: #F6F7F3; --ink: #1C292F; --ink-2: #4A585E; --rule: #C3CCC5;
+  --proof: #AE2459; --branch: #5E45A3; --stamp: #A3262E; --pen: #1F2F5C;
+  --serif: "Source Serif 4", Georgia, serif; --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace; --type: "Special Elite", "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #141B1F; --paper-2: #1B2429; --card: #202A30; --ink: #E3E7E1; --ink-2: #9CA9AD; --rule: #2F3C42;
+  --proof: #E2729B; --branch: #A898E4; --stamp: #E0727A; --pen: #9DB2EE; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #141B1F; --paper-2: #1B2429; --card: #202A30; --ink: #E3E7E1; --ink-2: #9CA9AD; --rule: #2F3C42;
+  --proof: #E2729B; --branch: #A898E4; --stamp: #E0727A; --pen: #9DB2EE; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 56px; }
+.col { max-width: 760px; display: grid; gap: 12px; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.1; }
+h2 { font-size: 27px; line-height: 1.2; }
+h3 { font-size: 17px; }
+p { margin: 0; max-width: 68ch; }
+.lead { font-family: var(--serif); font-size: 19px; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); font-weight: 500; }
+.note { font-size: 14px; color: var(--ink-2); }
+section { display: grid; gap: 18px; }
+.sec-head { border-top: 1px solid var(--ink); padding-top: 12px; display: grid; gap: 6px; }
+.row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .row { grid-template-columns: 1fr; } }
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: 2px; padding: 12px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.who { font-family: var(--serif); font-weight: 600; font-size: 16px; line-height: 1.2; }
+.role { font-size: 13px; color: var(--ink-2); }
+canvas, .card svg { width: 100%; height: auto; display: block; }
+.ctl { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; }
+.ctl label { display: grid; gap: 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+select, input[type="range"] { font: inherit; font-size: 15px; color: var(--ink); }
+select { background: var(--paper-2); border: 1px solid var(--ink-2); border-radius: 3px; padding: 5px 8px; }
+input[type="range"] { accent-color: var(--proof); width: 220px; max-width: 100%; }
+.file { font-size: 13px; }
+:focus-visible { outline: 2px solid var(--branch); outline-offset: 2px; }
+.prompt { font-family: var(--mono); font-size: 11.5px; line-height: 1.45; background: var(--paper-2); padding: 8px; border-radius: 2px; color: var(--ink-2); max-height: 120px; overflow: auto; }
+.pill { font-size: 11.5px; padding: 0 7px; border: 1px solid currentColor; border-radius: 9px; white-space: nowrap; }
+.sig { font-size: 40px; line-height: 1; color: var(--pen); white-space: nowrap; overflow: visible; }
+.sigbox { height: 74px; display: grid; align-items: center; border-bottom: 1px solid var(--ink-2); position: relative; overflow: hidden; }
+.sigbox svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.doc { background: #F8F5EC; color: #1E1A14; border: 1px solid #CFC8B5; padding: 28px 28px 24px; max-width: 620px; display: grid; gap: 12px; font-family: var(--serif); font-size: 15px; position: relative; box-shadow: 0 1px 0 #CFC8B5; }
+.doc .lh { text-align: center; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; border-bottom: 1px solid #1E1A14; padding-bottom: 8px; }
+.doc .no { font-weight: 600; text-align: center; }
+.doc .sigline { display: grid; justify-items: start; gap: 0; margin-top: 8px; position: relative; }
+.doc .sigline .sig { color: #1F2F5C; }
+.doc .stamp { position: absolute; right: 26px; bottom: 18px; width: 112px; height: 112px; opacity: .8; transform: rotate(-12deg); }
+.epi { font-family: var(--serif); font-style: italic; font-size: 22px; line-height: 1.15; color: var(--proof); }
+.rule { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); }
+blockquote { margin: 0; padding-left: 10px; border-left: 2px solid var(--rule); font-family: var(--serif); font-size: 14.5px; }
+blockquote cite { display: block; font-family: var(--sans); font-style: normal; font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.file-card { background: #EFE8D2; color: #2A2418; border: 1px solid #BCAE86; padding: 14px; display: grid; gap: 8px; font-family: var(--type); font-size: 12.5px; line-height: 1.4; position: relative; overflow: hidden; min-width: 0; }
+.file-card .hdr { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed #8C7E58; padding-bottom: 6px; font-size: 11.5px; }
+.file-card .top { display: grid; grid-template-columns: 74px 1fr; gap: 10px; }
+.file-card .ph { border: 1px solid #8C7E58; background: #F6F0DC; }
+.file-card dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 0; }
+.file-card dt { color: #6A5E40; }
+.file-card dd { margin: 0; }
+.redact { background: #1A1610; color: transparent; border-radius: 1px; padding: 0 2px; user-select: none; }
+.conf { font-family: var(--sans); font-size: 11px; border: 1px solid #6A5E40; border-radius: 8px; padding: 0 5px; white-space: nowrap; }
+.margin { font-family: "Herr Von Muellerhoff", cursive; font-size: 26px; color: #1F2F5C; line-height: 1; transform: rotate(-4deg); }
+.stampt { position: absolute; top: 46px; right: -8px; transform: rotate(14deg); border: 2px solid #A3262E; color: #A3262E; font-family: var(--sans); font-weight: 600; font-size: 12px; letter-spacing: .14em; padding: 2px 8px; opacity: .75; }
+ul.src { margin: 0; padding-left: 16px; font-size: 11.5px; }
+.legend { display: grid; gap: 2px; font-size: 13px; }
+.legend span { color: var(--ink-2); }
+.verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.verdict > div { border-top: 2px solid var(--ink); padding-top: 8px; display: grid; gap: 4px; }
+</style>
+
+<div class="wrap">
+<header class="col">
+  <div class="eyebrow">Ceteris · characters · mocks · 28 October 2026</div>
+  <h1>Six ways to give a character a look without drawing a face</h1>
+  <p class="lead">The same four generated people appear in each mock: a Brazilian finance minister, a Nigerian general, a Swedish central bank governor and a Turkish party leader. Every mock is deterministic from the character's seed and record, so replays and forks show the same thing.</p>
+</header>
+
+<section id="photo">
+  <div class="sec-head">
+    <div class="eyebrow">1 of 6 · recommended</div>
+    <h2>Press photos from your own model, printed as halftone</h2>
+    <p>With a key connected (as in the flag studio), the app writes the prompt below, the model returns one photo per person, and the app prints it in the seat's press style. The image is stored by hash; it is regenerated from the first one each decade to age. This page cannot reach an image model, so the frames show the treatment on a soft placeholder. Drop any image, such as a portrait you generated elsewhere, onto a card to see it printed.</p>
+  </div>
+  <div class="ctl">
+    <label>Treatment<select id="ph-mode"><option value="news">Newsprint halftone</option><option value="duo">Duotone, seat colours</option><option value="gravure">Photogravure</option></select></label>
+    <label>Screen<input type="range" id="ph-dot" min="2.5" max="6" step=".5" value="3.5"></label>
+  </div>
+  <div class="row" id="ph-row"></div>
+  <p class="note">Real people never get a generated photo. The prompt always says "fictional", carries no real name, and the provider's own policy applies. Cost is one image per person per decade, roughly a few hundred images over a long run, only for people you open.</p>
+</section>
+
+<section id="silhouette">
+  <div class="sec-head">
+    <div class="eyebrow">2 of 6 · offline fallback</div>
+    <h2>Cut-paper silhouettes</h2>
+    <p>A profile is one curve, which code can draw cleanly: forehead, brow, nose, lips, chin, hair and collar from the genome. Age lengthens the nose, softens the chin and thins the hair. Generals wear a peaked cap, everyone else is bare-headed.</p>
+  </div>
+  <div class="ctl"><label>Year <span id="sil-out" class="mono">2000</span><input type="range" id="sil-year" min="2000" max="2040" step="1" value="2000"></label></div>
+  <div class="row" id="sil-row"></div>
+</section>
+
+<section id="signature">
+  <div class="sec-head">
+    <div class="eyebrow">3 of 6</div>
+    <h2>Signatures</h2>
+    <p>Each person gets a hand, a slant, a pressure and a flourish, drawn from the seed. The signature appears on decrees, treaties, banknotes and letters wherever their office signs.</p>
+  </div>
+  <div class="row" id="sig-row"></div>
+  <div class="doc" id="decree">
+    <div class="lh">Federative Republic of Brazil · Ministry of Finance</div>
+    <div class="no">Ordinance No. 214, of 9 May 2003</div>
+    <p>The Minister of State for Finance, using the powers conferred by article 87 of the Constitution, resolves to set the primary surplus target for the consolidated public sector at 4.25 percent of GDP for the 2003 fiscal year, and to report quarterly to the National Congress on its execution.</p>
+    <p>This ordinance enters into force on the date of its publication.</p>
+    <div class="sigline"><div class="sigbox" style="width:280px;border-bottom-color:#1E1A14"><span class="sig" id="decree-sig"></span><svg id="decree-fl" viewBox="0 0 280 74" preserveAspectRatio="none"></svg></div><div style="font-size:13px">Cláudia Barbosa Almeida · Minister of State for Finance</div></div>
+    <svg class="stamp" viewBox="0 0 120 120" aria-hidden="true"><defs><path id="ring" d="M60,60 m-44,0 a44,44 0 1,1 88,0 a44,44 0 1,1 -88,0"/></defs><circle cx="60" cy="60" r="56" fill="none" stroke="#A3262E" stroke-width="2.5"/><circle cx="60" cy="60" r="34" fill="none" stroke="#A3262E" stroke-width="1.2"/><text font-family="IBM Plex Sans Condensed, sans-serif" font-size="10.5" letter-spacing="2" fill="#A3262E"><textPath href="#ring">MINISTÉRIO DA FAZENDA · GABINETE ·</textPath></text><text x="60" y="58" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#A3262E">09 MAI</text><text x="60" y="71" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#A3262E">2003</text></svg>
+  </div>
+</section>
+
+<section id="epithet">
+  <div class="sec-head">
+    <div class="eyebrow">4 of 6</div>
+    <h2>Epithets and voice</h2>
+    <p>A nickname is earned by a rule over the person's record and memory, so it changes when the run does. Each person also gets a phrase they repeat and a register for their speeches, which the chronicle uses (ADR 0078).</p>
+  </div>
+  <div class="row" id="epi-row"></div>
+</section>
+
+<section id="dossier">
+  <div class="sec-head">
+    <div class="eyebrow">5 of 6</div>
+    <h2>Intelligence file</h2>
+    <p>The dossier signals of DESIGN 23.5 shown as a file your own service keeps. Hidden traits are redacted until there is evidence; each estimate shows its confidence and the record it rests on. Better intelligence (ADR 0153) unredacts more.</p>
+  </div>
+  <div class="row" id="file-row"></div>
+</section>
+
+<section id="effects">
+  <div class="sec-head">
+    <div class="eyebrow">6 of 6</div>
+    <h2>Personal effects</h2>
+    <p>A flat lay of what is on the person's desk. Each object follows from the record: profession, office, age, habits drawn at creation, and what they lived through.</p>
+  </div>
+  <div class="row" id="fx-row"></div>
+</section>
+
+<section>
+  <div class="sec-head"><div class="eyebrow">How they combine</div><h2>Suggested use</h2></div>
+  <div class="verdict">
+    <div><h3>Faces</h3><p>Photos (1) where a model is connected, silhouettes (2) otherwise. One slot, two sources.</p></div>
+    <div><h3>Everywhere</h3><p>Signatures (3), epithets and voice (4). Cheap, offline, and they make people recognisable in text.</p></div>
+    <div><h3>Dossier view</h3><p>The intelligence file (5) as the character panel, with effects (6) as an optional tab.</p></div>
+  </div>
+</section>
+</div>
+
+<script>
+(() => {
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const L = (a, b, t) => a + (b - a) * t;
+function fnv(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; }
+function rng(key) { let a = fnv(key); return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const f1 = n => Math.round(n * 10) / 10;
+
+const P = [
+  { id: 'cba', name: 'Cláudia Barbosa Almeida', short: 'Cláudia B. Almeida', role: 'Minister of Finance, Brazil', born: 1957, sex: 'f', office: 'min', seat: ['#1F6B45', '#E8D27A'], skin: .42, hair: 'bob',
+    prompt: 'woman, 43, finance minister, dark brown shoulder-length hair, rectangular reading glasses on a chain, navy suit jacket, pearl necklace',
+    epi: 'a Contadora', epiEn: 'the Accountant', rule: 'finance office + inflation memory > 30% + primary surplus kept 3 years', phrase: '“Numbers do not vote, but they do count.”',
+    speech: [['Cabinet', 'We cut where it hurts least and we say so in public, line by line.'], ['Press', 'I lived through five currencies. I am not going to gamble on a sixth.']],
+    file: { no: '0417-BR', agency: 'Seat service · economic desk', edu: 'Economics, USP; PhD, Unicamp', path: 'Treasury analyst 1983, secretary 1999', traits: [['Fiscal hawkishness', 'high', 'medium', 'lived 1980-94 inflation aged 23-37'], ['Competence', 'above average', 'low', 'record as secretary'], ['Loyalty to president', null, null, ''], ['Ambition', null, null, '']], note: 'Will resign before she signs a waiver.' },
+    fx: ['calc', 'glasses', 'pen', 'notebook', 'cup'], fxWhy: { calc: 'economist', glasses: 'age 43 + genome', pen: 'signs ordinances', notebook: 'keeps her own figures', cup: 'habit drawn at creation' } },
+  { id: 'mdj', name: 'Musa Danjuma', short: 'M. Danjuma', role: 'Chief of Army Staff, Nigeria', born: 1948, sex: 'm', office: 'gen', seat: ['#0E7A43', '#F2F2EA'], skin: .82, hair: 'crop',
+    prompt: 'man, 52, army general, close-cropped grey-black hair, olive service uniform with rank on shoulder boards, ribbon rack',
+    epi: 'Old Barracks', epiEn: '', rule: 'general + entered service before 1970 + civil war memory', phrase: '“A soldier who reads the budget wins the war before it starts.”',
+    speech: [['Staff', 'Supply first, then plans. Plans without fuel are prayers.'], ['Parade', 'The army serves the republic. It does not own it.']],
+    file: { no: '0092-NG', agency: 'Seat service · defence desk', edu: 'Nigerian Defence Academy; Staff College, Camberley', path: 'Commissioned 1967; brigade 1984; division 1993', traits: [['Operational skill', 'above average', 'medium', 'exercise scores, 1993 division'], ['Risk aversion', 'high', 'low', 'peer reports'], ['Coup propensity', null, null, ''], ['Corruption', null, null, '']], note: 'Medals outrun his combat record.' },
+    fx: ['medal', 'watch', 'badge', 'mapcase'], fxWhy: { medal: 'ribbons from record (inflated by patronage)', watch: 'steel field watch', badge: 'cap badge, office', mapcase: 'staff officer' } },
+  { id: 'kni', name: 'Karin Nilsson', short: 'Karin Nilsson', role: 'Governor, Riksbank, Sweden', born: 1952, sex: 'f', office: 'cb', seat: ['#1D4F8C', '#E9C44B'], skin: .06, hair: 'bun',
+    prompt: 'woman, 48, central bank governor, fair hair in a low bun, thin metal glasses, grey wool jacket, white blouse',
+    epi: 'Fem Hundra', epiEn: '“Five Hundred”', rule: 'central bank + lived the 1992 500% overnight rate at the bank', phrase: '“The krona remembers.”',
+    speech: [['Board', 'Credibility is a stock. We spend it once.'], ['Parliament', 'I would rather be early and wrong than late and right.']],
+    file: { no: '0133-SE', agency: 'Seat service · financial desk', edu: 'Economics, Stockholm School of Economics', path: 'Riksbank economist 1979; deputy governor 1994', traits: [['Hawkishness', 'high', 'high', 'lived 1975-82 inflation; voted 1992'], ['Independence', 'high', 'medium', 'public statements'], ['Political ties', null, null, ''], ['Health', null, null, '']], note: 'Do not try to surprise her.' },
+    fx: ['glasses', 'books', 'watch', 'tea', 'pen'], fxWhy: { glasses: 'genome, myopic', books: 'academic background', watch: 'gold, gift on appointment', tea: 'habit drawn at creation', pen: 'signs the banknotes' } },
+  { id: 'moz', name: 'Murat Öztürk', short: 'M. Öztürk', role: 'Party leader, Türkiye', born: 1961, sex: 'm', office: 'party', seat: ['#C8102E', '#F4F1EA'], skin: .26, hair: 'side',
+    prompt: 'man, 39, opposition party leader, thick dark hair with side part, trimmed moustache, charcoal suit, open collar',
+    epi: 'the Night Owl', epiEn: '', rule: 'party leader + coalition talks past midnight ≥ 3 in the log', phrase: '“Ask the bakers, not the bankers.”',
+    speech: [['Rally', 'They printed money and you paid for it at the bakery.'], ['Coalition talks', 'I can sign tonight if the ministry of the economy is ours.']],
+    file: { no: '0251-TR', agency: 'Seat service · political desk', edu: 'Political science, Ankara University', path: 'Youth branch 1983; deputy 1995; leader 1999', traits: [['Charisma', 'high', 'medium', 'polling after rallies'], ['Ideology', 'centre-left', 'high', 'party programme'], ['Ambition', 'very high', 'low', 'press'], ['Foreign contacts', null, null, '']], note: 'Remembers who stayed silent in 1994.' },
+    fx: ['phone', 'cigs', 'paper', 'cup'], fxWhy: { phone: 'year 2000, party leader', cigs: 'habit drawn at creation', paper: 'reads every morning edition', cup: 'tea glass, habit' } },
+];
+
+// 1. Halftone press photo
+const srcCache = {};
+function placeholderSource(p) {
+  const c = document.createElement('canvas'); c.width = 200; c.height = 240; const x = c.getContext('2d');
+  const r = rng(p.id + '|ph');
+  const bg = x.createRadialGradient(70, 60, 10, 100, 120, 200); bg.addColorStop(0, '#A8A8A8'); bg.addColorStop(1, '#4A4A4A');
+  x.fillStyle = bg; x.fillRect(0, 0, 200, 240);
+  x.filter = 'blur(7px)';
+  const tone = 225 - p.skin * 150;
+  x.fillStyle = '#262626';
+  x.beginPath(); x.ellipse(100, 250, 95, 70, 0, 0, Math.PI * 2); x.fill();
+  x.fillStyle = `rgb(${tone},${tone},${tone})`;
+  x.fillRect(84, 140, 32, 60);
+  const hg = x.createRadialGradient(88, 85, 6, 100, 100, 46); hg.addColorStop(0, `rgb(${tone + 25},${tone + 25},${tone + 25})`); hg.addColorStop(1, `rgb(${tone - 45},${tone - 45},${tone - 45})`);
+  x.fillStyle = hg; x.beginPath(); x.ellipse(100, 98, 33, 44, 0, 0, Math.PI * 2); x.fill();
+  x.fillStyle = p.skin > .6 ? '#202020' : '#3A3A3A';
+  x.beginPath(); x.ellipse(100, 66 + (p.hair === 'crop' ? 4 : 0), 36, p.hair === 'crop' ? 18 : 24, 0, Math.PI, 0); x.fill();
+  if (p.hair === 'bob') { x.fillRect(64, 64, 12, 62); x.fillRect(124, 64, 12, 62); }
+  if (p.hair === 'bun') { x.beginPath(); x.arc(100, 46, 14, 0, Math.PI * 2); x.fill(); }
+  x.filter = 'blur(2.5px)';
+  x.fillStyle = 'rgba(20,20,20,.55)';
+  for (const dx of [-13, 13]) { x.beginPath(); x.ellipse(100 + dx, 96, 6, 3, 0, 0, Math.PI * 2); x.fill(); }
+  x.beginPath(); x.ellipse(100, 124, 9, 2.6, 0, 0, Math.PI * 2); x.fill();
+  if (p.office === 'gen') { x.fillStyle = '#4A4A40'; x.beginPath(); x.ellipse(100, 250, 96, 72, 0, 0, Math.PI * 2); x.fill(); x.fillStyle = '#9A9A90'; x.fillRect(132, 212, 26, 10); }
+  x.filter = 'none';
+  return c;
+}
+function luminanceGrid(src) {
+  const c = document.createElement('canvas'); c.width = 200; c.height = 240; const x = c.getContext('2d');
+  const s = src.width / src.height, t = 200 / 240; let sw = src.width, sh = src.height, sx = 0, sy = 0;
+  if (s > t) { sw = src.height * t; sx = (src.width - sw) / 2; } else { sh = src.width / t; sy = (src.height - sh) / 4; }
+  x.drawImage(src, sx, sy, sw, sh, 0, 0, 200, 240);
+  const d = x.getImageData(0, 0, 200, 240).data, lum = new Float32Array(200 * 240);
+  for (let i = 0; i < lum.length; i++) lum[i] = (0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]) / 255;
+  return lum;
+}
+function printPhoto(canvas, p, src) {
+  const mode = document.getElementById('ph-mode').value, step = +document.getElementById('ph-dot').value;
+  const W = 400, H = 480, k = 2; canvas.width = W; canvas.height = H;
+  const x = canvas.getContext('2d'), lum = luminanceGrid(src);
+  const at = (px, py) => lum[clamp(Math.round(py), 0, 239) * 200 + clamp(Math.round(px), 0, 199)];
+  const paper = mode === 'duo' ? p.seat[1] : '#EFEADD', ink = mode === 'duo' ? p.seat[0] : mode === 'gravure' ? '#3B2A1E' : '#141414';
+  x.fillStyle = paper; x.fillRect(0, 0, W, H);
+  if (mode === 'gravure') {
+    const img = x.createImageData(W, H), r = rng(p.id + '|grain'), ic = [59, 42, 30], pc = [239, 232, 218];
+    for (let y = 0; y < H; y++) for (let xx = 0; xx < W; xx++) { const l = clamp(at(xx / k, y / k) + (r() - .5) * .18, 0, 1), i = (y * W + xx) * 4; for (let c = 0; c < 3; c++) img.data[i + c] = L(ic[c], pc[c], Math.pow(l, 1.2)); img.data[i + 3] = 255; }
+    x.putImageData(img, 0, 0);
+  } else {
+    x.fillStyle = ink; const s = step * k, a = Math.PI / 4, ca = Math.cos(a), sa = Math.sin(a);
+    for (let v = -H; v < W + H; v += s) for (let u = -H; u < W + H; u += s) {
+      const px = u * ca - v * sa + W / 2, py = u * sa + v * ca; if (px < -s || py < -s || px > W + s || py > H + s) continue;
+      const l = at(px / k, py / k), rad = s * .62 * Math.sqrt(1 - l); if (rad < .3) continue;
+      x.beginPath(); x.arc(px, py, rad, 0, Math.PI * 2); x.fill();
+    }
+  }
+  x.strokeStyle = '#00000033'; x.lineWidth = 2; x.strokeRect(1, 1, W - 2, H - 2);
+}
+function photoRow() {
+  const row = document.getElementById('ph-row');
+  row.innerHTML = P.map(p => `<div class="card" data-id="${p.id}"><canvas aria-label="Halftone portrait of ${esc(p.name)}"></canvas><div class="who">${esc(p.name)}</div><div class="role">${esc(p.role)} · 2000</div><div class="prompt">Official press photograph of a fictional ${esc(p.prompt)}, plain studio background, natural light, year 2000, head and shoulders. Not a real or identifiable person.</div><input class="file" type="file" accept="image/*" id="f-${p.id}" aria-label="Use your own image for ${esc(p.name)}"></div>`).join('');
+  for (const p of P) {
+    srcCache[p.id] = srcCache[p.id] || placeholderSource(p);
+    printPhoto(row.querySelector(`[data-id="${p.id}"] canvas`), p, srcCache[p.id]);
+    document.getElementById('f-' + p.id).addEventListener('change', e => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      const img = new Image(); img.onload = () => { srcCache[p.id] = img; redrawPhotos(); }; img.src = URL.createObjectURL(f);
+    });
+  }
+}
+function redrawPhotos() { for (const p of P) printPhoto(document.querySelector(`#ph-row [data-id="${p.id}"] canvas`), p, srcCache[p.id]); }
+document.getElementById('ph-mode').addEventListener('change', redrawPhotos);
+document.getElementById('ph-dot').addEventListener('input', redrawPhotos);
+photoRow();
+
+// 2. Silhouettes
+function crPath(pts) {
+  let d = `M${f1(pts[0][0])},${f1(pts[0][1])}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    d += ` C${f1(p1[0] + (p2[0] - p0[0]) / 6)},${f1(p1[1] + (p2[1] - p0[1]) / 6)} ${f1(p2[0] - (p3[0] - p1[0]) / 6)},${f1(p2[1] - (p3[1] - p1[1]) / 6)} ${f1(p2[0])},${f1(p2[1])}`;
+  }
+  return d;
+}
+function silhouette(p, year) {
+  const r = rng(p.id + '|profile'), age = year - p.born, a = clamp((age - 30) / 50, 0, 1);
+  const g = { brow: L(1, 5, r()), nose: L(6, 11, r()) + a * 2.5, bridge: L(-2, 3, r()), lip: L(.4, 1.8, r()) * (1 - a * .4), chin: L(0, 6, r()) - a * 2, jaw: L(0, 5, r()), fore: L(-3, 3, r()), neck: L(0, 4, r()) };
+  const dbl = clamp((age - 50) / 25, 0, 1) * 5;
+  const front = [[92, 38], [116 + g.fore, 50], [125 + g.fore, 72], [128 + g.brow, 90], [125 + g.bridge * .3, 98], [127 + g.nose * .55 + g.bridge, 108], [127 + g.nose, 119], [128, 124], [128 + g.lip, 131], [126.5, 135], [127 + g.lip * .6, 139.5], [124, 145], [126 + g.chin, 154], [119 + g.chin * .5, 163 + dbl * .4], [110 - g.jaw, 166 + dbl], [109 + g.neck + (p.sex === 'm' ? 1.5 : 0), 173], [110 + g.neck, 181]];
+  const back = [[72 - g.neck, 186], [69 - g.neck, 166], [60, 144], [48, 118], [45, 90], [53, 62], [70, 44], [92, 38]];
+  let body;
+  if (p.office === 'gen') body = `M${f1(110 + g.neck)},181 L120,188 C158,190 190,206 208,240 L-8,240 C6,212 36,192 ${f1(72 - g.neck)},186 Z`;
+  else body = `M${f1(110 + g.neck)},181 L116,194 L122,187 C158,190 190,206 208,240 L-8,240 C6,212 36,192 ${f1(72 - g.neck)},186 Z`;
+  const head = crPath([...back.slice(0, -1), ...front]) + ' Z';
+  const hairOn = 1 - clamp((age - 55) / 30, 0, .7) * (p.sex === 'm' ? 1 : 0);
+  const extra = [];
+  if (p.hair === 'bob') extra.push(`<path d="${crPath([[92, 33], [62, 40], [42, 76], [42, 124], [56, 150], [80, 148], [76, 112], [86, 60], [112, 44], [92, 33]])}Z"/>`);
+  if (p.hair === 'bun') extra.push(`<circle cx="46" cy="${f1(96 + a * 4)}" r="${f1(13 - a * 2)}"/>`);
+  if (p.hair === 'side' || p.hair === 'crop') extra.push(`<path d="${crPath([[118, 52], [104, 33 + (1 - hairOn) * 5], [78, 33 + (1 - hairOn) * 5], [56, 44], [44, 76], [47, 104], [54, 100]])}Z" opacity="${f1(hairOn)}"/>`);
+  if (p.hair === 'side') extra.push(`<path d="M${f1(128.5 + g.lip - 2.5)},128.5 q-5,1 -6,-1 l5,-3 z"/>`);
+  if (p.office === 'gen') extra.push(`<path d="M46,68 L58,40 Q90,24 118,36 L126,60 L144,66 Q130,72 120,68 L50,74 Z"/>`);
+  const tie = p.sex === 'm' && p.office !== 'gen' ? `<path d="M115,194 l5,24 l-3,22" stroke="var(--card)" stroke-width="1.2" fill="none"/>` : '';
+  const id = 'sv' + p.id;
+  return `<svg viewBox="0 0 200 240" role="img" aria-label="Silhouette of ${esc(p.name)} in ${year}"><defs><clipPath id="${id}"><ellipse cx="100" cy="122" rx="86" ry="108"/></clipPath></defs>
+    <ellipse cx="100" cy="122" rx="86" ry="108" style="fill:var(--paper-2)"/>
+    <g clip-path="url(#${id})" style="fill:var(--ink)"><path d="${body}"/><path d="${head}"/>${extra.join('')}${tie}</g>
+    <ellipse cx="100" cy="122" rx="86" ry="108" fill="none" style="stroke:var(--ink)" stroke-width="1.2"/><ellipse cx="100" cy="122" rx="91" ry="113" fill="none" style="stroke:var(--ink-2)" stroke-width=".6"/></svg>`;
+}
+function silRow() {
+  const y = +document.getElementById('sil-year').value; document.getElementById('sil-out').textContent = y;
+  document.getElementById('sil-row').innerHTML = P.map(p => `<div class="card">${silhouette(p, y)}<div class="who">${esc(p.name)}</div><div class="role">${esc(p.role)} · aged ${y - p.born}</div></div>`).join('');
+}
+document.getElementById('sil-year').addEventListener('input', silRow);
+silRow();
+
+// 3. Signatures
+const HANDS = ['Mrs Saint Delafield', 'Herr Von Muellerhoff', 'Monsieur La Doulaise', 'Pinyon Script'];
+function sigStyle(p) {
+  const r = rng(p.id + '|sig');
+  return { font: HANDS[Math.floor(r() * HANDS.length)], slant: L(-14, 4, r()), stretch: L(.92, 1.15, r()), weight: L(.25, .7, r()), size: L(36, 46, r()), r };
+}
+function flourish(svg, s, w, h) {
+  const r = s.r, y0 = h * L(.7, .85, r()), x0 = w * L(.15, .3, r()), x1 = w * L(.8, .97, r());
+  const d = `M${f1(x0)},${f1(y0 + 4)} C${f1(w * .4)},${f1(y0 + L(6, 14, r()))} ${f1(w * .7)},${f1(y0 + L(-2, 8, r()))} ${f1(x1)},${f1(y0 - L(4, 16, r()))}`;
+  svg.innerHTML = `<path d="${d}" fill="none" stroke="currentColor" stroke-width="${f1(1 + s.weight * 1.6)}" stroke-linecap="round"/>` + (r() < .5 ? `<path d="M${f1(x1 - 6)},${f1(y0 - 10)} l4,2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>` : '');
+}
+document.getElementById('sig-row').innerHTML = P.map(p => `<div class="card"><div class="sigbox" style="color:var(--pen)"><span class="sig" id="sig-${p.id}">${esc(p.short)}</span><svg id="fl-${p.id}" viewBox="0 0 240 74" preserveAspectRatio="none" aria-hidden="true"></svg></div><div class="who">${esc(p.name)}</div><div class="role" id="sigm-${p.id}"></div></div>`).join('');
+for (const p of P) {
+  const s = sigStyle(p), el = document.getElementById('sig-' + p.id);
+  Object.assign(el.style, { fontFamily: `"${s.font}", cursive`, fontSize: s.size + 'px', transform: `skewX(${f1(s.slant)}deg) scaleX(${s.stretch})`, transformOrigin: 'left center', display: 'inline-block', paddingLeft: '8px', WebkitTextStroke: f1(s.weight * .8) + 'px currentColor' });
+  flourish(document.getElementById('fl-' + p.id), s, 240, 74);
+  const box = el.parentElement, fit = () => { const w = el.getBoundingClientRect().width, bw = box.clientWidth - 12; if (w > bw) el.style.fontSize = f1(parseFloat(el.style.fontSize) * bw / w) + 'px'; };
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(fit);
+  document.getElementById('sigm-' + p.id).textContent = `${s.font} · slant ${f1(s.slant)}° · pressure ${f1(s.weight)}`;
+}
+{ const p = P[0], s = sigStyle(p), el = document.getElementById('decree-sig'); el.textContent = p.short;
+  Object.assign(el.style, { fontFamily: `"${s.font}", cursive`, fontSize: s.size + 'px', transform: `skewX(${f1(s.slant)}deg) scaleX(${s.stretch})`, transformOrigin: 'left center', display: 'inline-block', paddingLeft: '8px', WebkitTextStroke: f1(s.weight * .8) + 'px currentColor' });
+  flourish(document.getElementById('decree-fl'), s, 280, 74);
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => { const w = el.getBoundingClientRect().width; if (w > 268) el.style.fontSize = f1(parseFloat(el.style.fontSize) * 268 / w) + 'px'; }); document.getElementById('decree-fl').style.color = '#1F2F5C'; }
+
+// 4. Epithets
+document.getElementById('epi-row').innerHTML = P.map(p => `<div class="card"><div class="who">${esc(p.name)}</div><div class="role">${esc(p.role)}</div><div class="epi">${esc(p.epi)}${p.epiEn ? `<span class="role" style="font-style:normal;font-family:var(--sans);color:var(--ink-2)"> · ${esc(p.epiEn)}</span>` : ''}</div><div class="rule">earned by: ${esc(p.rule)}</div><blockquote>${esc(p.phrase)}<cite>signature phrase</cite></blockquote>${p.speech.map(([w, t]) => `<blockquote>${esc(t)}<cite>${esc(w)} register</cite></blockquote>`).join('')}</div>`).join('');
+
+// 5. Files
+document.getElementById('file-row').innerHTML = P.map(p => `<div class="file-card"><div class="hdr"><span>FILE ${esc(p.file.no)}</span><span>${esc(p.file.agency)}</span></div><div class="stampt">CONFIDENTIAL</div>
+  <div class="top"><div class="ph">${silhouette(p, 2000)}</div><dl><dt>Name</dt><dd>${esc(p.name.toUpperCase())}</dd><dt>Born</dt><dd>${p.born}</dd><dt>Post</dt><dd>${esc(p.role)}</dd></dl></div>
+  <dl><dt>Educ.</dt><dd>${esc(p.file.edu)}</dd><dt>Career</dt><dd>${esc(p.file.path)}</dd></dl>
+  <div>ASSESSMENT</div>
+  <dl>${p.file.traits.map(([k, v, c, src]) => `<dt>${esc(k)}</dt><dd>${v ? `${esc(v)} <span class="conf">${esc(c)}</span>` : '<span class="redact">no assessment</span> <span class="conf">no data</span>'}</dd>`).join('')}</dl>
+  <ul class="src">${p.file.traits.filter(t => t[1]).map(t => `<li>${esc(t[0])}: ${esc(t[3])}</li>`).join('')}</ul>
+  <div class="margin">${esc(p.file.note)}</div></div>`).join('');
+
+// 6. Effects
+const FX = {
+  calc: () => `<g><rect x="-22" y="-34" width="44" height="68" rx="4" fill="#2B2B2E"/><rect x="-17" y="-29" width="34" height="12" fill="#9BAF8E"/><text x="14" y="-20" text-anchor="end" font-family="IBM Plex Mono" font-size="8" fill="#1C292F">4.25</text>${Array.from({ length: 16 }, (_, i) => `<rect x="${-17 + (i % 4) * 9}" y="${-12 + Math.floor(i / 4) * 10}" width="7" height="7" rx="1.2" fill="${i % 4 === 3 ? '#C9A253' : '#5A5A60'}"/>`).join('')}</g>`,
+  glasses: () => `<g fill="none" stroke="#2A221A" stroke-width="2.4"><rect x="-28" y="-9" width="22" height="16" rx="4" fill="#BFD3DC" fill-opacity=".35"/><rect x="6" y="-9" width="22" height="16" rx="4" fill="#BFD3DC" fill-opacity=".35"/><path d="M-6,-3 q6,-4 12,0"/><path d="M-28,-5 l-18,10 M28,-5 l18,10"/></g>`,
+  pen: () => `<g><rect x="-4" y="-40" width="8" height="66" rx="3.5" fill="#1F2F5C"/><rect x="-4" y="-40" width="8" height="22" rx="3.5" fill="#24252B"/><rect x="2.5" y="-36" width="1.6" height="16" fill="#C9A253"/><path d="M-3.5,26 L0,40 L3.5,26 Z" fill="#C9A253"/></g>`,
+  notebook: () => `<g><rect x="-34" y="-44" width="68" height="88" rx="2" fill="#E9E3D2" stroke="#8C7E58"/>${Array.from({ length: 9 }, (_, i) => `<line x1="-28" x2="28" y1="${-34 + i * 9}" y2="${-34 + i * 9}" stroke="#B9C4CC" stroke-width=".8"/>`).join('')}<text x="-26" y="-22" font-family="Herr Von Muellerhoff" font-size="15" fill="#1F2F5C">superávit 4,25</text><text x="-26" y="-4" font-family="Herr Von Muellerhoff" font-size="15" fill="#1F2F5C">juros 26,5</text><rect x="-34" y="-44" width="5" height="88" fill="#7A2335"/></g>`,
+  cup: () => `<g><circle r="20" fill="#F2EFE8" stroke="#BDB6A6"/><circle r="15" fill="#4A2E1E"/><circle r="15" fill="none" stroke="#6A4430" stroke-width="2"/><path d="M19,-4 q11,4 0,8" fill="none" stroke="#BDB6A6" stroke-width="4"/></g>`,
+  tea: () => `<g><circle r="18" fill="#F2EFE8" stroke="#BDB6A6"/><circle r="13" fill="#A2652A"/><path d="M5,-13 l14,-24" stroke="#E9E3D2" stroke-width="2"/><rect x="14" y="-44" width="10" height="13" fill="#E9E3D2" stroke="#BDB6A6" transform="rotate(30 19 -37)"/></g>`,
+  medal: () => `<g><path d="M-10,-40 L10,-40 L6,-6 L-6,-6 Z" fill="#0E7A43"/><path d="M-3,-40 L3,-40 L2,-6 L-2,-6 Z" fill="#F2F2EA"/><circle cy="10" r="15" fill="#C9A253" stroke="#8A6A2A" stroke-width="2"/><path d="M0,0 l3,7 l7,1 l-5,5 l1,7 l-6,-3 l-6,3 l1,-7 l-5,-5 l7,-1 z" fill="#E9C979"/></g>`,
+  watch: () => `<g><rect x="-9" y="-40" width="18" height="80" rx="3" fill="#6B6356"/><circle r="15" fill="#D9D6CE" stroke="#8A8A86" stroke-width="3"/><circle r="11" fill="#F4F2EC"/><path d="M0,0 L0,-8 M0,0 L6,3" stroke="#1C292F" stroke-width="1.5" stroke-linecap="round"/></g>`,
+  badge: () => `<g><path d="M0,-24 L20,-10 L14,20 L-14,20 L-20,-10 Z" fill="#C9A253" stroke="#8A6A2A" stroke-width="2"/><circle r="8" fill="#0E7A43"/><path d="M-12,10 q12,8 24,0" fill="none" stroke="#8A6A2A" stroke-width="2"/></g>`,
+  mapcase: () => `<g><rect x="-46" y="-34" width="92" height="68" fill="#D9DCC6" stroke="#7E8566"/>${Array.from({ length: 6 }, (_, i) => `<line x1="${-46 + i * 18}" x2="${-46 + i * 18}" y1="-34" y2="34" stroke="#A9AE90" stroke-width=".7"/>`).join('')}<path d="M-40,20 C-20,0 0,14 18,-8 S40,-20 44,-26" fill="none" stroke="#4E79A0" stroke-width="2.5"/><path d="M-8,4 l10,-10 m-10,0 l10,10" stroke="#A3262E" stroke-width="2.4"/></g>`,
+  books: () => `<g>${[['#2F4A6B', 'MONETARY THEORY'], ['#7A2335', 'KRISEN 1992'], ['#4E5A3A', 'RIKSBANK 1668-1993']].map(([c, t], i) => `<rect x="-50" y="${-24 + i * 16}" width="100" height="14" fill="${c}"/><text x="0" y="${-14 + i * 16}" text-anchor="middle" font-family="IBM Plex Sans Condensed" font-size="7.5" letter-spacing="1" fill="#F2EFE8">${t}</text>`).join('')}</g>`,
+  phone: () => `<g><rect x="-13" y="-34" width="26" height="68" rx="9" fill="#2E3440"/><rect x="-9" y="-24" width="18" height="16" fill="#9BAF8E"/>${Array.from({ length: 12 }, (_, i) => `<circle cx="${-6 + (i % 3) * 6}" cy="${0 + Math.floor(i / 3) * 6}" r="1.8" fill="#8A93A3"/>`).join('')}</g>`,
+  cigs: () => `<g><rect x="-20" y="-28" width="40" height="56" rx="2" fill="#F2EFE8" stroke="#BDB6A6"/><rect x="-20" y="-6" width="40" height="16" fill="#C8102E"/><rect x="26" y="-14" width="12" height="26" rx="2" fill="#C9A253"/></g>`,
+  paper: () => `<g><rect x="-56" y="-38" width="112" height="76" fill="#E9E6DE" stroke="#BDB6A6"/><text x="-50" y="-22" font-family="Source Serif 4" font-weight="600" font-size="13" fill="#1C292F">Kriz derinleşiyor</text>${Array.from({ length: 6 }, (_, i) => `<rect x="${-50 + (i % 3) * 36}" y="${-12 + Math.floor(i / 3) * 24}" width="32" height="${i < 3 ? 20 : 18}" fill="#C9C5BB"/>`).join('')}</g>`,
+};
+function flatlay(p) {
+  const r = rng(p.id + '|fx'), slots = [[60, 70], [140, 62], [58, 168], [146, 160], [100, 116]];
+  const items = p.fx.map((k, i) => { const [x, y] = slots[i]; return `<g transform="translate(${f1(x + L(-6, 6, r()))} ${f1(y + L(-6, 6, r()))}) rotate(${f1(L(-25, 25, r()))})">${FX[k]()}</g>`; }).join('');
+  return `<svg viewBox="0 0 200 220" role="img" aria-label="Personal effects of ${esc(p.name)}"><rect width="200" height="220" fill="#6B4E36"/><rect width="200" height="220" fill="url(#wood)"/>${items}</svg>`;
+}
+document.getElementById('fx-row').innerHTML = `<svg width="0" height="0" style="position:absolute"><defs><pattern id="wood" width="200" height="12" patternUnits="userSpaceOnUse"><rect width="200" height="12" fill="#6B4E36"/><path d="M0,6 C50,3 100,9 200,5" stroke="#5A3F2B" stroke-width="2" fill="none"/></pattern></defs></svg>` + P.map(p => `<div class="card">${flatlay(p)}<div class="who">${esc(p.name)}</div><div class="legend">${p.fx.map(k => `<div>${k} <span>· ${esc(p.fxWhy[k])}</span></div>`).join('')}</div></div>`).join('');
+})();
+</script>

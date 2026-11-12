@@ -1,0 +1,886 @@
+<title>Ceteris Instrument Charm</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=IBM+Plex+Sans+Condensed:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a printed atlas specimen (ADR 0137 tokens). One reading column; plates break wide; ideas as a filterable register. */
+:root{
+  --paper:#EDEFEA; --paper-2:#E3E7E1; --paper-3:#D7DDD6;
+  --ink:#1C292F; --ink-2:#4B5B62; --ink-3:#6E7E84; --rule:#C3CBC5;
+  --sea:#BCD1DB; --land:#E2DCCB; --water-ink:#3B6782;
+  --lo:#D9E3C8; --hi:#8C3B2E;
+  --proof:#AE2459; --branch:#5E45A3;
+  --ok:#3B7A4C; --warn:#A27419;
+  --chip:#D2D9D1;
+  --t1:#E6D3B3; --t2:#C9D6BC; --t3:#D5D2E0; --t4:#E8D8C8;
+  --f-serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --f-ui:"IBM Plex Sans Condensed","Arial Narrow","Helvetica Neue",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#11171B; --paper-2:#182026; --paper-3:#202A31;
+  --ink:#E2E7E3; --ink-2:#A2B0AE; --ink-3:#7A898D; --rule:#2B363C;
+  --sea:#1A2B36; --land:#2C3430; --water-ink:#8DB4CC;
+  --lo:#33402F; --hi:#D9826A;
+  --proof:#E35E91; --branch:#A890E8;
+  --ok:#6CB485; --warn:#D9AA4E;
+  --chip:#26323A;
+  --t1:#4A4233; --t2:#36432F; --t3:#3B3A4D; --t4:#4B4036;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --paper:#11171B; --paper-2:#182026; --paper-3:#202A31;
+  --ink:#E2E7E3; --ink-2:#A2B0AE; --ink-3:#7A898D; --rule:#2B363C;
+  --sea:#1A2B36; --land:#2C3430; --water-ink:#8DB4CC;
+  --lo:#33402F; --hi:#D9826A;
+  --proof:#E35E91; --branch:#A890E8;
+  --ok:#6CB485; --warn:#D9AA4E;
+  --chip:#26323A;
+  --t1:#4A4233; --t2:#36432F; --t3:#3B3A4D; --t4:#4B4036;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 64px}
+.wrap{max-width:1100px;margin:0 auto}
+h1,h2,h3{font-family:var(--f-serif);font-weight:600;text-wrap:balance;margin:0}
+h2{font-size:27px;line-height:1.15}
+h3{font-size:17px;line-height:1.25}
+p{margin:0;max-width:68ch}
+a{color:var(--water-ink)}
+button:focus-visible,input:focus-visible,canvas:focus-visible{outline:2px solid var(--proof);outline-offset:2px}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+
+.mast{padding-block:40px 26px;border-bottom:1px solid var(--rule);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:end}
+.mast h1{font-size:clamp(38px,6.5vw,68px);line-height:.98;letter-spacing:-.02em}
+.mast h1 i{font-weight:400;color:var(--water-ink)}
+.lede{margin-top:14px;font-family:var(--f-serif);font-size:19px;line-height:1.45;color:var(--ink-2);max-width:60ch}
+.meta{font-family:var(--f-mono);font-size:11.5px;color:var(--ink-3);text-align:right;line-height:1.7}
+@media (max-width:720px){.mast{grid-template-columns:1fr}.meta{text-align:left}}
+
+section{padding-block:40px 6px;display:grid;gap:20px}
+.sechead{display:grid;grid-template-columns:130px minmax(0,1fr);gap:20px;align-items:baseline;border-top:2px solid var(--ink);padding-top:12px}
+.sechead .intro{display:grid;gap:8px}
+.sechead .intro p{color:var(--ink-2)}
+@media (max-width:720px){.sechead{grid-template-columns:1fr;gap:6px}}
+
+.rules3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+@media (max-width:820px){.rules3{grid-template-columns:1fr}}
+.rule{border-top:1px solid var(--ink);padding-top:8px;display:grid;gap:4px}
+.rule p{font-size:14px;color:var(--ink-2)}
+.notlist{font-size:13.5px;color:var(--ink-2)}
+.notlist b{color:var(--ink);font-weight:600}
+
+.plate{border:1px solid var(--ink);background:var(--paper-2);display:grid;grid-template-columns:minmax(0,1fr) 300px}
+@media (max-width:920px){.plate{grid-template-columns:1fr}}
+.plate .stage{position:relative;background:var(--sea);min-width:0;align-self:start}
+.plate .stage canvas{display:block;width:100%;height:auto;cursor:crosshair}
+.plate .stage #fx{position:absolute;inset:0;pointer-events:none}
+.plate .side{padding:14px 16px;display:grid;gap:12px;align-content:start;border-left:1px solid var(--ink);min-width:0}
+@media (max-width:920px){.plate .side{border-left:0;border-top:1px solid var(--ink)}}
+.modes{display:flex;flex-wrap:wrap}
+.modes button,.btn{font:500 13px/1 var(--f-ui);color:var(--ink);background:var(--paper);border:1px solid var(--rule);padding:7px 10px;cursor:pointer;margin:0 -1px -1px 0}
+.modes button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink);position:relative;z-index:1}
+.btn{margin:0}
+.side .desc{font-size:13.5px;color:var(--ink-2);display:grid;gap:6px}
+.side .desc b{color:var(--ink);font-family:var(--f-serif);font-size:15px}
+.ctl{display:flex;gap:10px;align-items:center;font-family:var(--f-mono);font-size:12.5px;color:var(--ink-2)}
+.ctl input{flex:1;min-width:0;accent-color:var(--ink)}
+.stamp{position:absolute;left:10px;top:10px;font:600 11px var(--f-ui);letter-spacing:.12em;text-transform:uppercase;background:var(--paper);color:var(--ink);border:1px solid var(--ink);padding:3px 7px}
+.caption{font-size:12px;color:var(--ink-3)}
+.swatches{display:flex;flex-wrap:wrap;gap:0;font:11px var(--f-mono);color:var(--ink-2)}
+.swatches span{display:grid;justify-items:center;gap:2px;width:34px}
+.swatches i{display:block;width:34px;height:12px;border:1px solid var(--rule)}
+
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+@media (max-width:900px){.grid3,.grid2{grid-template-columns:1fr}}
+.span2{grid-column:span 2}
+@media (max-width:900px){.span2{grid-column:auto}}
+.cell{border:1px solid var(--rule);background:var(--paper-2);padding:12px 14px;display:grid;gap:10px;align-content:start;min-width:0}
+.cell h3{font-size:16px}
+.cell > p{font-size:13px;color:var(--ink-2)}
+.cell canvas,.cell svg{display:block;width:100%;height:auto}
+.seals{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.seal{display:grid;gap:4px;justify-items:center;font-family:var(--f-mono);font-size:11px;color:var(--ink-3);text-align:center}
+.seal canvas{max-width:150px;aspect-ratio:1}
+.cell input[type=text]{font:12px var(--f-mono);background:var(--paper);color:var(--ink);border:1px solid var(--rule);padding:6px 8px;width:100%}
+.clearing{display:flex;gap:14px;align-items:center}
+.clearing svg{width:96px;height:96px;flex:none}
+.clearing .rd{display:grid;gap:4px;font-family:var(--f-mono);font-size:12px;color:var(--ink-2);min-width:0}
+.clearing .rd b{font-size:18px;color:var(--ink);font-weight:500}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2)}
+.row input[type=range]{flex:1;min-width:120px;accent-color:var(--ink)}
+
+.ledger{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.ledger th{font-weight:500;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);text-align:right;padding:6px 8px;border-bottom:1px solid var(--ink)}
+.ledger th:first-child,.ledger td:first-child{text-align:left}
+.ledger td{padding:5px 8px;border-bottom:1px solid var(--rule);text-align:right;font-family:var(--f-mono)}
+.ledger td:first-child{font-family:var(--f-ui)}
+.ink-obs{color:var(--ink);font-weight:500}
+.ink-imp{color:var(--ink-3);font-style:italic}
+.ink-sim{color:var(--ink-2)}
+.ink-ed{color:var(--proof);text-decoration:underline;text-underline-offset:3px}
+.key{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--ink-2)}
+.tbl-wrap{overflow-x:auto}
+
+/* departures board: a physical object, same look in both themes */
+.board{background:#15181B;border:6px solid #2A2E33;padding:8px;display:grid;gap:3px;overflow-x:auto}
+.board .bh,.board .br{display:grid;grid-template-columns:5.4em 9.6em 7.2em 5.4em 7.8em;gap:8px;min-width:560px}
+.board .bh{font:500 10px var(--f-ui);letter-spacing:.14em;text-transform:uppercase;color:#9AA3A8;padding:0 2px 3px;border-bottom:1px solid #2F353A}
+.board .br{font:500 14px var(--f-mono);color:#F2E6C2}
+.board .f{display:flex;gap:1px}
+.board .f i{font-style:normal;display:inline-block;width:.78em;text-align:center;background:#22262A;border-radius:2px;box-shadow:inset 0 -1px 0 #0B0D0E,inset 0 1px 0 #30353A;line-height:1.5}
+.board .st-warn{color:#F0B34A} .board .st-bad{color:#F07A6A}
+
+.reg{display:grid;gap:26px}
+.filters{display:flex;flex-wrap:wrap;align-items:center}
+.filters .lbl{font-size:12px;color:var(--ink-3);margin-right:10px}
+.group{display:grid;gap:12px}
+.group > header{display:grid;gap:4px;border-bottom:1px solid var(--ink);padding-bottom:6px}
+.group > header p{color:var(--ink-2);font-size:14px}
+.ideas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 22px}
+@media (max-width:820px){.ideas{grid-template-columns:1fr}}
+.idea{display:grid;grid-template-columns:38px minmax(0,1fr);gap:4px 10px;padding:10px 0;border-bottom:1px solid var(--rule)}
+.idea .n{font-family:var(--f-mono);font-size:13px;color:var(--ink-3);padding-top:2px}
+.idea h3{font-size:16.5px}
+.idea p{font-size:13.5px;color:var(--ink-2);grid-column:2}
+.idea .tags{grid-column:2;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11.5px;color:var(--ink-3)}
+.idea.new .n{color:var(--proof)}
+.v{font:600 10.5px var(--f-ui);letter-spacing:.1em;text-transform:uppercase;padding:1px 6px;border:1px solid currentColor}
+.v.v10{color:var(--ok)} .v.v1x{color:var(--water-ink)} .v.v20{color:var(--branch)}
+.idea .src{font-family:var(--f-mono)}
+.idea .demo{color:var(--proof)}
+.costs{overflow-x:auto}
+.costs table{border-collapse:collapse;width:100%;min-width:560px;font-size:13.5px}
+.costs th{font-weight:500;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:6px 10px;border-bottom:1px solid var(--ink)}
+.costs td{padding:7px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+.costs td.w{font-family:var(--f-mono);white-space:nowrap}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+<header class="mast">
+  <div>
+    <div class="eyebrow">Ceteris Paribus · flavour, round two · 29 October 2026 · v2</div>
+    <h1>Charm from the <i>instrument</i></h1>
+    <p class="lede">Thirty-nine ideas in a different register from the rejected charms: no desk objects, no jokes, no collections. The charm comes from precise instruments, printed maps, weather charts and astronomers' plates, and from the model visibly doing its work. Thirty of them are lab tools that fit the pure-simulator 1.0 under ADR 0240.</p>
+  </div>
+  <div class="meta">Tokens: ADR 0137 Modern Atlas<br>Deduped against: art page v17,<br>ADRs 0001-0242, borrowed mechanics,<br>keyboard, character flavour<br>Demos use made-up toy data<br>v2: rail time rebuilt, ideas 26-39</div>
+</header>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">Ground rules</div>
+    <div class="intro">
+      <h2>What makes a charm fit a pure simulator</h2>
+      <p>ADR 0240 lets an item onto the 1.0 path when it helps a user read, edit or compare runs. So each 1.0 idea below must earn its place twice: it is pleasant, and it carries information the user did not have before.</p>
+    </div>
+  </div>
+  <div class="rules3">
+    <div class="rule"><h3>Every mark means a number</h3><p>No ornament that is not data. A line's weight, a label's size, a stipple's density, a ring's width, each reads from the run. Turning one off loses information, not just mood.</p></div>
+    <div class="rule"><h3>Craft from instruments and print</h3><p>Guilloche, survey benchmarks, isobars, station models, barographs, blink comparators, overprint registration, railway time maps. Old tools built to show quantities precisely.</p></div>
+    <div class="rule"><h3>Nothing scripted, nothing written to state</h3><p>All of it is presentation. No view changes a hash, nothing fires on a date, and every label after 1 January 2000 comes from the simulated run (ADR 0241).</p></div>
+  </div>
+  <p class="notlist"><b>Left out on purpose:</b> the rejected charm set and its kin (desk drink, window light, tear-off calendar, lighthouses, budget ritual, ink customs, pets, margin notes, every-calendar), portraits of any kind, sonification, humour, collections and achievements, and anything already on the art page (living map, game feel, interactions, local standards, flags, names).</p>
+</section>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">Plate 1</div>
+    <div class="intro">
+      <h2>One toy coast, eight ways to read it</h2>
+      <p>A made-up coast with fourteen towns, a railway, ports and a price shock that drifts east. Each button is one idea from the register below. In "Railway time", click any town.</p>
+    </div>
+  </div>
+  <div class="plate">
+    <div class="stage">
+      <canvas id="map" width="800" height="520" tabindex="0" aria-label="Toy map"></canvas>
+      <canvas id="fx" width="800" height="520" aria-hidden="true"></canvas>
+      <div class="stamp" id="mapstamp">Railway time</div>
+    </div>
+    <div class="side">
+      <div class="modes" role="group" aria-label="Map reading">
+        <button type="button" data-mode="rings" aria-pressed="true">Railway time</button>
+        <button type="button" data-mode="weather" aria-pressed="false">Price weather</button>
+        <button type="button" data-mode="borders" aria-pressed="false">Border weight</button>
+        <button type="button" data-mode="labels" aria-pressed="false">Labels</button>
+        <button type="button" data-mode="exposure" aria-pressed="false">Long exposure</button>
+        <button type="button" data-mode="stipple" aria-pressed="false">Stipple</button>
+        <button type="button" data-mode="overprint" aria-pressed="false">Overprint</button>
+        <button type="button" data-mode="blink" aria-pressed="false">Blink</button>
+      </div>
+      <div class="ctl" id="ctl"><label for="slider" id="sliderlbl">Month</label><input id="slider" type="range" min="0" max="24" value="8"><span id="sliderv">2003-09</span></div>
+      <div class="desc" id="mapdesc"></div>
+      <div id="extra"></div>
+      <p class="caption">Toy data, not Ceteris output. Town names are made up.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">Plate 2</div>
+    <div class="intro">
+      <h2>The model, visibly at work</h2>
+      <p>Three instruments for the chrome. They show things the engine already computes: the run hash, the clearing loop and the per-system tick budget of ADR 0235.</p>
+    </div>
+  </div>
+  <div class="grid3">
+    <div class="cell">
+      <h3>Run seal</h3>
+      <p>A guilloche rosette drawn from the run hash, as on banknotes and share certificates. Same hash, same seal on every machine; one changed edit gives a visibly different one. Type to change the hash.</p>
+      <div class="seals">
+        <div class="seal"><canvas id="sealA" width="300" height="300" aria-label="Seal for the main branch"></canvas><span>main</span></div>
+        <div class="seal"><canvas id="sealB" width="300" height="300" aria-label="Seal for the fork"></canvas><span>fork 2008-09</span></div>
+      </div>
+      <label class="caption" for="hashA">Main branch hash</label>
+      <input id="hashA" type="text" value="b3f1c09e7a2d4415" spellcheck="false" autocomplete="off">
+    </div>
+    <div class="cell">
+      <h3>Clearing ring</h3>
+      <p>Around the date, a thin ring closes as the month's markets clear. A hard month shows as a ring that hesitates, with the iteration count and final residual beside it.</p>
+      <div class="clearing">
+        <svg viewBox="0 0 96 96" aria-hidden="true">
+          <circle cx="48" cy="48" r="40" fill="none" stroke="var(--rule)" stroke-width="3"/>
+          <circle id="ring" cx="48" cy="48" r="40" fill="none" stroke="var(--ink)" stroke-width="3" stroke-dasharray="251.3" stroke-dashoffset="0" transform="rotate(-90 48 48)"/>
+          <text id="ringdate" x="48" y="53" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="var(--ink)">2003-09</text>
+        </svg>
+        <div class="rd"><b id="ringit">cleared</b><span id="ringres">6 iterations<br>residual 4.2e-10</span><button type="button" class="btn" id="ringbtn">Run one month</button></div>
+      </div>
+      <p class="caption">Iteration counts and residuals are illustrative.</p>
+    </div>
+    <div class="cell">
+      <h3>Orrery</h3>
+      <p>Each system as a ring turning at its own clock: climate yearly, economy monthly, calendar daily, war hourly and only while a war runs. Ring weight is its share of the tick budget.</p>
+      <canvas id="orrery" width="420" height="300" aria-label="Orrery of simulation systems"></canvas>
+      <p class="caption">Speeds are log-scaled; budget shares are illustrative.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">Plate 3</div>
+    <div class="intro">
+      <h2>Panel instruments</h2>
+      <p>New in this round. Each borrows a recording or observing instrument and points it at the economy: a barograph, a seismograph, a weather station, a tree core, a wind rose, a spirit level and a station departures board.</p>
+    </div>
+  </div>
+  <div class="grid3">
+    <div class="cell span2">
+      <h3>Strip-chart recorder and crisis seismograph</h3>
+      <p>Pin any series to a paper strip that inks as time runs, one pen per branch. Below it, one strip for the world: every detector event registers as a spike scaled by its size. The fork parts from main at the dashed line.</p>
+      <canvas id="strip" width="760" height="260" aria-label="Strip chart of a series in two branches and a seismograph of events"></canvas>
+      <div class="row"><button type="button" class="btn" id="strippause">Pause</button><span>GDP index, Escalda province · main <b style="color:var(--ink)">ink</b>, fork <b style="color:var(--branch)">violet</b></span></div>
+    </div>
+    <div class="cell">
+      <h3>Tree rings</h3>
+      <p>The province as a tree core, one ring a year from 2000. Ring width is real growth; recessions leave thin dark rings, and a banking crisis leaves a scar.</p>
+      <canvas id="rings" width="320" height="320" aria-label="Tree-ring cross-section of a province"></canvas>
+      <p class="caption" id="ringcap">Escalda, 2000-2034. Toy growth series.</p>
+    </div>
+    <div class="cell">
+      <h3>Station models</h3>
+      <p>The weather map's compact glyph, one per province. Cloud cover is unemployment, the wind shaft points to the main supplier, barbs count import inflation, and the corner numbers are growth, CPI and the policy rate.</p>
+      <svg id="stations" viewBox="0 0 320 185" role="img" aria-label="Three station models"></svg>
+      <p class="caption">Full barb 2 points, half barb 1, pennant 10. Each octa of cloud is 2% unemployment.</p>
+    </div>
+    <div class="cell">
+      <h3>Trade wind rose</h3>
+      <p>At a port, a rose of export value by compass bearing. Compare 2000 with a later year and the trade winds have visibly shifted.</p>
+      <div class="modes" role="group" aria-label="Year"><button type="button" data-rose="0" aria-pressed="true">2000</button><button type="button" data-rose="1" aria-pressed="false">2025</button></div>
+      <svg id="rose" viewBox="0 0 260 260" role="img" aria-label="Wind rose of exports from Port Miren"></svg>
+      <p class="caption">Port Miren. Petal area is the share of export value on that bearing.</p>
+    </div>
+    <div class="cell">
+      <h3>Spirit level</h3>
+      <p>Balances as a bubble vial. The bubble drifts off-centre as the current account moves; the marks are a tolerance you set. It answers back with the springy motion of the game-feel set.</p>
+      <svg id="level" viewBox="0 0 300 90" role="img" aria-label="Spirit level for the current account"></svg>
+      <div class="row"><label for="ca">Current account</label><input id="ca" type="range" min="-10" max="10" step="0.1" value="-2.4"><span id="cav" style="font-family:var(--f-mono)">-2.4% of GDP</span></div>
+    </div>
+    <div class="cell span2" style="grid-column:1/-1">
+      <h3>Departures board</h3>
+      <p>The port inspector as a split-flap board: next month's sailings by destination and good, with status words that come from the model (rationed, rerouted, held by a closure). Press the button to roll the month.</p>
+      <div class="board" id="board" aria-live="polite"></div>
+      <div class="row"><button type="button" class="btn" id="boardbtn">Next month</button><span>Port Miren · sailings over 5 kt</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">Plate 4</div>
+    <div class="intro">
+      <h2>Ink of evidence, and prices in hours</h2>
+      <p>Two typographic ideas for every panel. The first shows where a number comes from. The second restates money in the hours of local work it costs.</p>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="cell">
+      <h3>Ink of evidence</h3>
+      <p>The weight of the type says where the number comes from. Only 1 January 2000 can be observed; everything after is simulated, which the ink makes plain. Totals that balance get the accountant's double rule (idea 34).</p>
+      <div class="key"><span class="ink-obs">observed 2000 data</span><span class="ink-imp">imputed in 2000</span><span class="ink-sim">simulated</span><span class="ink-ed">your edit</span></div>
+      <div class="tbl-wrap"><table class="ledger">
+        <thead><tr><th>Alicante</th><th>2000-01</th><th>2008-03</th><th>2014-03</th></tr></thead>
+        <tbody>
+          <tr><td>Population, thousand</td><td class="ink-obs">1,461</td><td class="ink-sim">1,872</td><td class="ink-sim">1,860</td></tr>
+          <tr><td>Construction share of jobs</td><td class="ink-imp">13.1%</td><td class="ink-sim">16.4%</td><td class="ink-sim">7.9%</td></tr>
+          <tr><td>Policy rate</td><td class="ink-obs">3.00%</td><td class="ink-sim">3.94%</td><td class="ink-ed">0.50%</td></tr>
+          <tr><td>Port throughput index</td><td class="ink-imp">100</td><td class="ink-sim">131</td><td class="ink-sim">118</td></tr>
+          <tr><td>Sources minus uses</td><td class="ink-sim" style="border-bottom:3px double var(--ink)">0</td><td class="ink-sim" style="border-bottom:3px double var(--ink)">0</td><td class="ink-sim" style="border-bottom:3px double var(--ink)">0</td></tr>
+        </tbody>
+      </table></div>
+      <p class="caption">Values made up for the mock.</p>
+    </div>
+    <div class="cell">
+      <h3>Time prices</h3>
+      <p>A units toggle that prices goods in hours of local median work. The same tariff reads very differently in two provinces.</p>
+      <div class="modes" role="group" aria-label="Units">
+        <button type="button" data-unit="money" aria-pressed="true">Local money</button>
+        <button type="button" data-unit="hours" aria-pressed="false">Hours of work</button>
+      </div>
+      <div class="tbl-wrap"><table class="ledger" id="tp">
+        <thead><tr><th>Good, 2003-09</th><th>Lagos</th><th>Lyon</th><th>Lahore</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <p class="caption">Illustrative prices and wages, not model output.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">Register</div>
+    <div class="intro">
+      <h2>All thirty-nine</h2>
+      <p>Grouped by register; numbers in magenta are new in this round. Version tags follow ADR 0240: <span class="v v10">1.0</span> helps read, edit or compare runs; <span class="v v1x">1.x</span> needs a system that lands after 1.0; <span class="v v20">2.0+</span> is flavour that needs a seat, regime chrome or fog of data. Cost is part-time owner effort.</p>
+    </div>
+  </div>
+  <div class="filters" role="group" aria-label="Filter by version">
+    <span class="lbl">Show</span>
+    <span class="modes">
+      <button type="button" data-f="all" aria-pressed="true">All</button>
+      <button type="button" data-f="v10" aria-pressed="false">1.0</button>
+      <button type="button" data-f="v1x" aria-pressed="false">1.x</button>
+      <button type="button" data-f="v20" aria-pressed="false">2.0+</button>
+      <button type="button" data-f="new" aria-pressed="false">New this round</button>
+    </span>
+  </div>
+  <div class="reg" id="reg"></div>
+</section>
+
+<section>
+  <div class="sechead">
+    <div class="eyebrow">Cost</div>
+    <div class="intro">
+      <h2>What the 1.0 set would cost</h2>
+      <p>All of it is presentation over data that P2-P5 already compute, so most items are a few days each. Three need new plumbing: the clearing ring (the solver reports its iterations), ripples on the real wires (the explainer chain of 0118) and the seismograph (event magnitudes from the detectors of 0049). Decisions wait until you have seen enough ideas.</p>
+    </div>
+  </div>
+  <div class="costs"><table>
+    <thead><tr><th>Register</th><th>1.0 items</th><th>Effort</th><th>Lands with</th></tr></thead>
+    <tbody>
+      <tr><td>The model at work</td><td>1-6, 34</td><td class="w">2-3 weeks</td><td>P3 chrome, 0137 neutral theme</td></tr>
+      <tr><td>Cartography of the run</td><td>7-13</td><td class="w">3-4 weeks</td><td>P3 map modes, beside 0155 lenses</td></tr>
+      <tr><td>Comparing like an astronomer</td><td>14-17, 35</td><td class="w">1-2 weeks</td><td>P3 branch compare (14.5, 0116)</td></tr>
+      <tr><td>Panel instruments</td><td>26-33</td><td class="w">3-4 weeks</td><td>P3 inspector and panels</td></tr>
+      <tr><td>Human scale</td><td>18, 20, 36</td><td class="w">2 weeks</td><td>P3 inspector, 0158 pedia</td></tr>
+      <tr><td><b>Total</b></td><td>30 items</td><td class="w"><b>11-15 weeks</b></td><td>Needs a cut before it goes in a plan</td></tr>
+    </tbody>
+  </table></div>
+</section>
+</div>
+
+<script>
+(() => {
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const probe = document.createElement('span'); probe.style.display='none'; document.body.appendChild(probe);
+function rgb(n){ probe.style.color = css(n); const m = getComputedStyle(probe).color.match(/[\d.]+/g); return m.slice(0,3).map(Number); }
+const C = {};
+function readColors(){ for (const k of ['paper','paper-2','ink','ink-2','ink-3','rule','sea','land','lo','hi','proof','branch','water-ink','warn','t1','t2','t3','t4']) C[k] = rgb('--'+k); }
+const rs = (c,a=1) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+const mix = (a,b,t) => [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+const SERIF='"Source Serif 4", Georgia, serif', UI='"IBM Plex Sans Condensed", "Arial Narrow", sans-serif', MONO='"IBM Plex Mono", monospace';
+
+/* ---------- toy world ---------- */
+const W = 400, H = 260, N = W*H, S = 800/W;
+function h2(i,j,s){ let h = Math.imul(i,374761393) + Math.imul(j,668265263) + Math.imul(s,982451653) | 0; h = Math.imul(h ^ (h>>>13), 1274126177); return ((h ^ (h>>>16))>>>0) / 4294967296; }
+function vnoise(x,y,s){ const i=Math.floor(x), j=Math.floor(y), fx=x-i, fy=y-j, u=fx*fx*(3-2*fx), v=fy*fy*(3-2*fy);
+  const a=h2(i,j,s), b=h2(i+1,j,s), c=h2(i,j+1,s), d=h2(i+1,j+1,s); return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v; }
+function fbm(x,y,s){ let t=0, amp=.5, f=1; for (let o=0;o<5;o++){ t+=amp*vnoise(x*f,y*f,s+o); amp*=.5; f*=2; } return t; }
+const land = new Uint8Array(N), terrain = new Float32Array(N), coast = new Float32Array(N), base = new Float32Array(N), spread = new Float32Array(N);
+for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+  const dx=(x/W-.55)*1.5, dy=(y/H-.5)*1.25, i=y*W+x;
+  const h = fbm(x*.011,y*.011,7) + .42 - 1.05*(dx*dx+dy*dy) - .25*Math.max(0,.25-x/W);
+  land[i] = h > .62 ? 1 : 0;
+  terrain[i] = .6 + 1.8*Math.max(0, fbm(x*.03,y*.03,21)-.38);
+}
+{ const q = new Int32Array(N); let qh=0, qt=0; coast.fill(1e9);
+  for (let i=0;i<N;i++) if (!land[i]) { coast[i]=0; q[qt++]=i; }
+  while (qh<qt){ const i=q[qh++], x=i%W, y=(i/W)|0; for (const [nx,ny] of [[x+1,y],[x-1,y],[x,y+1],[x,y-1]]){ if(nx<0||ny<0||nx>=W||ny>=H) continue; const k=ny*W+nx; if (coast[k]>coast[i]+1){ coast[k]=coast[i]+1; q[qt++]=k; } } } }
+for (let i=0;i<N;i++){ const x=i%W, y=(i/W)|0;
+  base[i] = .18 + .45*Math.min(1, coast[i]/55) + .37*fbm(x*.008+40,y*.008,3);
+  spread[i] = Math.min(1, .05 + .9*Math.min(1,coast[i]/70)*fbm(x*.02,y*.02,11)*1.6); }
+
+// towns
+const NAMES=['Escalda','Varonne','Port Miren','Tolde','Sarrat','Ouvène','Castrell','Albaria','Quinta Rasa','Morvel','Haldin','Saint-Oriel','Lessa','Brenmouth','Arvel','Cassen'];
+const towns=[];
+for (let k=0; k<4000 && towns.length<14; k++){
+  const x = 12 + Math.floor(h2(k,1,77)*(W-24)), y = 12 + Math.floor(h2(k,2,77)*(H-24)), i=y*W+x;
+  if (!land[i] || coast[i]<2) continue;
+  if (towns.some(t=>Math.hypot(t.x-x,t.y-y)<40)) continue;
+  const n=towns.length;
+  towns.push({x,y,i,name:NAMES[n],pop0:40+1100*h2(n,3,77)**2,g:(h2(n,4,77)-.42)*.07,port:coast[i]<9});
+}
+towns.forEach((t,n)=>{ if (t.port && !t.name.startsWith('Port') && n%3===0) t.name='Port '+t.name; });
+// rails: minimum spanning tree over towns, land-only straight links
+function landLine(a,b){ const n=Math.ceil(Math.hypot(b.x-a.x,b.y-a.y)); for (let s=0;s<=n;s++){ const x=Math.round(a.x+(b.x-a.x)*s/n), y=Math.round(a.y+(b.y-a.y)*s/n); if(!land[y*W+x]) return false; } return true; }
+const rail = new Uint8Array(N), rails=[];
+{ const inT=new Set([0]); for(;;){ let best=null;
+    for (const a of inT) towns.forEach((b,j)=>{ if(inT.has(j)) return; const d=Math.hypot(towns[a].x-b.x,towns[a].y-b.y); if((!best||d<best[2]) && d<150 && landLine(towns[a],b)) best=[a,j,d]; });
+    if(!best){ const rest=towns.findIndex((_,j)=>!inT.has(j)); if(rest<0) break; inT.add(rest); continue; }
+    inT.add(best[1]); rails.push([best[0],best[1]]); } }
+for (const [a,b] of rails){ const A=towns[a], B=towns[b], n=Math.ceil(Math.hypot(B.x-A.x,B.y-A.y)); for(let s=0;s<=n;s++){ const x=Math.round(A.x+(B.x-A.x)*s/n), y=Math.round(A.y+(B.y-A.y)*s/n); rail[y*W+x]=1; } }
+const portZone = new Uint8Array(N);
+for (const t of towns) if (t.port) for (let y=Math.max(0,t.y-9);y<Math.min(H,t.y+10);y++) for (let x=Math.max(0,t.x-9);x<Math.min(W,t.x+10);x++) if (Math.hypot(x-t.x,y-t.y)<=9) portZone[y*W+x]=1;
+// regions: nearest town
+const region = new Int16Array(N).fill(-1);
+for (let i=0;i<N;i++){ if(!land[i]) continue; const x=i%W, y=(i/W)|0; let b=-1, bd=1e9; towns.forEach((t,j)=>{ const d=(t.x-x)**2+(t.y-y)**2; if(d<bd){bd=d;b=j;} }); region[i]=b; }
+
+// Dijkstra over typed arrays
+const NB=[[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[1,1,1.4142],[-1,-1,1.4142],[1,-1,1.4142],[-1,1,1.4142]];
+function dijkstra(src){
+  const d=new Float64Array(N).fill(Infinity), cap=N*9, hk=new Int32Array(cap), hv=new Float64Array(cap); let n=0;
+  const push=(k,v)=>{ let i=n++; hk[i]=k; hv[i]=v; while(i>0){ const p=(i-1)>>1; if(hv[p]<=hv[i]) break; [hk[p],hk[i]]=[hk[i],hk[p]]; [hv[p],hv[i]]=[hv[i],hv[p]]; i=p; } };
+  const pop=()=>{ const k=hk[0], v=hv[0]; n--; if(n>0){ hk[0]=hk[n]; hv[0]=hv[n]; let i=0; for(;;){ const a=2*i+1, b=a+1; let m=i; if(a<n&&hv[a]<hv[m]) m=a; if(b<n&&hv[b]<hv[m]) m=b; if(m===i) break; [hk[m],hk[i]]=[hk[i],hk[m]]; [hv[m],hv[i]]=[hv[i],hv[m]]; i=m; } } return [k,v]; };
+  d[src]=0; push(src,0);
+  while(n>0){ const [i,v]=pop(); if (v>d[i]) continue; const x=i%W, y=(i/W)|0;
+    for (const [ox,oy,dl] of NB){ const nx=x+ox, ny=y+oy; if(nx<0||ny<0||nx>=W||ny>=H) continue; const k=ny*W+nx; let c;
+      if (land[i] && land[k]) c = dl*(rail[i]&&rail[k] ? .09 : terrain[k]);
+      else if (!land[i] && !land[k]) c = dl*.18;
+      else if (portZone[i] && portZone[k]) c = 5;
+      else continue;
+      const nv=v+c; if (nv<d[k] && n<cap){ d[k]=nv; push(k,nv); } } }
+  return d; }
+
+function shockAt(m){ return { cx: 120 + m*8.5, cy: 120 + 25*Math.sin(m/5), amp: m===0?0:.30*Math.min(1,m/4) }; }
+function field(m){ const f = new Float32Array(N), s = shockAt(m);
+  for (let i=0;i<N;i++){ const x=i%W, y=(i/W)|0, d2=(x-s.cx)**2+(y-s.cy)**2; f[i] = base[i] + s.amp*Math.exp(-d2/(2*38*38)); } return f; }
+const ymd = m => { const t = 2003*12 + m; return `${Math.floor(t/12)}-${String(t%12+1).padStart(2,'0')}`; };
+const popAt = (t,yr) => t.pop0*Math.exp(t.g*yr);
+function friction(a,b,yr){ const lo=Math.min(a,b), hi=Math.max(a,b); let f=.15+.85*h2(lo,hi,5);
+  if (yr>=10 && lo<5 && hi<5) f*=.25; if (yr>=30 && ((lo===6&&hi===9)||(lo===2&&hi===7))) f=Math.min(1.4,f+.9); return f; }
+
+/* ---------- map render ---------- */
+const cv = document.getElementById('map'), ctx = cv.getContext('2d');
+const fx = document.getElementById('fx'), fctx = fx.getContext('2d');
+const off = document.createElement('canvas'); off.width=W; off.height=H; const octx = off.getContext('2d');
+const st = { mode:'rings', month:8, year:12, speed:16, origin:0, dist:null, wave:Infinity, blinkB:false };
+let blinkT=null, waveRAF=null, fxRAF=null;
+function paint(fn){ const img = octx.createImageData(W,H), px = img.data;
+  for (let i=0;i<N;i++){ const c = fn(i); px[i*4]=c[0]; px[i*4+1]=c[1]; px[i*4+2]=c[2]; px[i*4+3]=255; }
+  octx.putImageData(img,0,0); ctx.imageSmoothingEnabled = st.mode!=='stipple'; ctx.drawImage(off,0,0,cv.width,cv.height); }
+function coastline(a=.7){ ctx.strokeStyle = rs(C['ink-2'],a); ctx.lineWidth = 1.1; ctx.beginPath();
+  for (let y=0;y<H-1;y++) for (let x=0;x<W-1;x++){ const p=land[y*W+x], q=land[y*W+x+1], r=land[(y+1)*W+x];
+    if (p!==q){ ctx.moveTo((x+1)*S,y*S); ctx.lineTo((x+1)*S,(y+1)*S); } if (p!==r){ ctx.moveTo(x*S,(y+1)*S); ctx.lineTo((x+1)*S,(y+1)*S); } }
+  ctx.stroke(); }
+function contours(f, levels, style, mask){
+  ctx.beginPath();
+  for (const L of levels) for (let y=0;y<H-1;y++) for (let x=0;x<W-1;x++){
+    const i=y*W+x; if (mask(i)||mask(i+1)||mask(i+W)||mask(i+W+1)) continue;
+    const v=[f[i],f[i+1],f[i+W+1],f[i+W]], p=[[x,y],[x+1,y],[x+1,y+1],[x,y+1]], pts=[];
+    for (let e=0;e<4;e++){ const a=v[e], b=v[(e+1)%4]; if ((a<L)!==(b<L)){ const t=(L-a)/(b-a), P=p[e], Q=p[(e+1)%4]; pts.push([(P[0]+(Q[0]-P[0])*t)*S,(P[1]+(Q[1]-P[1])*t)*S]); } }
+    if (pts.length>=2){ ctx.moveTo(pts[0][0],pts[0][1]); ctx.lineTo(pts[1][0],pts[1][1]); }
+    if (pts.length===4){ ctx.moveTo(pts[2][0],pts[2][1]); ctx.lineTo(pts[3][0],pts[3][1]); }
+  }
+  ctx.strokeStyle = style.c; ctx.lineWidth = style.w; ctx.stroke(); }
+const notLand = i => !land[i];
+function drawRails(alpha=1){
+  for (const [a,b] of rails){ const A=towns[a], B=towns[b];
+    ctx.lineCap='butt'; ctx.setLineDash([]); ctx.strokeStyle=rs(C.ink,alpha); ctx.lineWidth=3.4; ctx.beginPath(); ctx.moveTo(A.x*S,A.y*S); ctx.lineTo(B.x*S,B.y*S); ctx.stroke();
+    ctx.strokeStyle=rs(C.paper,alpha); ctx.lineWidth=1.6; ctx.setLineDash([7,7]); ctx.stroke(); ctx.setLineDash([]); } }
+function townDot(t, r=3.2){ ctx.fillStyle=rs(C.paper); ctx.strokeStyle=rs(C.ink); ctx.lineWidth=1.4; ctx.beginPath(); ctx.arc(t.x*S,t.y*S,r,0,7); ctx.fill(); ctx.stroke();
+  if (t.port){ ctx.beginPath(); ctx.moveTo(t.x*S-r-3,t.y*S+r+3); ctx.lineTo(t.x*S+r+3,t.y*S+r+3); ctx.stroke(); } }
+function label(text,x,y,font,color,align='left'){ ctx.font=font; ctx.textAlign=align; ctx.textBaseline='middle'; ctx.lineWidth=3; ctx.strokeStyle=rs(C.paper,.85); ctx.strokeText(text,x,y); ctx.fillStyle=color; ctx.fillText(text,x,y); }
+function extremes(f){ const out=[];
+  for (let y=8;y<H-8;y+=4) for (let x=8;x<W-8;x+=4){ const i=y*W+x; if(!land[i]) continue; let mx=true, mn=true;
+    for (let yy=-22;yy<=22;yy+=2) for (let xx=-22;xx<=22;xx+=2){ const X=x+xx, Y=y+yy; if(X<0||Y<0||X>=W||Y>=H) continue; const k=Y*W+X; if(!land[k]) continue; if(f[k]>f[i]) mx=false; if(f[k]<f[i]) mn=false; }
+    if ((mx||mn) && coast[i]>6 && !out.some(o=>Math.hypot(o.x-x,o.y-y)<45)) out.push({x,y,hi:mx,v:f[i]}); }
+  return out.slice(0,6); }
+const ramp = v => mix(C.lo, C.hi, Math.max(0,Math.min(1,(v-.2)/.85)));
+const DAY = 3; // cost units per day of travel
+const desc = {
+  rings:['Railway time (11)','Bands of equal travel time from one town, as on 19th-century time maps. Rail is fast, open country slow, and the sea is cheap once a port is reached, so the bands stretch along the lines and leap across bays. Click a town to send a new time wave.'],
+  weather:['Price weather (7)','Isobars of a price level, with H and L for highs and lows. Drag the month: the shock moves east as a front and the isobars bunch where prices change fastest.'],
+  borders:['Border weight (8)','Each border is drawn as thick as the trade friction across it. Drag the years: a customs union in the west thins its borders in 2010, and two sanctions edits thicken others in 2030.'],
+  labels:['Labels that earn their size (9)','Town lettering takes its cartographic class from simulated population. Drag the years: growing towns are promoted to capitals and serif, shrinking ones fade to grey italics.'],
+  exposure:['Long exposure (12)','At high speed, trains and ships leave light trails in proportion to traffic, like a night photograph. The slider is game speed: faster means longer trails.'],
+  stipple:['Stipple of doubt (10)','Where the ensemble lanes disagree, the fill dissolves into stipple. Solid colour means the lanes agree; a speckled interior means read the fan chart before trusting the map.'],
+  overprint:['Overprint (15)','Main printed in cyan, the fork in magenta, as two plates on one sheet. Where they agree the ink prints dark; where they differ the colour fringes show which branch is higher.'],
+  blink:['Blink comparator (14)','The two branches swap several times a second, as Clyde Tombaugh compared plates to find Pluto. Everything identical stands still; only the change flickers.']
+};
+const SL = { month:{min:0,max:24,lbl:'Month',key:'month',fmt:v=>ymd(v)}, year:{min:0,max:48,lbl:'Year',key:'year',fmt:v=>String(2000+v)}, speed:{min:1,max:48,lbl:'Speed',key:'speed',fmt:v=>'×'+v} };
+const MODE_SL = { rings:null, weather:'month', stipple:'month', overprint:'month', blink:'month', borders:'year', labels:'year', exposure:'speed' };
+
+function renderRings(){
+  if (!st.dist) st.dist = dijkstra(towns[st.origin].i);
+  const d = st.dist, wv = st.wave;
+  const shades = [0,1,2,3,4,5,6,7].map(k=>mix(C.land, C['water-ink'], .03+k*.085));
+  paint(i => { if (!land[i]) { const dd=d[i]; return (dd<=wv && dd<Infinity) ? mix(C.sea, C['water-ink'], .08) : C.sea; }
+    const dd=d[i]; if (!(dd<=wv)) return C.land; const k=Math.min(7, Math.floor(dd/(2*DAY))); return shades[k]; });
+  const lv=[]; for (let k=1;k<=12;k++) if (k*2*DAY<=wv) lv.push(k*2*DAY);
+  contours(d, lv, {c:rs(C.ink,.45), w:1}, notLand);
+  coastline(); drawRails();
+  towns.forEach((t,j)=>{ townDot(t, j===st.origin?5:3.2); const dd=d[t.i];
+    label(t.name, t.x*S+8, t.y*S-7, `600 12px ${UI}`, rs(C.ink));
+    if (dd<=wv) label(j===st.origin?'origin':(dd===Infinity?'no route':`${(dd/DAY).toFixed(1)} d`), t.x*S+8, t.y*S+8, `500 11px ${MONO}`, rs(j===st.origin?C.proof:C['ink-2'])); });
+  const o=towns[st.origin]; ctx.strokeStyle=rs(C.proof); ctx.lineWidth=2; ctx.beginPath(); ctx.arc(o.x*S,o.y*S,9,0,7); ctx.stroke();
+  document.getElementById('mapstamp').textContent = `Railway time · days from ${o.name}`;
+  document.getElementById('extra').innerHTML = `<div class="swatches">${shades.map((c,k)=>`<span><i style="background:${rs(c)}"></i>${k*2}-${k*2+2}</span>`).join('')}</div><p class="caption">Days of travel. Rail 0.1 of open-country cost per cell, sea 0.2, a port transfer costs a third of a day.</p>`;
+}
+function startWave(){ cancelAnimationFrame(waveRAF); st.dist=null;
+  if (reduce){ st.wave=Infinity; render(); return; }
+  const d = st.dist = dijkstra(towns[st.origin].i); let mx=0; for (let i=0;i<N;i++) if (land[i] && d[i]<Infinity && d[i]>mx) mx=d[i];
+  const t0=performance.now(), dur=1400;
+  const step=now=>{ const p=Math.min(1,(now-t0)/dur); st.wave = p<1 ? mx*p*(2-p) : Infinity; render(); if (p<1 && st.mode==='rings') waveRAF=requestAnimationFrame(step); };
+  waveRAF=requestAnimationFrame(step); }
+
+function renderBorders(){
+  const yr=st.year, tints=[C.t1,C.t2,C.t3,C.t4];
+  paint(i => land[i] ? tints[(region[i]*7)%4] : C.sea);
+  const segs=new Map();
+  for (let y=0;y<H-1;y++) for (let x=0;x<W-1;x++){ const i=y*W+x, a=region[i]; if (a<0) continue;
+    const r=region[i+1], b=region[i+W];
+    if (r>=0 && r!==a){ const k=Math.min(a,r)+'-'+Math.max(a,r); (segs.get(k)||segs.set(k,[]).get(k)).push([(x+1)*S,y*S,(x+1)*S,(y+1)*S]); }
+    if (b>=0 && b!==a){ const k=Math.min(a,b)+'-'+Math.max(a,b); (segs.get(k)||segs.set(k,[]).get(k)).push([x*S,(y+1)*S,(x+1)*S,(y+1)*S]); } }
+  ctx.lineCap='round';
+  for (const [k,list] of segs){ const [a,b]=k.split('-').map(Number), f=friction(a,b,yr); ctx.strokeStyle=rs(C.ink, .35+.5*Math.min(1,f)); ctx.lineWidth=.8+5*f; ctx.beginPath(); for (const s of list){ ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); } ctx.stroke(); }
+  coastline(.9);
+  towns.forEach(t=>{ townDot(t,2.6); label(t.name, t.x*S+6, t.y*S-6, `500 11px ${UI}`, rs(C['ink-2'])); });
+  const ev = yr>=30 ? 'Union in force since 2010; sanctions since 2030' : yr>=10 ? 'Western customs union in force since 2010' : 'No agreements yet';
+  document.getElementById('mapstamp').textContent = `Border weight · ${2000+yr}`;
+  document.getElementById('extra').innerHTML = `<p class="caption">${ev}. Line width = trade friction, from 0.15 to 1.4.</p>`;
+}
+function cls(p){ return p>=900?0 : p>=350?1 : p>=120?2 : p>=45?3 : 4; }
+const CLS = [ [`700 17px ${SERIF}`,'caps',6], [`600 15px ${SERIF}`,'',4.6], [`600 13px ${UI}`,'',3.6], [`500 11.5px ${UI}`,'',2.8], [`italic 400 11px ${UI}`,'fade',2.2] ];
+function renderLabels(){
+  const yr=st.year;
+  paint(i => land[i] ? mix(C.land, C.paper, .25) : C.sea);
+  coastline(); drawRails(.35);
+  const moved=[];
+  towns.forEach(t=>{ const p=popAt(t,yr), c=cls(p), c0=cls(t.pop0), [font,kind,r]=CLS[c];
+    if (c<c0) moved.push(`<b style="color:var(--ok)">${t.name}</b> up`); if (c>c0) moved.push(`<span style="color:var(--ink-3)">${t.name}</span> down`);
+    townDot(t, r);
+    const txt = kind==='caps' ? t.name.toUpperCase().split('').join(' ') : t.name;
+    label(txt, t.x*S+r+5, t.y*S-r-3, font, rs(kind==='fade'?C['ink-3']:C.ink));
+    label(`${Math.round(p)}k`, t.x*S+r+5, t.y*S+r+7, `400 10px ${MONO}`, rs(C['ink-3'])); });
+  document.getElementById('mapstamp').textContent = `Labels · ${2000+yr}`;
+  document.getElementById('extra').innerHTML = `<p class="caption">${moved.length?'Since 2000: '+moved.join(', ')+'.':'Every town in its 2000 class.'} Classes at 45k, 120k, 350k and 900k people.</p>`;
+}
+// long exposure: trains on rail links, ships between ports via sea BFS
+const lanes = [];
+{ for (const [a,b] of rails) lanes.push({pts:[[towns[a].x,towns[a].y],[towns[b].x,towns[b].y]], kind:'rail', vol:.4+h2(a,b,9)});
+  const ports = towns.filter(t=>t.port);
+  function seaPath(A,B){ const prev=new Int32Array(N).fill(-1), q=new Int32Array(N); let qh=0,qt=0;
+    const start=[], goal=new Set();
+    for (let i=0;i<N;i++) if (!land[i] && portZone[i]){ const x=i%W,y=(i/W)|0; if (Math.hypot(x-A.x,y-A.y)<=9){ start.push(i); prev[i]=i; q[qt++]=i; } if (Math.hypot(x-B.x,y-B.y)<=9) goal.add(i); }
+    let end=-1; while(qh<qt){ const i=q[qh++]; if (goal.has(i)){ end=i; break; } const x=i%W,y=(i/W)|0;
+      for (const [ox,oy] of NB){ const nx=x+ox, ny=y+oy; if(nx<0||ny<0||nx>=W||ny>=H) continue; const k=ny*W+nx; if(land[k]||prev[k]>=0) continue; prev[k]=i; q[qt++]=k; } }
+    if (end<0) return null; const pts=[[B.x,B.y]]; let i=end, c=0; while(prev[i]!==i){ if(c++%6===0) pts.push([i%W,(i/W)|0]); i=prev[i]; } pts.push([i%W,(i/W)|0],[A.x,A.y]); return pts.reverse(); }
+  for (let a=0;a<ports.length;a++) for (let b=a+1;b<ports.length;b++){ if (lanes.filter(l=>l.kind==='sea').length>=6) break; const p=seaPath(ports[a],ports[b]); if (p && p.length<120) lanes.push({pts:p, kind:'sea', vol:.5+h2(a,b,13)}); } }
+lanes.forEach(l=>{ let L=0; l.cum=[0]; for (let k=1;k<l.pts.length;k++){ L+=Math.hypot(l.pts[k][0]-l.pts[k-1][0], l.pts[k][1]-l.pts[k-1][1]); l.cum.push(L); } l.len=L; });
+const movers=[]; lanes.forEach((l,j)=>{ const n=Math.round(2+4*l.vol); for (let k=0;k<n;k++) movers.push({l, s:(k/n + h2(j,k,3))%1, dir: k%2?1:-1}); });
+function at(l,s){ const d=s*l.len; let k=1; while(k<l.cum.length-1 && l.cum[k]<d) k++; const a=l.pts[k-1], b=l.pts[k], t=(d-l.cum[k-1])/Math.max(1e-6,l.cum[k]-l.cum[k-1]); return [(a[0]+(b[0]-a[0])*t)*S,(a[1]+(b[1]-a[1])*t)*S]; }
+const NIGHT=[14,19,24], NIGHTLAND=[34,40,44], GLOW=[255,214,150], SHIP=[150,210,255];
+function renderExposureBase(){ paint(i => land[i] ? NIGHTLAND : NIGHT);
+  ctx.strokeStyle='rgba(120,135,145,.5)'; ctx.lineWidth=1; ctx.beginPath();
+  for (let y=0;y<H-1;y++) for (let x=0;x<W-1;x++){ const p=land[y*W+x], q=land[y*W+x+1], r=land[(y+1)*W+x]; if(p!==q){ctx.moveTo((x+1)*S,y*S);ctx.lineTo((x+1)*S,(y+1)*S);} if(p!==r){ctx.moveTo(x*S,(y+1)*S);ctx.lineTo((x+1)*S,(y+1)*S);} } ctx.stroke();
+  towns.forEach(t=>{ const g=ctx.createRadialGradient(t.x*S,t.y*S,0,t.x*S,t.y*S,6+Math.sqrt(t.pop0)/2); g.addColorStop(0,'rgba(255,214,150,.9)'); g.addColorStop(1,'rgba(255,214,150,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(t.x*S,t.y*S,6+Math.sqrt(t.pop0)/2,0,7); ctx.fill(); });
+  document.getElementById('mapstamp').textContent = `Long exposure · speed ×${st.speed}`;
+  document.getElementById('extra').innerHTML = `<p class="caption">Warm trails are trains, cool trails ships. Trail brightness follows the traffic on each link.</p>`; }
+function exposureLoop(){ cancelAnimationFrame(fxRAF); fctx.clearRect(0,0,fx.width,fx.height);
+  const frame=()=>{ if (st.mode!=='exposure'){ fctx.clearRect(0,0,fx.width,fx.height); return; }
+    const sp=st.speed; fctx.globalCompositeOperation='destination-out'; fctx.fillStyle=`rgba(0,0,0,${Math.max(.015,.35/(1+sp/3))})`; fctx.fillRect(0,0,fx.width,fx.height);
+    fctx.globalCompositeOperation='lighter';
+    for (const m of movers){ const p0=at(m.l,m.s); m.s=(m.s + m.dir*sp*.00006*(m.l.kind==='rail'?1.6:1)*(200/Math.max(30,m.l.len)) + 1)%1; const p1=at(m.l,m.s);
+      if (Math.hypot(p1[0]-p0[0],p1[1]-p0[1])>40) continue; const c=m.l.kind==='rail'?GLOW:SHIP;
+      fctx.strokeStyle=rs(c,.35+.5*m.l.vol/1.5); fctx.lineWidth=1.6; fctx.beginPath(); fctx.moveTo(p0[0],p0[1]); fctx.lineTo(p1[0],p1[1]); fctx.stroke(); }
+    fctx.globalCompositeOperation='source-over'; fxRAF=requestAnimationFrame(frame); };
+  if (reduce){ for (let r=0;r<400;r++){ for (const m of movers){ const p0=at(m.l,m.s); m.s=(m.s+m.dir*.002+1)%1; const p1=at(m.l,m.s); if (Math.hypot(p1[0]-p0[0],p1[1]-p0[1])>40) continue; fctx.strokeStyle=rs(m.l.kind==='rail'?GLOW:SHIP,.25); fctx.beginPath(); fctx.moveTo(p0[0],p0[1]); fctx.lineTo(p1[0],p1[1]); fctx.stroke(); } } return; }
+  fxRAF=requestAnimationFrame(frame); }
+
+function render(){
+  const m=st.mode, stamp=document.getElementById('mapstamp');
+  if (m!=='rings' && m!=='borders' && m!=='labels' && m!=='exposure') document.getElementById('extra').innerHTML='';
+  if (m==='rings') return renderRings();
+  if (m==='borders') return renderBorders();
+  if (m==='labels') return renderLabels();
+  if (m==='exposure') return renderExposureBase();
+  const f = field(st.month), f0 = field(0);
+  if (m==='weather'){
+    paint(i => land[i] ? mix(C.land, ramp(f[i]), .35) : C.sea);
+    contours(f, Array.from({length:12},(_,k)=>.25+k*.075), {c:rs(C['ink-2'],.75), w:1}, notLand);
+    coastline();
+    for (const e of extremes(f)){ label(e.hi?'H':'L', e.x*S, e.y*S, `700 22px ${SERIF}`, rs(e.hi?C.hi:C['water-ink']), 'center'); label((e.v*100).toFixed(0), e.x*S, e.y*S+17, `500 11px ${MONO}`, rs(C['ink-2']), 'center'); }
+    stamp.textContent = `Price weather · fork · ${ymd(st.month)}`;
+  } else if (m==='stipple'){
+    paint(i => !land[i] ? C.sea : h2(i%W,(i/W)|0,st.month+99) < spread[i]*spread[i]*.9 ? C['paper-2'] : ramp(f[i]));
+    coastline(); stamp.textContent = `Stipple of doubt · ${ymd(st.month)}`;
+  } else if (m==='overprint'){
+    paint(i => { if (!land[i]) return C.sea; const a=Math.min(1,Math.max(0,(f0[i]-.2)/.9)), b=Math.min(1,Math.max(0,(f[i]-.2)/.9));
+      return [255*(1-a*.85), 255*(1-b*.85), 255*(1-.25*(a+b))]; });
+    coastline(); stamp.textContent = 'Overprint · main cyan, fork magenta';
+  } else if (m==='blink'){
+    const g = st.blinkB ? f : f0; paint(i => land[i] ? ramp(g[i]) : C.sea); coastline();
+    stamp.textContent = st.blinkB ? `Blink · fork ${ymd(st.month)}` : `Blink · main ${ymd(st.month)}`;
+  }
+}
+function setMode(m){
+  st.mode=m; document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed', b.dataset.mode===m));
+  const d=desc[m]; document.getElementById('mapdesc').innerHTML = `<b>${d[0]}</b><span>${d[1]}</span>`;
+  clearInterval(blinkT); blinkT=null; cancelAnimationFrame(waveRAF); cancelAnimationFrame(fxRAF); fctx.clearRect(0,0,fx.width,fx.height);
+  const sk=MODE_SL[m], ctl=document.getElementById('ctl'), sl=document.getElementById('slider');
+  ctl.hidden=!sk; if (sk){ const c=SL[sk]; sl.min=c.min; sl.max=c.max; sl.value=st[c.key]; document.getElementById('sliderlbl').textContent=c.lbl; document.getElementById('sliderv').textContent=c.fmt(st[c.key]); }
+  cv.style.cursor = m==='rings' ? 'pointer' : 'default';
+  if (m==='blink'){ if (reduce) st.blinkB=true; else blinkT=setInterval(()=>{ st.blinkB=!st.blinkB; render(); }, 380); }
+  if (m==='rings') { startWave(); return; }
+  render(); if (m==='exposure') exposureLoop();
+}
+document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+document.getElementById('slider').addEventListener('input', e=>{ const c=SL[MODE_SL[st.mode]]; st[c.key]=+e.target.value; document.getElementById('sliderv').textContent=c.fmt(st[c.key]); if (st.mode!=='exposure') render(); else renderExposureBase(); });
+cv.addEventListener('click', e=>{ if (st.mode!=='rings') return; const r=cv.getBoundingClientRect(); const x=(e.clientX-r.left)/r.width*W, y=(e.clientY-r.top)/r.height*H;
+  let b=0, bd=1e9; towns.forEach((t,j)=>{ const d=Math.hypot(t.x-x,t.y-y); if(d<bd){bd=d;b=j;} }); if (bd<45){ st.origin=b; startWave(); } });
+cv.addEventListener('keydown', e=>{ if (st.mode!=='rings') return; if (e.key==='ArrowRight'||e.key==='ArrowLeft'){ st.origin=(st.origin+(e.key==='ArrowRight'?1:towns.length-1))%towns.length; startWave(); e.preventDefault(); } });
+
+/* ---------- seal ---------- */
+function fnvBytes(s, n){ const out=[]; let h=0x811c9dc5; for (let r=0; out.length<n; r++){ for (const ch of s+':'+r){ h^=ch.charCodeAt(0); h=Math.imul(h,0x01000193)>>>0; } out.push(h&255, (h>>>8)&255, (h>>>16)&255, (h>>>24)&255); } return out.slice(0,n); }
+function seal(id, hash, ink){
+  const c=document.getElementById(id), g=c.getContext('2d'), w=c.width, R=w/2; g.clearRect(0,0,w,w);
+  const b=fnvBytes(hash,16), k1=5+b[0]%9, k2=11+b[1]%17, a=.05+b[2]/255*.09, a2=.03+b[3]/255*.06, rot=b[4]/255, copies=18+b[5]%22, r0=.58+b[6]/255*.12;
+  g.lineWidth=.7; g.strokeStyle=rs(ink,.75);
+  for (let j=0;j<copies;j++){ const ph=j/copies*2*Math.PI; g.beginPath();
+    for (let t=0;t<=720;t++){ const th=t/720*2*Math.PI; const r=R*(r0 + a*Math.sin(k1*th+ph) + a2*Math.sin(k2*th-ph*2));
+      const x=R+r*Math.cos(th+rot), y=R+r*Math.sin(th+rot); t?g.lineTo(x,y):g.moveTo(x,y); } g.stroke(); }
+  const k3=3+b[7]%6; g.strokeStyle=rs(ink,.55);
+  for (let j=0;j<12;j++){ g.beginPath(); for (let t=0;t<=360;t++){ const th=t/360*2*Math.PI; const r=R*(.22+.12*Math.cos(k3*th+j*.52)); const x=R+r*Math.cos(th), y=R+r*Math.sin(th); t?g.lineTo(x,y):g.moveTo(x,y);} g.stroke(); }
+  g.strokeStyle=rs(ink,.9); g.lineWidth=1.2; g.beginPath(); g.arc(R,R,R*.93,0,7); g.stroke(); g.beginPath(); g.arc(R,R,R*.89,0,7); g.stroke();
+  g.fillStyle=rs(ink); g.font=`500 ${Math.round(w*.045)}px ${MONO}`; g.textAlign='center'; g.fillText(hash.slice(0,8), R, R+R*.02);
+}
+function seals(){ const h=document.getElementById('hashA').value.trim()||'0'; seal('sealA', h, C.ink); seal('sealB', h+'|edit:policy_rate@2008-09=0.5', C.branch); }
+document.getElementById('hashA').addEventListener('input', seals);
+
+/* ---------- clearing ring ---------- */
+let rm = 8, ringBusy=false;
+document.getElementById('ringbtn').addEventListener('click', ()=>{
+  if (ringBusy) return; ringBusy=true; rm++; const ring=document.getElementById('ring');
+  const hard = h2(rm,3,5) < .3, iters = hard ? 14 + Math.floor(h2(rm,4,5)*9) : 5 + Math.floor(h2(rm,4,5)*4);
+  document.getElementById('ringdate').textContent = ymd(rm); document.getElementById('ringit').textContent='clearing';
+  let i=0; const step = () => { i++; const p = hard ? Math.min(1, i/iters + (i<iters*.6 ? -.15*Math.sin(i):0)) : i/iters;
+    ring.setAttribute('stroke-dashoffset', 251.3*(1-Math.max(0,p))); const res = Math.pow(10, -1 - 9*i/iters).toExponential(1);
+    document.getElementById('ringres').innerHTML = `${i} iterations<br>residual ${res}`;
+    if (i<iters) setTimeout(step, reduce?0:(hard?70:45)); else { document.getElementById('ringit').textContent = hard?'cleared, hard month':'cleared'; ringBusy=false; } };
+  ring.setAttribute('stroke-dashoffset', 251.3); setTimeout(step, reduce?0:60); });
+
+/* ---------- orrery ---------- */
+const oc=document.getElementById('orrery'), og=oc.getContext('2d');
+const sys=[{n:'Climate · yearly',r:130,w:2,sp:.015},{n:'Economy · monthly',r:100,w:7,sp:.06},{n:'Calendar · daily',r:70,w:2.5,sp:.22},{n:'War · hourly, idle',r:42,w:1,sp:.7,dash:true}];
+function orrery(t){ const w=oc.width, h=oc.height, cx=w*.33, cy=h/2; og.clearRect(0,0,w,h);
+  og.font=`500 15px ${UI}`; og.textBaseline='middle'; og.textAlign='left';
+  sys.forEach((s,k)=>{ og.setLineDash(s.dash?[3,4]:[]); og.strokeStyle=rs(k===1?C.ink:C['ink-3'], k===1?.85:.6); og.lineWidth=s.w; og.beginPath(); og.arc(cx,cy,s.r*.9,0,7); og.stroke();
+    og.setLineDash([]); const a = t*s.sp*2*Math.PI/1000; og.fillStyle=rs(k===1?C.proof:C.ink); og.beginPath(); og.arc(cx+Math.cos(a)*s.r*.9, cy+Math.sin(a)*s.r*.9, 3.5, 0, 7); og.fill();
+    og.fillStyle=rs(C['ink-2']); og.fillText(s.n, w*.66, 50+k*30); });
+  og.fillStyle=rs(C['ink-3']); og.fillText('Ring weight: share', w*.66, 190); og.fillText('of the 160 ms tick', w*.66, 208); og.fillText('budget (0235)', w*.66, 226);
+  og.fillStyle=rs(C.ink); og.beginPath(); og.arc(cx,cy,4,0,7); og.fill(); }
+
+/* ---------- strip chart + seismograph ---------- */
+const sc=document.getElementById('strip'), sg=sc.getContext('2d'); let stripT=0, stripRun=!reduce;
+function series(t){ const n = (k)=> (h2(Math.floor(k),7,31)-.5); const sm = k => { const i=Math.floor(k), f=k-i; return n(i)*(1-f)+n(i+1)*f; };
+  let v = 100 + .02*t + 2.2*Math.sin(t/37) + 3*sm(t/9);
+  const c = t%700; if (c>420) v -= 9*Math.exp(-(c-420)/60)*Math.min(1,(c-420)/8);
+  const fork = c>250 ? v + Math.min(6,(c-250)*.03) - (c>420?-3*Math.exp(-(c-420)/60):0) : v;
+  return [v, fork]; }
+function quake(t){ const c=Math.round(t)%700; const ev={420:1, 120:.35, 560:.25, 300:.15}; return ev[c]||0; }
+function drawStrip(){ const w=sc.width, h=sc.height, pen=w-60, top=14, mid=170, bot=h-10; sg.clearRect(0,0,w,h);
+  sg.fillStyle=rs(C.paper); sg.fillRect(0,0,w,h);
+  sg.strokeStyle=rs(C.rule); sg.lineWidth=1;
+  for (let x=pen-((stripT*2)%40); x>0; x-=40){ sg.beginPath(); sg.moveTo(x,top); sg.lineTo(x,bot); sg.stroke(); }
+  for (let y=top; y<=mid-10; y+=24){ sg.beginPath(); sg.moveTo(0,y); sg.lineTo(pen,y); sg.stroke(); }
+  sg.strokeStyle=rs(C['ink-3']); sg.beginPath(); sg.moveTo(0,mid); sg.lineTo(w,mid); sg.stroke();
+  const Y = v => top + (118-v)*(mid-20-top)/30;
+  for (const [br,col] of [[1,C.branch],[0,C.ink]]){ sg.strokeStyle=rs(col); sg.lineWidth=1.6; sg.beginPath();
+    for (let x=0;x<=pen;x++){ const t=stripT-(pen-x)/2; if (t<0) continue; const v=series(t)[br]; x===0||t-1/2<0?sg.moveTo(x,Y(v)):sg.lineTo(x,Y(v)); } sg.stroke(); }
+  for (let x=0;x<=pen;x+=2){ const t=Math.round(stripT-(pen-x)/2); if (t>=0 && t%700===250){ sg.setLineDash([4,4]); sg.strokeStyle=rs(C.branch,.7); sg.lineWidth=1; sg.beginPath(); sg.moveTo(x,top); sg.lineTo(x,mid-10); sg.stroke(); sg.setLineDash([]); sg.fillStyle=rs(C.branch); sg.font=`500 11px ${MONO}`; sg.fillText('fork', x+4, top+10); } }
+  const sy=(mid+bot)/2; sg.strokeStyle=rs(C.ink); sg.lineWidth=1; sg.beginPath();
+  for (let x=0;x<=pen;x++){ const t=stripT-(pen-x)/2; let a=0; for (let d=0; d<14; d++){ const q=quake(t-d); if (q) a += q*Math.exp(-d/4)*Math.sin((t-d)*2.7+d); } a += .02*Math.sin(t*3.1)*h2(Math.floor(t),1,1);
+    const y=sy - a*(bot-mid)/2.2; x?sg.lineTo(x,y):sg.moveTo(x,y); } sg.stroke();
+  sg.fillStyle=rs(C.proof); sg.beginPath(); sg.arc(pen, Y(series(stripT)[0]), 3.5, 0, 7); sg.fill();
+  sg.fillStyle=rs(C['ink-3']); sg.font=`500 11px ${UI}`; sg.textAlign='left'; sg.fillText('GDP INDEX', 6, top+8); sg.fillText('EVENTS, WORLD', 6, mid+14);
+  const yr = 2000 + Math.floor(stripT/24); sg.textAlign='right'; sg.fillStyle=rs(C.ink); sg.font=`500 12px ${MONO}`; sg.fillText(String(yr), w-6, top+8); }
+function stripLoop(){ if (stripRun){ stripT+=.5; } drawStrip(); if (!reduce) requestAnimationFrame(stripLoop); }
+stripT = 380;
+document.getElementById('strippause').addEventListener('click', e=>{ stripRun=!stripRun; e.target.textContent = stripRun?'Pause':'Run'; if (reduce) { stripT+=60; drawStrip(); } });
+
+/* ---------- tree rings ---------- */
+function growth(y){ const base = 2.4 + 1.3*Math.sin(y/3.1) + 1.6*(h2(y,5,5)-.5); return y===9?-3.2 : y===10?-.6 : y===20?-5.5 : y===27?-1.2 : base; }
+function drawRings(){ const c=document.getElementById('rings'), g=c.getContext('2d'), w=c.width, cx=w/2, cy=w/2; g.clearRect(0,0,w,w);
+  const yrs=35; const widths=[]; for (let y=0;y<yrs;y++){ const gr=growth(y); widths.push(gr<0 ? 1.2 : 1.6+gr*1.15); }
+  const total=widths.reduce((a,b)=>a+b,0), scale=(w*.46)/total;
+  const shape = (r,th,y) => r*(1 + .045*Math.sin(3*th + .7) + .02*Math.sin(7*th + y*.3));
+  const wood=mix(C.land,C.warn,.25), late=mix(C.ink,C.warn,.3);
+  let R=0; const radii=[]; for (let y=0;y<yrs;y++){ R+=widths[y]*scale; radii.push(R); }
+  for (let y=yrs-1;y>=0;y--){ const r=radii[y], gr=growth(y);
+    g.beginPath(); for (let t=0;t<=180;t++){ const th=t/180*2*Math.PI, rr=shape(r,th,y); const x=cx+rr*Math.cos(th), yy=cy+rr*Math.sin(th); t?g.lineTo(x,yy):g.moveTo(x,yy); } g.closePath();
+    g.fillStyle=rs(gr<0 ? mix(wood,late,.65) : mix(wood, C.paper, (y%2)*.18)); g.fill(); g.strokeStyle=rs(late,gr<0?.95:.55); g.lineWidth=gr<0?1.6:.8; g.stroke(); }
+  g.fillStyle=rs(late); g.beginPath(); g.arc(cx,cy,2.5,0,7); g.fill();
+  // crisis scar in 2009 ring
+  const r9=radii[9], th0=-.6; g.fillStyle=rs(C.ink,.85); g.beginPath();
+  for (let t=0;t<=20;t++){ const th=th0+t/20*.5, rr=shape(r9,th,9); g.lineTo(cx+rr*Math.cos(th), cy+rr*Math.sin(th)); }
+  for (let t=20;t>=0;t--){ const th=th0+t/20*.5, rr=shape(radii[8],th,8); g.lineTo(cx+rr*Math.cos(th), cy+rr*Math.sin(th)); } g.closePath(); g.fill();
+  g.font=`500 11px ${MONO}`; g.textBaseline='middle';
+  for (const [y,txt] of [[0,'2000'],[9,'2009 scar'],[20,'2020'],[34,'2034']]){ const r=shape(radii[y],-Math.PI/2.4,y); const x=cx+r*Math.cos(-Math.PI/2.4), yy=cy+r*Math.sin(-Math.PI/2.4); g.strokeStyle=rs(C.ink,.7); g.lineWidth=1; g.beginPath(); g.moveTo(x,yy); g.lineTo(w-62, 18+ (y===0?0:y===9?18:y===20?36:54)); g.stroke();
+    g.fillStyle=rs(C.ink); g.textAlign='left'; g.fillText(txt, w-60, 18+(y===0?0:y===9?18:y===20?36:54)); } }
+
+/* ---------- station models ---------- */
+function station(x,y,s){ const r=13; let out=`<g transform="translate(${x},${y})">`;
+  out+=`<circle r="${r}" fill="var(--paper)" stroke="var(--ink)" stroke-width="1.6"/>`;
+  const oct=Math.max(0,Math.min(8,Math.round(s.u/2)));
+  for (let k=0;k<oct;k++){ const a0=-Math.PI/2+k*Math.PI/4, a1=a0+Math.PI/4; out+=`<path d="M0 0 L${(r*Math.cos(a0)).toFixed(2)} ${(r*Math.sin(a0)).toFixed(2)} A${r} ${r} 0 0 1 ${(r*Math.cos(a1)).toFixed(2)} ${(r*Math.sin(a1)).toFixed(2)} Z" fill="var(--ink)"/>`; }
+  const b=s.bear*Math.PI/180, L=40, ex=Math.sin(b)*(r+L), ey=-Math.cos(b)*(r+L), sx=Math.sin(b)*r, sy=-Math.cos(b)*r;
+  out+=`<line x1="${sx.toFixed(1)}" y1="${sy.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="var(--ink)" stroke-width="1.6"/>`;
+  let left=s.inf, pos=0; const px=Math.cos(b), py=Math.sin(b);
+  const at=d=>[Math.sin(b)*(r+L-d), -Math.cos(b)*(r+L-d)];
+  while(left>=10){ const [ax,ay]=at(pos), [bx,by]=at(pos+8); out+=`<path d="M${ax.toFixed(1)} ${ay.toFixed(1)} L${(ax+px*16).toFixed(1)} ${(ay+py*16).toFixed(1)} L${bx.toFixed(1)} ${by.toFixed(1)} Z" fill="var(--ink)"/>`; pos+=11; left-=10; }
+  while(left>=2){ const [ax,ay]=at(pos); out+=`<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${(ax+px*16+Math.sin(b)*5).toFixed(1)}" y2="${(ay+py*16-Math.cos(b)*5).toFixed(1)}" stroke="var(--ink)" stroke-width="1.6"/>`; pos+=6; left-=2; }
+  if (left>=1){ const [ax,ay]=at(pos+2); out+=`<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${(ax+px*8+Math.sin(b)*2.5).toFixed(1)}" y2="${(ay+py*8-Math.cos(b)*2.5).toFixed(1)}" stroke="var(--ink)" stroke-width="1.6"/>`; }
+  out+=`<text x="-19" y="-18" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="11" fill="${s.g<0?'var(--hi)':'var(--ok)'}">${s.g>0?'+':''}${s.g.toFixed(1)}</text>`;
+  out+=`<text x="-19" y="27" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">${s.cpi.toFixed(1)}</text>`;
+  out+=`<text x="19" y="-18" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">${s.rate.toFixed(2)}</text>`;
+  out+=`<text x="0" y="${172-y}" text-anchor="middle" font-family="IBM Plex Sans Condensed, sans-serif" font-size="12" font-weight="600" fill="var(--ink)">${s.name}</text></g>`; return out; }
+document.getElementById('stations').innerHTML =
+  station(60,85,{name:'Escalda',u:5.1,bear:0,inf:7,g:2.8,cpi:2.4,rate:3.25}) +
+  station(165,85,{name:'Tolde',u:11.8,bear:180,inf:13,g:-1.4,cpi:6.9,rate:3.25}) +
+  station(265,85,{name:'Port Miren',u:2.6,bear:90,inf:3,g:4.1,cpi:1.8,rate:3.25});
+
+/* ---------- wind rose ---------- */
+const ROSE=[[2,3,9,14,6,2,1,1,1,2,4,11,18,12,8,3],[9,15,12,6,3,2,2,4,6,8,7,5,6,5,4,6]];
+function rose(k){ const v=ROSE[k], tot=v.reduce((a,b)=>a+b,0), cx=130, cy=130, R=95; let s='';
+  for (const r of [.25,.5,.75,1]) s+=`<circle cx="${cx}" cy="${cy}" r="${(R*Math.sqrt(r)).toFixed(1)}" fill="none" stroke="var(--rule)"/>`;
+  v.forEach((x,j)=>{ const share=x/tot, len=R*Math.sqrt(share/ .2), a=(j*22.5-90)*Math.PI/180, w=9.5*Math.PI/180;
+    const p1=[cx+len*Math.cos(a-w), cy+len*Math.sin(a-w)], p2=[cx+len*Math.cos(a+w), cy+len*Math.sin(a+w)];
+    s+=`<path d="M${cx} ${cy} L${p1[0].toFixed(1)} ${p1[1].toFixed(1)} A${len.toFixed(1)} ${len.toFixed(1)} 0 0 1 ${p2[0].toFixed(1)} ${p2[1].toFixed(1)} Z" fill="${k?'var(--branch)':'var(--water-ink)'}" fill-opacity="${(.35+share*2.5).toFixed(2)}" stroke="var(--paper)" stroke-width="1"/>`; });
+  for (const [t,a] of [['N',-90],['E',0],['S',90],['W',180]]){ const x=cx+(R+16)*Math.cos(a*Math.PI/180), y=cy+(R+16)*Math.sin(a*Math.PI/180); s+=`<text x="${x.toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="middle" font-family="Source Serif 4, Georgia, serif" font-size="14" font-weight="600" fill="var(--ink)">${t}</text>`; }
+  document.getElementById('rose').innerHTML=s; }
+document.querySelectorAll('[data-rose]').forEach(b=>b.addEventListener('click',()=>{ document.querySelectorAll('[data-rose]').forEach(x=>x.setAttribute('aria-pressed',x===b)); rose(+b.dataset.rose); }));
+
+/* ---------- spirit level ---------- */
+let bub=-2.4, bubV=0, bubTarget=-2.4, levRAF=null;
+function drawLevel(){ const x=150+bub*11.5; document.getElementById('level').innerHTML =
+  `<rect x="14" y="26" width="272" height="36" rx="18" fill="var(--paper)" stroke="var(--ink)" stroke-width="1.6"/>`+
+  `<rect x="20" y="31" width="260" height="26" rx="13" fill="var(--chip)"/>`+
+  [-3,3].map(v=>`<line x1="${150+v*11.5}" y1="28" x2="${150+v*11.5}" y2="60" stroke="var(--proof)" stroke-width="1.4"/>`).join('')+
+  `<line x1="150" y1="22" x2="150" y2="66" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="2 3"/>`+
+  `<ellipse cx="${x.toFixed(1)}" cy="44" rx="17" ry="9" fill="var(--paper)" stroke="var(--ink-2)" stroke-width="1.2"/>`+
+  `<ellipse cx="${(x-5).toFixed(1)}" cy="40" rx="6" ry="2.5" fill="var(--paper-2)"/>`+
+  `<text x="150" y="84" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-3)">tolerance ±3% of GDP</text>`; }
+function levelStep(){ const a=(bubTarget-bub)*.12 - bubV*.18; bubV+=a; bub+=bubV; drawLevel(); if (Math.abs(bubV)>.002||Math.abs(bubTarget-bub)>.01) levRAF=requestAnimationFrame(levelStep); else { bub=bubTarget; drawLevel(); } }
+document.getElementById('ca').addEventListener('input', e=>{ bubTarget=+e.target.value; document.getElementById('cav').textContent=`${bubTarget.toFixed(1)}% of GDP`; if (reduce){ bub=bubTarget; drawLevel(); } else { cancelAnimationFrame(levRAF); levRAF=requestAnimationFrame(levelStep); } });
+
+/* ---------- departures board ---------- */
+const DEST=['VARONNE','SAINT-ORIEL','BRENMOUTH','HALDIN','LESSA','QUINTA RASA','ARVEL','CASSEN'];
+const GOODS=['WHEAT','STEEL COIL','CRUDE','CONTAINERS','FERTILISER','RICE','COPPER','TIMBER'];
+const STAT=[['ON TIME',''],['ON TIME',''],['ON TIME',''],['DELAYED','st-warn'],['RATIONED','st-warn'],['REROUTED','st-warn'],['HELD: CLOSURE','st-bad']];
+let bm=8; const COLS=[5,12,10,5,13];
+function rowsFor(m){ return [0,1,2,3,4].map(r=>{ const k=(n)=>Math.floor(h2(m,r,n)*1e6);
+  const day=String(1+k(1)%27).padStart(2,'0'), mon=ymd(m).slice(5);
+  return [`${day}/${mon}`, DEST[k(2)%DEST.length], GOODS[k(3)%GOODS.length], `${5+k(4)%60}KT`, STAT[k(5)%STAT.length]]; }).sort((a,b)=>a[0].localeCompare(b[0])); }
+const pad=(s,n)=>(s+' '.repeat(n)).slice(0,n);
+function boardHTML(rows){ return `<div class="bh"><span>Sails</span><span>Destination</span><span>Cargo</span><span>Load</span><span>Status</span></div>` +
+  rows.map(r=>`<div class="br">${r.slice(0,4).map((c,j)=>`<span class="f">${pad(c,COLS[j]).split('').map(ch=>`<i>${ch===' '?'&nbsp;':ch}</i>`).join('')}</span>`).join('')}<span class="f ${r[4][1]}">${pad(r[4][0],COLS[4]).split('').map(ch=>`<i>${ch===' '?'&nbsp;':ch}</i>`).join('')}</span></div>`).join(''); }
+function board(){ document.getElementById('board').innerHTML = boardHTML(rowsFor(bm)); }
+document.getElementById('boardbtn').addEventListener('click', ()=>{ bm++; const target=rowsFor(bm); if (reduce) return board();
+  const AL='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/:'; let f=0; const frames=10;
+  const tick=()=>{ f++; const rows=target.map((r,ri)=>r.map((c,ci)=>{ const s=ci===4?c[0]:c; const flipped=s.split('').map((ch,i)=> (f>=frames- ((i+ri)%4)) || ch===' ' ? ch : AL[Math.floor(h2(f,i+ri*13,ci)*AL.length)]).join(''); return ci===4?[flipped,c[1]]:flipped; }));
+    document.getElementById('board').innerHTML=boardHTML(rows); if (f<frames) setTimeout(tick,45); };
+  tick(); });
+
+/* ---------- time prices ---------- */
+const goods=[['Rice, 1 kg',[650,2.1,55]],['Bus fare',[150,1.6,20]],['Diesel, 1 l',[45,0.98,32]],['Phone, entry',[18500,79,6200]]];
+const wage=[160,13.2,38], cur=['NGN','EUR','PKR'];
+let unit='money';
+function tp(){ document.querySelector('#tp tbody').innerHTML = goods.map(([g,p])=>`<tr><td>${g}</td>${p.map((v,k)=>`<td>${unit==='money'? v.toLocaleString('en-GB')+' '+cur[k] : (v/wage[k]).toFixed(v/wage[k]<10?1:0)+' h'}</td>`).join('')}</tr>`).join(''); }
+document.querySelectorAll('[data-unit]').forEach(b=>b.addEventListener('click',()=>{ unit=b.dataset.unit; document.querySelectorAll('[data-unit]').forEach(x=>x.setAttribute('aria-pressed',x===b)); tp(); }));
+
+/* ---------- register ---------- */
+const G = [
+ ['The model at work','Chrome that shows the engine. Neutral, so it fits the one 1.0 theme of 0137.',[
+  [1,'Run seal','A guilloche rosette drawn from the run hash, in the title bar and on every export. Same hash, same seal; a fork gets its own. Two users can check they hold the same world by looking.','v10','S','0128, 0144','Plate 2'],
+  [2,'Map imprint','A corner block like a printed map: compiled from (sources with vintages), app and pack version, branch, tick, seal. Updates on every postcard and atlas page, so a screenshot carries its provenance.','v10','S','0124, 0213',''],
+  [3,'The world compiles itself','First load draws the layers in their real load order (relief, coasts, cells, borders, towns, flows), each credited to its source, and then the clock starts at 1 January 2000, 00:00. A loading screen that is also the credits.','v10','S','0215, 0217',''],
+  [4,'Clearing ring','A thin ring round the date that closes as the month clears, with iterations and residual. Hard months visibly hesitate, which is a free early warning that something is straining.','v10','S-M','0093','Plate 2'],
+  [5,'Orrery','Systems as rings at their own clock rates, weighted by measured share of the tick budget. Doubles as the performance panel of 0235.','v10','S','0232, 0235','Plate 2'],
+  [6,'Ink of evidence','Type weight encodes provenance: observed 2000 data in full ink, imputed in grey italic, simulated in regular, edits in proof magenta. Teaches 0241 without a sentence.','v10','S','0014, 0241','Plate 4'],
+  [34,'Double rule','When a ledger\'s sources and uses balance, its total gets the accountant\'s double rule, with the residual on hover. The conservation tests of every tick, made visible in the panels.','v10','S','0093','Plate 4'],
+ ]],
+ ['Cartography of the run','Continues the living map with marks whose weight is data. Map modes in P3.',[
+  [7,'Price weather','Isobars of a price level with H and L and moving fronts after a shock. Any scalar mode can be drawn as isolines on top of the fill.','v10','S-M','0155','Plate 1'],
+  [8,'Border weight','Border stroke weight follows bilateral trade friction. A trade agreement visibly thins a border; a sanctions edit thickens it overnight.','v10','S','0102, 0047','Plate 1'],
+  [9,'Labels that earn their size','Town labels take their cartographic class from simulated population. Towns are promoted and demoted over decades; shrinking places fade a step. The lettering becomes a record of the run.','v10','S','0074','Plate 1'],
+  [10,'Stipple of doubt','Where ensemble lanes disagree, fills dissolve into stipple with density set by the spread. Uncertainty on the map without a second map.','v10','S','0024','Plate 1'],
+  [11,'Railway time','Bands of equal travel time from a clicked town, as on 19th-century time maps, with a time wave that spreads at the speed of trade. Keeps geography where the cartogram bends it.','v10','S','0017, 0124','Plate 1'],
+  [12,'Long exposure','At fast speeds, trains and ships leave light trails in proportion to traffic; slow down and the trails fade. Speed itself becomes readable.','v10','S','0208','Plate 1'],
+  [13,'Ripples on the real wires','The shock ripple of the living map travels hop by hop along actual trade links and input-output edges instead of by distance, so the user sees who is exposed.','v10','S-M','0118, 0156',''],
+ ]],
+ ['Comparing like an astronomer','Branch compare (14.5) with tools from plate astronomy, animation and print.',[
+  [14,'Blink comparator','Two branches swapped a few times a second at the same tick. Identical places stand still; only change flickers. One key, no legend needed.','v10','S','0116','Plate 1'],
+  [15,'Overprint','Main in cyan, fork in magenta, multiplied as two printing plates. Agreement prints dark, difference fringes in the colour of the higher branch.','v10','S','0116, 0221','Plate 1'],
+  [16,'Survey benchmarks','Drop a benchmark on a province at a tick. Later it shows the change since, like a levelling mark on a wall. Benchmarks travel into forks, so every branch is measured from the same marks.','v10','S','14.2',''],
+  [17,'Chapter bands','The timeline divides itself at detector events into plainly labelled chapters ("Fixed peg, 2003-2011"), with a pin at the first tick a fork diverges by more than a set threshold.','v10','S','0049, 0144',''],
+  [35,'Onion skin','Hold a key and the last few years appear as fading isolines under the current map, as animators stack frames. A front\'s path or a city\'s sprawl reads in one still.','v10','S','0155',''],
+ ]],
+ ['Panel instruments','New register: recording and observing instruments pointed at the economy.',[
+  [26,'Strip-chart recorder','Pin any series to a paper strip that inks as time runs, one pen per branch. Reads like a barograph; the eye catches two pens parting long before a table would.','v10','S','14.5, 0116','Plate 3'],
+  [27,'Crisis seismograph','One strip for the world. Each detector event registers as a spike scaled by its size, so a quiet decade and a shaking one look different at a glance.','v10','S-M','0049','Plate 3'],
+  [28,'Station models','Meteorology\'s compact glyph per province: cloud cover is unemployment, the wind shaft points to the main supplier, barbs count import inflation, corner figures give growth, CPI and policy rate. A map mode that is dense and still readable.','v10','S-M','0155','Plate 3'],
+  [29,'Tree rings','A province\'s history as a tree core in its inspector: a ring per year, width set by real growth, thin dark rings for recessions, scars for banking crises and wars.','v10','S','0049','Plate 3'],
+  [30,'Trade wind roses','At each port, a rose of export value by compass bearing. Set two years side by side and the shift in trade winds is obvious.','v10','S','0017','Plate 3'],
+  [31,'Spirit levels','Balances (current account, budget, a province\'s trade) as bubble vials with user-set tolerance marks. The bubble moves with the springy motion of the game-feel set.','v10','S','0100, 0042','Plate 3'],
+  [32,'Plimsoll marks','The headroom gauges of 0155 drawn as load lines: on ports for capacity, on banks for capital, on sovereigns for debt. How deep the load sits reads before any number does.','v10','S','0155',''],
+  [33,'Departures boards','The port or rail-hub inspector as a split-flap board of next month\'s sailings, with status words taken from the model: rationed, rerouted, held by a closure.','v10','S','0017, 0020','Plate 3'],
+ ]],
+ ['Human scale without faces','People-sized readings that need no portrait and no character.',[
+  [18,'Time prices','A units toggle that prices goods in hours of local median work. Makes tariffs and inflation comparable across income levels at a glance.','v10','S','0021, 0124','Plate 4'],
+  [19,'The class of 2000','The cohort born on the start date in a province, followed as medians: school years, first job, wage, move, children. A life line built from a cohort, not from a character.','v1x','M','0032, 0082',''],
+  [20,'Place dossiers','The province inspector in the register of the leadership dossiers: the 2000 file beside today, biggest town, main export and buyer, benchmarks, tree rings, chapters. Neutral in 1.0, seat-styled in 2.0.','v10','S-M','0187',''],
+  [21,'Names for what arrives','New towns, firms, projects and organizations named from the local toponymy of their region (GeoNames and Wikidata patterns), deterministic from the seed, editable as a name edit.','v1x','M','0143, 0189, 0206',''],
+  [36,'Goods specimen sheets','Each traded good gets a sheet like a museum specimen label: where it is made in this run, its main routes, its price history, its elasticities with their sources. The pedia entry for goods.','v10','S-M','0158, 0018',''],
+ ]],
+ ['Local standards, continued','The register Antonio liked most, for when seats and regime chrome return in 2.0.',[
+  [22,'National mapping conventions','The map takes the symbology and lettering of the seat\'s mapping agency: Ordnance Survey, IGN, swisstopo relief, USGS quads, GSI Japan.','v20','M','0140, 0141',''],
+  [23,'Release calendar','With fog of data, statistics arrive on each office\'s real release rhythm and local hour: the US jobs report on the first Friday at 08:30 ET, Destatis at 08:00 CET, IBGE in the morning in Rio.','v20','S-M','0238',''],
+  [24,'Gazette','Enacted edits published in the seat\'s official journal format and numbering series (BOE, Diário Oficial da União, Federal Register, Bundesgesetzblatt), with the signatures of the character flavour page.','v20','S-M','0141, 0187',''],
+  [25,'Local odometers','The rolling numbers of the game-feel set in the seat\'s digits and grouping: lakh and crore, Arabic-Indic and Devanagari digits, 万 grouping that rolls at ten thousand.','v20','S','0141',''],
+  [37,'Benchmark plates by country','Survey benchmarks (16) drawn as the seat country\'s own levelling marks: the Ordnance Survey cut mark, the IGN repère, the USGS brass disc.','v20','S','0141',''],
+  [38,'Exchange boards','Exchange rates on a bureau board in the seat\'s language and conventions, quoted the local way round (direct or indirect, per 100 yen, per 1,000 won).','v20','S','0141',''],
+  [39,'Census returns','The population panel laid out like the country\'s real census form of the period, with its own categories and question wording, filled from the simulated cohorts.','v20','M','0141, 0032',''],
+ ]],
+];
+const VL={v10:'1.0',v1x:'1.x',v20:'2.0+'};
+let filt='all';
+function reg(){ document.getElementById('reg').innerHTML = G.map(([t,d,items])=>{ const vis=items.filter(i=>filt==='all'||(filt==='new'?i[0]>=26:i[3]===filt)); if(!vis.length) return '';
+  return `<div class="group"><header><h3>${t}</h3><p>${d}</p></header><div class="ideas">${vis.map(([n,h,p,v,c,src,demo])=>`<article class="idea${n>=26?' new':''}"><span class="n">${String(n).padStart(2,'0')}</span><h3>${h}</h3><p>${p}</p><div class="tags"><span class="v ${v}">${VL[v]}</span><span>Cost ${c}</span><span class="src">${src}</span>${demo?`<span class="demo">${demo}</span>`:''}</div></article>`).join('')}</div></div>`; }).join(''); }
+document.querySelectorAll('[data-f]').forEach(b=>b.addEventListener('click',()=>{ filt=b.dataset.f; document.querySelectorAll('[data-f]').forEach(x=>x.setAttribute('aria-pressed',x===b)); reg(); }));
+
+/* ---------- boot ---------- */
+function themed(){ readColors(); if (st.mode==='rings') { st.wave=Infinity; } render(); seals(); drawRings(); drawStrip(); drawLevel(); if (reduce) orrery(0); }
+function loop(t){ orrery(t); requestAnimationFrame(loop); }
+readColors(); tp(); reg(); rose(0); board(); drawLevel(); seals(); drawRings();
+setMode('rings');
+if (reduce) { orrery(0); drawStrip(); } else { requestAnimationFrame(loop); requestAnimationFrame(stripLoop); }
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themed);
+new MutationObserver(themed).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+document.fonts && document.fonts.ready.then(themed);
+})();
+</script>

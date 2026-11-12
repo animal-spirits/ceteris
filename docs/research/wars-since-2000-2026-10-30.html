@@ -1,0 +1,266 @@
+<title>Wars Since 2000</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Public+Sans:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single reading column, wide tables scroll in their own frame; chips encode archetype */
+:root {
+  --bg: #f3f4f2; --panel: #e7e9e4; --fg: #1d2420; --muted: #5a645d; --rule: #c9cec6;
+  --accent: #4b5d2f; --war: #9a2d20; --warn: #8a6410;
+  --display: "Source Serif 4", Georgia, serif;
+  --body: "Public Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #151916; --panel: #1f2420; --fg: #e3e7e1; --muted: #9aa49c; --rule: #343b35;
+  --accent: #a9c27a; --war: #e0806f; --warn: #d9b25a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #151916; --panel: #1f2420; --fg: #e3e7e1; --muted: #9aa49c; --rule: #343b35;
+  --accent: #a9c27a; --war: #e0806f; --warn: #d9b25a; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--body); }
+main { max-width: 980px; margin: 0 auto; padding-block: 40px 80px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 40px; }
+section { display: grid; gap: 14px; min-width: 0; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 2.3rem; }
+h2 { font-size: 1.5rem; border-top: 1px solid var(--rule); padding-top: 22px; }
+h3 { font-size: 1.1rem; }
+p, ul, ol { margin: 0; max-width: 68ch; }
+ul, ol { padding-left: 1.2em; display: grid; gap: 6px; }
+.eyebrow { font: 600 0.72rem var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.08rem; }
+.muted { color: var(--muted); }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+a { color: var(--accent); }
+.box { background: var(--panel); padding: 16px 18px; border-radius: 4px; display: grid; gap: 8px; }
+.scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+th { font: 600 0.7rem var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--panel); position: sticky; top: 0; }
+td.yr { font-family: var(--mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wide { min-width: 1100px; }
+.chip { display: inline-block; font: 600 0.68rem var(--mono); padding: 1px 6px; border-radius: 3px; border: 1px solid currentColor; white-space: nowrap; margin: 0 4px 3px 0; }
+.c-int { color: var(--war); } .c-civ { color: var(--accent); } .c-ext { color: var(--warn); } .c-non { color: var(--muted); }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.filters button { font: 600 0.75rem var(--mono); background: transparent; color: var(--fg); border: 1px solid var(--rule); border-radius: 3px; padding: 4px 9px; cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.filters button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.layers { display: grid; gap: 0; border-left: 2px solid var(--accent); }
+.layer { display: grid; grid-template-columns: 56px 1fr; gap: 12px; padding: 10px 0 10px 14px; }
+.layer + .layer { border-top: 1px dashed var(--rule); }
+.layer b.tag { font: 600 0.8rem var(--mono); color: var(--accent); }
+.layer > div { min-width: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.grid2 > div { min-width: 0; }
+.dec { border: 1px solid var(--rule); border-radius: 4px; padding: 14px 16px; display: grid; gap: 6px; }
+.dec .rec { color: var(--accent); font-weight: 600; }
+@media (max-width: 520px) { h1 { font-size: 1.8rem; } .layer { grid-template-columns: 40px 1fr; } }
+</style>
+
+<main>
+<header style="display:grid;gap:12px">
+  <div class="eyebrow">Ceteris Paribus · research · 30 October 2026</div>
+  <h1>Wars since 2000, and how they can happen on their own</h1>
+  <p class="lede">A catalogue of the armed conflicts of 2000 to 2025, the regularities they share, and a proposal for producing them from simulated state alone, with no dates, names or scripted events (ADR 0241).</p>
+</header>
+
+<section>
+  <h2>Summary</h2>
+  <ul>
+    <li><b>Most organized violence since 2000 is civil war, increasingly internationalized.</b> UCDP counted 61 state-based conflicts in 2024, the most since 1946, and 65 in 2025, of which 8 were interstate, also a record. Deaths in 2025 (about 245,000) were the highest since 1994.</li>
+    <li><b>Wars start when a fast trigger lands on slow risk.</b> Coups, revolutions, contested successions, mass-casualty attacks, subsidy cuts, shifts in relative power and the withdrawal of a sponsor fire on states that already carry exclusion, weak capacity, rents, rough terrain and a recent war.</li>
+    <li><b>Ten causal pathways cover every conflict in the catalogue.</b> Five need mechanisms Ceteris does not have yet: cohesion of the security forces, third-party intervention, armed groups that cross borders, attribution of attacks, and conflict state at 1 January 2000.</li>
+    <li><b>Proposal: the hazard proposes, actors decide.</b> A calibrated crisis hazard (MID and UCDP minor-conflict rates) creates crises with named actors and a stake; actors escalate or settle through the bargaining model of 11.2 and the new intervention rule. Aggregate onset rates must reproduce the 0110 hazard (a nesting test), so organic does not mean uncalibrated.</li>
+    <li><b>1.0 has no conflicts at all today</b> (war is 2.0, ADR 0136). In a calendar-blind run that drops war-driven oil, refugee and capital shocks from the economy. The cheapest fix is a 1.0 conflict-incidence hazard with economic effects only.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Catalogue</h2>
+  <p class="muted">Major conflicts active after 1 January 2000. Conflicts active at that date are marked t0: they are initial conditions, not events. Archetype codes refer to the pathways below. Figures are rounded and from UCDP, UNHCR, IMF and World Bank releases; casualty counts for some wars (Tigray, Sudan) are disputed by a factor of two or more.</p>
+  <div class="filters" role="group" aria-label="Filter by type">
+    <button type="button" id="f-all" data-f="all" aria-pressed="true">All</button>
+    <button type="button" id="f-int" data-f="int" aria-pressed="false">Interstate</button>
+    <button type="button" id="f-civ" data-f="civ" aria-pressed="false">Civil</button>
+    <button type="button" id="f-ext" data-f="ext" aria-pressed="false">Intervention or internationalized</button>
+    <button type="button" id="f-non" data-f="non" aria-pressed="false">Non-state or criminal</button>
+  </div>
+  <div class="scroll">
+  <table class="wide" id="cat">
+    <thead><tr><th>Conflict</th><th>Years</th><th>Type, path</th><th>Trigger</th><th>Structural drivers</th><th>Escalation and actors</th><th>Outcome</th><th>Economic and political effects</th></tr></thead>
+    <tbody>
+<tr data-t="int"><td>Ethiopia-Eritrea</td><td class="yr">1998-2000 t0</td><td><span class="chip c-int">interstate</span>P1</td><td>Badme border incident (1998)</td><td>Undemarcated border, post-secession rivalry</td><td>Trench war, about 80,000 dead</td><td>Algiers agreement Dec 2000; frozen "no war no peace" to 2018</td><td>Eritrean militarization, indefinite conscription; Ethiopia shifts trade to Djibouti</td></tr>
+<tr data-t="ext"><td>Second Congo War and eastern DRC</td><td class="yr">1998-2003 t0; 2012-</td><td><span class="chip c-ext">internationalized</span>P4 P5 P7</td><td>Rwanda and Uganda invade to chase Hutu militias; M23 mutiny 2012, resurgence 2021</td><td>Collapsed state capacity, minerals (coltan, gold, tin), refugee militias</td><td>Up to nine foreign armies; later Rwanda backs M23, takes Goma Jan 2025</td><td>2002-03 accords; east never settles</td><td>Mineral rents finance groups; tens of millions displaced over two decades</td></tr>
+<tr data-t="civ"><td>Second Chechen War</td><td class="yr">1999-2009 t0</td><td><span class="chip c-civ">civil</span>P4</td><td>Dagestan incursion and apartment bombings (1999)</td><td>Secessionist region, prior war, mountains</td><td>Full Russian offensive, then counter-insurgency</td><td>Government victory; client strongman rule</td><td>Built Putin's standing; template for later operations</td></tr>
+<tr data-t="civ"><td>Sri Lanka (LTTE)</td><td class="yr">1983-2009 t0</td><td><span class="chip c-civ">civil</span>P4</td><td>Norway-brokered ceasefire 2002 collapses 2006</td><td>Tamil exclusion, territorial insurgent proto-state, diaspora finance</td><td>LTTE split (Karuna 2004) weakens it</td><td>Decisive government victory 2009, heavy civilian toll</td><td>Post-war growth boom; later debt crisis 2022 unrelated</td></tr>
+<tr data-t="non"><td>Colombia (FARC)</td><td class="yr">1964-2016 t0</td><td><span class="chip c-non">civil, drug-financed</span>P4 P9</td><td>Failed Caguán talks 2002, Plan Colombia</td><td>Land inequality, coca rents, rough terrain</td><td>US aid shifts balance; leaders killed 2008</td><td>Negotiated peace 2016; dissidents and ELN continue</td><td>Security gains drive investment, oil boom in 2000s</td></tr>
+<tr data-t="ext"><td>Afghanistan</td><td class="yr">2001-2021</td><td><span class="chip c-ext">intervention</span>P6 P7 P4</td><td>9/11 attack by al-Qaeda, hosted by the Taliban</td><td>Weak state, sanctuary in Pakistan, opium rents</td><td>US and NATO regime change, then 20-year insurgency</td><td>Afghan army collapses in weeks once US leaves; Taliban return Aug 2021</td><td>US cost about $2 trillion; aid economy collapses 2021; opium ban 2022</td></tr>
+<tr data-t="ext"><td>Iraq</td><td class="yr">2003-2011</td><td><span class="chip c-ext">intervention</span>P10 P7 P2</td><td>Preventive war over claimed WMD</td><td>Sunni-Shia-Kurd cleavage, oil, de-Baathification</td><td>Regime change in 3 weeks, then insurgency and sectarian civil war 2006-07</td><td>US withdrawal 2011; state remains contested</td><td>Oil output recovers only after 2010; 100,000+ civilian deaths</td></tr>
+<tr data-t="civ"><td>Darfur and Sudan</td><td class="yr">2003-</td><td><span class="chip c-civ">civil</span>P4</td><td>SLA and JEM attacks on garrisons</td><td>Marginalized periphery, drought, land competition</td><td>Government arms Janjaweed militias (later the RSF)</td><td>Low-level persistence; militia institutionalized</td><td>ICC indictment of al-Bashir; militia gains gold rents</td></tr>
+<tr data-t="int"><td>Israel-Hezbollah</td><td class="yr">2006</td><td><span class="chip c-int">interstate-like</span>P6</td><td>Cross-border raid captures two soldiers</td><td>Armed non-state actor with Iranian sponsor in a weak host state</td><td>34-day air and ground campaign</td><td>UNSCR 1701 ceasefire; mutual deterrence to 2023</td><td>Lebanese infrastructure losses; Hezbollah's political weight grows</td></tr>
+<tr data-t="ext"><td>Somalia</td><td class="yr">2006-</td><td><span class="chip c-ext">internationalized</span>P7 P5</td><td>Islamic Courts take Mogadishu</td><td>No central state, clan rivalry</td><td>Ethiopian intervention spawns al-Shabaab; AU mission</td><td>Insurgency persists; al-Shabaab taxes the countryside</td><td>Piracy 2008-12 raises Gulf of Aden freight premia</td></tr>
+<tr data-t="non"><td>Mexico drug war</td><td class="yr">2006-</td><td><span class="chip c-non">criminal</span>P9</td><td>Federal offensive on cartels</td><td>Drug-route rents to US market, weak local police</td><td>Kingpin strategy fragments cartels into rival groups</td><td>No end; homicide rate roughly doubles</td><td>Investment and tourism shifts by state; extortion tax</td></tr>
+<tr data-t="int"><td>Russia-Georgia</td><td class="yr">2008</td><td><span class="chip c-int">interstate</span>P8 P1</td><td>Georgian assault on Tskhinvali after provocations</td><td>Frozen conflicts from 1992, NATO aspiration</td><td>Five days; Russian forces reach Gori</td><td>Russia recognizes Abkhazia and South Ossetia; new frozen line</td><td>Brief capital flight from Georgia and Russia</td></tr>
+<tr data-t="civ"><td>Boko Haram and ISWAP</td><td class="yr">2009-</td><td><span class="chip c-civ">civil</span>P4 P5</td><td>Police kill founder Mohammed Yusuf</td><td>Northeast poverty, youth, Lake Chad decline</td><td>Spreads to Niger, Chad, Cameroon; ISWAP split 2016</td><td>Persistent insurgency</td><td>About 2 million displaced; famine conditions 2016-17</td></tr>
+<tr data-t="ext"><td>Libya</td><td class="yr">2011; 2014-2020</td><td><span class="chip c-ext">intervention</span>P2 P7</td><td>Arab Spring protests, regime threatens Benghazi</td><td>Personalist regime, regional and tribal split, oil</td><td>NATO air campaign (UNSCR 1973); later Turkey vs UAE, Egypt, Russia</td><td>Qaddafi killed; second civil war; 2020 ceasefire, divided state</td><td>Oil output falls from 1.6 mb/d to near zero in 2011; Brent spike; arms flood the Sahel</td></tr>
+<tr data-t="ext"><td>Syria</td><td class="yr">2011-2024</td><td><span class="chip c-ext">internationalized</span>P2 P7 P5</td><td>Protest, repression, army defections</td><td>Minority-led regime, drought, youth, sectarian stacking of the army</td><td>Iran, Hezbollah, Russia (2015) for the regime; Turkey, Gulf, US for others; ISIS</td><td>Stalemate from 2020; regime collapses in 11 days, Dec 2024, after its sponsors are stretched</td><td>About 500,000 dead, 6.8 million refugees; GDP more than halved</td></tr>
+<tr data-t="civ"><td>Côte d'Ivoire</td><td class="yr">2002-07; 2010-11</td><td><span class="chip c-civ">civil</span>P3</td><td>Mutiny 2002; incumbent refuses electoral defeat 2010</td><td>North-south identity ("ivoirité") exclusion</td><td>French and UN forces intervene 2011</td><td>Gbagbo captured; Ouattara rules</td><td>Cocoa export disruption, price spike</td></tr>
+<tr data-t="ext"><td>Mali and the Sahel</td><td class="yr">2012-</td><td><span class="chip c-ext">internationalized</span>P5 P3 P7</td><td>Tuareg fighters return armed from Libya; coup 2012</td><td>Northern exclusion, weak army, smuggling rents</td><td>Jihadists take the north; French intervention 2013; coups 2020-23 in Mali, Burkina Faso, Niger; Wagner replaces France</td><td>Spreading insurgency; juntas leave ECOWAS</td><td>Sahel becomes the centre of jihadist deaths; gold-mining rents</td></tr>
+<tr data-t="civ"><td>South Sudan</td><td class="yr">2013-2018</td><td><span class="chip c-civ">civil</span>P3</td><td>Clash in the presidential guard (Dinka vs Nuer units)</td><td>Army built from unintegrated militias, oil rents</td><td>Army splits along ethnic lines; Uganda backs government</td><td>2018 power-sharing deal</td><td>Oil output halves; hyperinflation; famine 2017</td></tr>
+<tr data-t="ext"><td>Iraq and Syria (ISIS)</td><td class="yr">2014-2019</td><td><span class="chip c-ext">internationalized</span>P4 P5</td><td>Mosul falls June 2014</td><td>Sunni exclusion under Maliki, Syrian sanctuary</td><td>Iraqi army collapses in the north; US-led air coalition, Iran-backed militias, Kurds</td><td>Territorial caliphate destroyed 2017-19; group persists</td><td>ISIS sells oil, taxes 8 million people; attacks in Europe</td></tr>
+<tr data-t="int"><td>Russia-Ukraine (Crimea, Donbas)</td><td class="yr">2014-2022</td><td><span class="chip c-int">interstate, proxy</span>P1 P8</td><td>Euromaidan revolution topples Yanukovych</td><td>Contested alignment, Russian-speaking regions, Black Sea Fleet basing</td><td>Crimea annexed; Russia-backed separatists in Donbas</td><td>Minsk agreements freeze the line</td><td>First sanctions round; rouble crisis 2014 (with oil fall)</td></tr>
+<tr data-t="ext"><td>Yemen</td><td class="yr">2014-</td><td><span class="chip c-ext">internationalized</span>P2 P7</td><td>Fuel subsidy cut; Houthis take Sanaa</td><td>Failed transition after 2011, Zaydi north exclusion</td><td>Saudi-led coalition 2015; Iran arms the Houthis</td><td>Truce 2022, frozen; Houthis attack shipping 2023-</td><td>Famine and cholera; Red Sea attacks halve Suez transits in 2024</td></tr>
+<tr data-t="ext"><td>Mozambique, Cabo Delgado</td><td class="yr">2017-</td><td><span class="chip c-ext">internationalized</span>P4 P5</td><td>Attacks on Mocímboa da Praia</td><td>Gas discovery with few local jobs, marginalized coast</td><td>Wagner, then Rwanda and SADC troops</td><td>Contained, not ended</td><td>$20 billion LNG project in force majeure from 2021</td></tr>
+<tr data-t="int"><td>India-Pakistan crises</td><td class="yr">2001-02; 2016; 2019; 2025</td><td><span class="chip c-int">interstate, nuclear</span>P6</td><td>Mass-casualty attacks in India by Pakistan-based groups</td><td>Kashmir claim, nuclear dyad, sponsored militants</td><td>Air and missile strikes; four days in May 2025</td><td>Ceasefire each time; nuclear deterrence caps escalation</td><td>Trade and water treaty suspended (Indus, 2025)</td></tr>
+<tr data-t="int"><td>Armenia-Azerbaijan</td><td class="yr">2020; 2023</td><td><span class="chip c-int">interstate</span>P8 P1</td><td>Azerbaijani offensive on a frozen line</td><td>Oil-funded rearmament, Turkish and Israeli drones, Russian guarantor distracted</td><td>44 days in 2020; one day in 2023</td><td>Decisive Azerbaijani victory; about 100,000 Armenians leave Karabakh</td><td>Shows that a changed balance reopens frozen conflicts</td></tr>
+<tr data-t="ext"><td>Ethiopia, Tigray</td><td class="yr">2020-2022</td><td><span class="chip c-ext">internationalized</span>P3 P4</td><td>TPLF attack on the Northern Command</td><td>Ethnic federalism, displaced former ruling group</td><td>Eritrea joins the federal side; drones from Turkey, UAE, Iran</td><td>Pretoria agreement 2022; Amhara (Fano) insurgency follows</td><td>Among the deadliest wars of the century; famine; debt default 2023</td></tr>
+<tr data-t="civ"><td>Myanmar</td><td class="yr">2021-</td><td><span class="chip c-civ">civil</span>P3 P2</td><td>Military coup reverses election</td><td>Ethnic armed organizations active since 1948</td><td>Protests crushed; armed resistance allies with ethnic armies; offensive 1027 in 2023</td><td>Junta loses much of the periphery</td><td>GDP falls about a fifth; scam-centre and opium economy grows</td></tr>
+<tr data-t="int"><td>Russia-Ukraine (full-scale)</td><td class="yr">2022-</td><td><span class="chip c-int">interstate</span>P1</td><td>Russian invasion</td><td>Perceived closing window as Ukraine drifts west; belief in quick victory</td><td>Western arms and finance; North Korean troops; drone war</td><td>Positional war of attrition</td><td>Ukraine GDP -29% in 2022; European gas and grain price spikes; reserve freeze; about 6 million refugees abroad; European rearmament</td></tr>
+<tr data-t="civ"><td>Sudan, SAF vs RSF</td><td class="yr">2023-</td><td><span class="chip c-civ">civil</span>P3</td><td>Dispute over folding the RSF into the army</td><td>Two armed forces after the 2019 revolution and 2021 coup; gold rents</td><td>UAE supplies the RSF; Egypt and others the SAF</td><td>De facto partition; El Fasher massacres 2025</td><td>About 12 million displaced, the largest displacement crisis in the world</td></tr>
+<tr data-t="ext"><td>Israel-Gaza and the regional war</td><td class="yr">2008- ; 2023-</td><td><span class="chip c-ext">internationalized</span>P6 P8 P10</td><td>Recurring rounds; 7 October 2023 attack</td><td>Blockade, occupation, Iranian-backed axis</td><td>Lebanon 2024, Houthis and Red Sea, direct Israel-Iran exchanges 2024, 12-day war with US strikes 2025</td><td>Ceasefires 2025; Hezbollah degraded</td><td>Red Sea rerouting; Gaza destroyed; Iran's nuclear programme struck</td></tr>
+<tr data-t="non"><td>Haiti gangs</td><td class="yr">2021-</td><td><span class="chip c-non">criminal</span>P9 P5</td><td>President assassinated</td><td>No functioning state, arms smuggled from the US</td><td>Gang coalition controls most of the capital; Kenyan-led mission</td><td>Ongoing</td><td>Food insecurity; economic contraction six years running</td></tr>
+<tr data-t="int"><td>Short border wars</td><td class="yr">2008-2025</td><td><span class="chip c-int">interstate</span>P1 P6</td><td>Incidents at disputed sites</td><td>Territorial claims (Preah Vihear, Ferghana enclaves, Durand Line)</td><td>Thailand-Cambodia 2008-11 and 2025; Kyrgyzstan-Tajikistan 2021-22; Afghanistan-Pakistan 2025</td><td>Days to weeks; ceasefires</td><td>Local trade closures; nationalist rallies</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Regularities</h2>
+  <p>These are the patterns a simulated 2000-2024 should reproduce in distribution, never by date.</p>
+  <ol>
+    <li><b>Type mix.</b> Civil conflict dominates counts; interstate war is rare but rising (8 interstate conflicts in 2025). Internationalized civil wars, rare before 2010, became common after 2013.</li>
+    <li><b>Interstate wars are short, limited and local.</b> They involve neighbours, a territorial claim or a frozen line, and an unequal balance. Nuclear dyads stay at strikes and skirmishes (India-Pakistan four times, Israel-Iran).</li>
+    <li><b>Fast triggers on slow risk.</b> Almost every onset has a dated political trigger: a coup, revolution, disputed election, assassination, mass-casualty attack, subsidy cut, or a neighbour's collapse.</li>
+    <li><b>The conflict trap.</b> Most onsets are recurrences or continuations of older conflicts (Chechnya, Karabakh, Gaza, Darfur, Ukraine 2014 to 2022). Peace-years is the strongest single predictor.</li>
+    <li><b>Splits inside the state.</b> Armies that are ethnically stacked or paired with a rival paramilitary break apart under stress (Syria, Libya, South Sudan, Sudan, Myanmar). Coups cluster regionally (Sahel 2020-23).</li>
+    <li><b>Contagion.</b> Collapse exports fighters and arms (Libya to Mali), sanctuary links neighbours (Syria and Iraq, Afghanistan and Pakistan), and one war pulls in others (Gaza to Lebanon, Yemen, Iran).</li>
+    <li><b>Sponsors set duration and outcome.</b> External support lengthens civil wars. When sponsors are stretched or leave, clients collapse within weeks (Kabul 2021, Damascus 2024).</li>
+    <li><b>Collapse is nonlinear.</b> Long stalemates end in sudden cascades of desertion and surrender, not gradual attrition.</li>
+    <li><b>Great-power regime change produces long insurgencies</b> (Afghanistan, Iraq, Libya). Victory in the first phase says little about the second.</li>
+    <li><b>Few decisive endings.</b> Victories are rare (Sri Lanka 2009, Karabakh 2023, Taliban 2021, HTS 2024). Ceasefires that freeze a line are the modal end, and frozen lines thaw when the balance shifts.</li>
+    <li><b>Rents finance the fighting.</b> Oil (ISIS, Libya), gold (Sudan, Sahel, Wagner), minerals (DRC), drugs (Afghanistan, Colombia, Mexico), extortion and diaspora money.</li>
+    <li><b>Economic footprint.</b> Theatre GDP falls 20 to 60 percent; displacement reaches tens of millions; spillovers run through oil (Libya 2011), gas and grain (2022), chokepoints (Red Sea 2024), sanctions and reserve freezes, and neighbours' defence budgets.</li>
+    <li><b>Cheap precision shifts the balance.</b> Drones and missiles let weaker parties strike far (Houthis, Ukraine, Azerbaijan), making cost exchange a production question (ADR 0152).</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Ten pathways</h2>
+  <p>Every conflict in the catalogue is one or more of these chains. Each names the simulated state it needs. <b>New</b> marks a mechanism Ceteris lacks.</p>
+  <div class="scroll">
+  <table style="min-width:760px">
+    <thead><tr><th>Path</th><th>Chain</th><th>Cases</th><th>Simulated state it reads</th><th>Status</th></tr></thead>
+    <tbody>
+<tr><td class="yr">P1</td><td>Opportunistic revision: claim plus a favourable shift in relative power plus a low expected third-party response</td><td>Georgia 2008, Crimea 2014, Ukraine 2022, Karabakh, Thai-Cambodian border</td><td>Dyad claims, capability ratio and its trend (11.4), alliance credibility (11.3), interdependence cost, leader risk tolerance (0066)</td><td>In 11.2 (extended); needs a crisis rate</td></tr>
+<tr><td class="yr">P2</td><td>Revolution to civil war: protest cascade, repression, defections</td><td>Syria, Libya, Yemen, Myanmar</td><td>10.8 protest threshold model, repression choice, <b>security-force cohesion</b></td><td>New: cohesion</td></tr>
+<tr><td class="yr">P3</td><td>Praetorian split: coup or failed integration of rival armed forces</td><td>Sudan 2023, South Sudan 2013, Côte d'Ivoire, Mali, Burkina Faso</td><td>Coup hazard (10.8), <b>force factions</b> and their loyalty</td><td>New: cohesion</td></tr>
+<tr><td class="yr">P4</td><td>Exclusion insurgency in weak, rough, rent-rich peripheries</td><td>Darfur, ISIS 2014, Boko Haram, Tigray, Cabo Delgado</td><td>EPR exclusion, horizontal inequality, state reach (0163), terrain, lootable rents, youth unemployment</td><td>In 11.6, 0069, 0110</td></tr>
+<tr><td class="yr">P5</td><td>Transnational diffusion: groups and weapons cross into weak neighbours</td><td>Libya to Mali, ISIS branches, al-Shabaab, JNIM, ADF</td><td>Arms stocks of collapsed states (0146), <b>group branches across borders</b>, kin and ideology links</td><td>New: diffusion</td></tr>
+<tr><td class="yr">P6</td><td>Attack to retaliation: mass-casualty attack attributed to a group hosted by a state</td><td>9/11 to Afghanistan, Mumbai, Pahalgam to May 2025, 7 October</td><td>0069 attack hazard with <b>origin and host</b>, rivalry, nuclear status</td><td>New: attribution</td></tr>
+<tr><td class="yr">P7</td><td>Intervention for a client or against a threat</td><td>Russia in Syria, Saudi Arabia in Yemen, France in Mali, Ethiopia in Somalia, NATO in Libya, Rwanda in DRC</td><td><b>Intervention value</b>: client ties (23.6 spheres), basing, kin, refugee inflow, attacks, proliferation, commodity exposure, power-projection cost</td><td>New: intervention</td></tr>
+<tr><td class="yr">P8</td><td>Frozen-conflict thaw after a shift in balance</td><td>Karabakh 2020 and 2023, Georgia 2008, Donbas to 2022, Gaza rounds</td><td>Ceasefire line, thaw hazard on relative-power shift (0073)</td><td>In 0073; needs lines at t0</td></tr>
+<tr><td class="yr">P9</td><td>Criminal war: state offensive fragments cartels, or gangs fill a void</td><td>Mexico, Haiti, Ecuador 2024</td><td>Drug-route rents, homicide model (0060), state capacity</td><td>In 0060, 0069</td></tr>
+<tr><td class="yr">P10</td><td>Preventive and counter-proliferation war</td><td>Iraq 2003 (on claims), Israel-Iran 2025</td><td>Proliferation latency (0073), power-shift term (Powell 2006), intelligence noise (23.6)</td><td>In 11.2, 0073</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>What Ceteris has today</h2>
+  <div class="grid2">
+    <div class="box"><h3>In place (all 2.0, P6 and P7)</h3>
+      <ul>
+        <li>11.2 crisis bargaining (Fearon range, commitment, indivisibility, nuclear cost term)</li>
+        <li>11.6 civil-war risk; 10.8 protest cascade, stress index, coups</li>
+        <li>0110 reduced-form onset and termination hazard as the lab default</li>
+        <li>0069 armed groups and their finance; 0060 organized crime</li>
+        <li>0073 proliferation and frozen conflicts; 0152 escalation ladder</li>
+        <li>0145-0154, 0245, 0246 conduct and occupation; 0165 war economy; 0045 sanctions</li>
+        <li>0051 fat-tailed severity, 0241 calendar-blind runs, 0242 hazard pattern</li>
+      </ul></div>
+    <div class="box"><h3>Gaps found</h3>
+      <ul>
+        <li><b>G1.</b> No cohesion or factions in security forces, so P2 and P3 cannot happen and collapses cannot cascade.</li>
+        <li><b>G2.</b> No rule for who intervenes in someone else's war; sponsors exist only as money in 0069.</li>
+        <li><b>G3.</b> Armed groups are tied to one state; no branches across borders, no leakage of arms after collapse.</li>
+        <li><b>G4.</b> Attacks carry no origin, so they cannot cause retaliation.</li>
+        <li><b>G5.</b> 0110's hazard says where violence starts but not who fights or why; 11.2 says why but has no rate at which disputes arise. Neither alone gives organic, calibrated wars.</li>
+        <li><b>G6.</b> The pack has no conflict state at 1 January 2000: ongoing wars, armed groups, foreign deployments, frozen lines and claims.</li>
+        <li><b>G7.</b> 1.0 has no conflicts, so a calendar-blind 1.0 run lacks war shocks to oil, refugees and capital.</li>
+      </ul></div>
+  </div>
+</section>
+
+<section>
+  <h2>Proposal: the hazard proposes, actors decide</h2>
+  <p>Five layers. Nothing in them names a country or a date; every war carries its causal chain in the event log so the chronicle (0049) can show why it happened.</p>
+  <div class="layers">
+    <div class="layer"><b class="tag">L0</b><div><b>Structural risk</b>, slow state already computed: income and growth, exclusion, state capacity and reach, terrain, rents, youth unemployment, peace-years, neighbourhood conflict; per dyad claims, capability ratio and trend, alliance credibility, trade dependence, nuclear status, regime type.</div></div>
+    <div class="layer"><b class="tag">L1</b><div><b>Triggers</b>, fast events from hazards that exist or are planned: coup and protest cascade (10.8), leader death and succession (0066), elections, price shocks that force subsidy cuts (econ), attacks with attribution (G4), a neighbour's collapse, a sponsor's withdrawal or overstretch, a power-shift window.</div></div>
+    <div class="layer"><b class="tag">L2</b><div><b>Crisis generator.</b> One hazard in the 0051 library creates crises, not wars. A crisis has typed actors (state, faction, group, sponsor) and a stake (territory, regime, autonomy, policy, retaliation). Rate is L0 risk times L1 trigger multipliers. Fitted on MID and ICB crises (interstate) and UCDP minor-conflict onsets (domestic). Drawn by thinning on shared uniforms (0241).</div></div>
+    <div class="layer"><b class="tag">L3</b><div><b>Escalation.</b> Actors bargain under 11.2 with private information and commitment problems; third parties run the intervention rule (G2); factions run the cohesion rule (G1). Outcomes: settle, standoff, limited clash, war. In the lab profile an escalation logit on the same covariates replaces bargaining.</div></div>
+    <div class="layer"><b class="tag">L4</b><div><b>Conduct and termination</b> as designed (0145-0154, 11.8). Sponsor budgets are finite across theatres, so overstretch can collapse a client elsewhere. Cohesion cascades give sudden collapses.</div></div>
+    <div class="layer"><b class="tag">L5</b><div><b>Aftermath.</b> Peace-years reset; ceasefire lines become frozen conflicts with a thaw hazard (0073); armed groups persist with their rents; grievance, destroyed capital and refugees feed L0 again. This is the conflict trap, with no separate term.</div></div>
+  </div>
+
+  <h3>New mechanisms</h3>
+  <div class="grid2">
+    <div class="box"><h3>M1. Security-force cohesion</h3>
+      <p>Each state's forces are one to a few factions (regular army, presidential guard, paramilitary), each with an identity profile from the officer corps and a loyalty stock. Loyalty falls with pay arrears (fiscal stress), orders to repress the faction's own group, losses, and leader illegitimacy; it rises with rents shared and sponsor support. Defection is a threshold cascade, the same model as 10.8 protest. A split creates a new armed actor with its units and the cells it holds. Coup-proofing (stacking, parallel forces) lowers coup risk and raises split risk. Calibrated on Powell-Thyne and Cline coups and on defection episodes.</p></div>
+    <div class="box"><h3>M2. Third-party intervention</h3>
+      <p>Each month, states with a stake in a crisis or war score modes (arms and money, advisers or private forces, air power, ground troops) by value (client tie, basing, kin, refugee inflow, attacks originating there, proliferation risk, commodity exposure) against cost (projection distance, casualty sensitivity by regime type, sanctions, other commitments). Sponsor budgets are shared across theatres. Calibrated on UCDP External Support and International Military Intervention data.</p></div>
+    <div class="box"><h3>M3. Cross-border armed groups</h3>
+      <p>Groups can open branches in adjacent provinces with low state reach and kin or ideological links. When a state collapses, a share of its arms stock leaks to groups within reach. Groups split and merge through 0189's emergent organizations. Calibrated on UCDP actor histories.</p></div>
+    <div class="box"><h3>M4. Attribution</h3>
+      <p>Every attack from 0069 records its group and the group's host state. A mass-casualty attack multiplies the target state's crisis rate against the host for some months; the size of the multiplier rises with deaths and rivalry and falls with nuclear deterrence.</p></div>
+    <div class="box"><h3>M5. Conflict state at t0</h3>
+      <p>The 2000 pack records as state: conflicts active in 1999 (UCDP), armed groups and the cells they control, foreign deployments, ceasefire lines (Karabakh, Transnistria, Abkhazia, South Ossetia, Cyprus, Kashmir, Korea, Western Sahara, Golan) and claims (ICOW). This is 0241's commitments-in-force rule applied to war.</p></div>
+    <div class="box"><h3>M6. 1.0 conflict incidence</h3>
+      <p>Until 2.0, a reduced-form 0110 hazard per province with economic incidence only: capital destruction, lost output, displacement under 6.5, oil and mineral supply cuts, and shipping premia near chokepoints. No actors, territory or borders change. 2.0 replaces it with L2-L5 and must reproduce its marginal frequencies.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>Calibration and tests</h2>
+  <ul>
+    <li><b>Nesting.</b> With M1-M4 on and default parameters, simulated onset rates by type and region match the 0110 hazard within its interval. The structural layers explain who and why; they must not change how often.</li>
+    <li><b>Frequencies, never dates.</b> Onsets per decade by type, interstate share, internationalized share, duration distribution, termination type shares (UCDP Conflict Termination), recurrence share, fatality power law (0051), displacement per battle death.</li>
+    <li><b>Pathway coverage.</b> Over 32 members and 25 years from the 2000 pack, each of P1-P10 fires at least once, and none exceeds three times its historical share.</li>
+    <li><b>Ablation.</b> Turning off a trigger family removes its pathway (no attribution, no P6; no cohesion, no P2 or P3) and leaves the others within error.</li>
+    <li><b>Hold-out.</b> From the 2000, 2005 and 2010 origins, counts and type mix in 2011-2024 against UCDP; history's percentile (0118).</li>
+    <li><b>Economic footprint.</b> Theatre GDP losses against synthetic-control estimates; refugee flows against UNHCR; oil supply losses against EIA outage data.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Decisions</h2>
+  <p class="muted">Posted as cards in the thread. The recommended option is marked.</p>
+  <div class="grid2">
+    <div class="dec"><b>D1. Conflict in 1.0</b><span class="rec">A. Economic-incidence hazard (M6), +2 to 3 owner-weeks in P8/P9</span><span>B. No conflict in 1.x; wars only through replay</span><span>C. Pull P7's lab profile into 1.0</span></div>
+    <div class="dec"><b>D2. Onset in 2.0</b><span class="rec">A. Layered crisis generator plus actor escalation, nested on 0110</span><span>B. 0110 hazard places wars; actors filled in after</span><span>C. Structural bargaining only</span></div>
+    <div class="dec"><b>D3. Recording</b><span class="rec">A. One ADR 0254 covering M1-M6 (PR #98), proposed, phased to P6, P7 and P8</span><span>B. ADR for M5 and M6 only now; M1-M4 at the P6 spec</span><span>C. Research page only</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>Sources</h2>
+  <ul class="muted">
+    <li>UCDP: <a href="https://www.uu.se/en/news/2025/2025-06-11-ucdp-sharp-increase-in-conflicts-and-wars">2024 conflict trends</a>; 2025 figures via <a href="https://opb.org/article/2026/06/09/global-conflicts-hit-highest-number-since-wwii-data-shows">NPR, 9 June 2026</a>; Davies et al., Journal of Peace Research 62(4).</li>
+    <li>Fearon and Laitin (2003); Cederman, Gleditsch and Buhaug (2013); Collier and Hoeffler (2004); Walter (2004) on recurrence; Regan (2002) on intervention and duration; Roessler (2016) on coup-proofing and civil war; Powell (2006); Slantchev (2003); Hegre et al. (2019) ViEWS.</li>
+    <li>Ceteris DESIGN 10.8, 11, 13.5-13.6, 23.6; ADRs 0051, 0060, 0066, 0069, 0073, 0110, 0136, 0145-0154, 0165, 0189, 0241, 0242, 0245, 0246.</li>
+  </ul>
+</section>
+</main>
+
+<script>
+const btns = document.querySelectorAll('.filters button');
+const rows = document.querySelectorAll('#cat tbody tr');
+btns.forEach(b => b.addEventListener('click', () => {
+  btns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  const f = b.dataset.f;
+  rows.forEach(r => { r.hidden = f !== 'all' && r.dataset.t !== f; });
+}));
+</script>

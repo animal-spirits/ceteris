@@ -1,0 +1,604 @@
+<title>Ceteris Map Cues</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=IBM+Plex+Sans+Condensed:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an atlas specimen (ADR 0137 tokens), same family as the instrument-charm page. One reading column; the globe plate breaks wide; ideas as a filterable register. */
+:root{
+  --paper:#EDEFEA; --paper-2:#E3E7E1; --paper-3:#D7DDD6;
+  --ink:#1C292F; --ink-2:#4B5B62; --ink-3:#6E7E84; --rule:#C3CBC5;
+  --sea:#BCD1DB; --water-ink:#3B6782;
+  --proof:#AE2459; --branch:#5E45A3;
+  --up:#2F6F86; --down:#9A5B2A;
+  --chip:#D2D9D1;
+  --f-serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --f-ui:"IBM Plex Sans Condensed","Arial Narrow","Helvetica Neue",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#131C21; --paper-2:#1A252B; --paper-3:#24323A;
+  --ink:#E3E8E4; --ink-2:#AEBBBE; --ink-3:#83959A; --rule:#33444C;
+  --sea:#1E3A4A; --water-ink:#8DB7CF;
+  --proof:#E0679A; --branch:#A493E0;
+  --up:#6FB5CF; --down:#D99A63; --chip:#2A3A42; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#131C21; --paper-2:#1A252B; --paper-3:#24323A;
+  --ink:#E3E8E4; --ink-2:#AEBBBE; --ink-3:#83959A; --rule:#33444C;
+  --sea:#1E3A4A; --water-ink:#8DB7CF;
+  --proof:#E0679A; --branch:#A493E0;
+  --up:#6FB5CF; --down:#D99A63; --chip:#2A3A42; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font:16px/1.55 var(--f-serif);margin:0}
+.wrap{max-width:1060px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.col{max-width:680px}
+header .kicker,.label{font:500 12px/1.3 var(--f-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+h1{font:700 clamp(30px,5vw,44px)/1.1 var(--f-serif);margin:.25em 0 .3em;text-wrap:balance}
+h2{font:600 26px/1.2 var(--f-serif);margin:0 0 .3em;text-wrap:balance}
+h3{font:600 15px/1.3 var(--f-ui);margin:0 0 4px}
+p{margin:0 0 .8em}
+.lede{font-size:19px;color:var(--ink-2)}
+.meta{display:flex;flex-wrap:wrap;gap:6px 18px;font:13px var(--f-ui);color:var(--ink-3);margin-top:10px}
+section{margin-top:52px}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px 26px;margin-top:14px}
+.rules div{border-top:1px solid var(--rule);padding-top:10px;font-size:15px;color:var(--ink-2);min-width:0}
+.rules b{display:block;font:600 14px var(--f-ui);color:var(--ink);margin-bottom:2px}
+
+/* plate 1 */
+.plate{border:1px solid var(--rule);background:var(--paper-2);padding:14px;margin-top:16px}
+.globe-grid{display:grid;grid-template-columns:minmax(0,480px) minmax(0,1fr);gap:18px}
+@media (max-width:820px){.globe-grid{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;outline:3px solid transparent;outline-offset:-3px;transition:outline-color .25s}
+.stage.paused{outline-color:var(--ink-3)}
+.stage canvas{display:block;width:100%;max-width:480px;aspect-ratio:1;touch-action:none;cursor:grab;transition:filter .3s}
+.stage.paused canvas#g{filter:saturate(.45) brightness(.96)}
+.stage canvas#o{position:absolute;inset:0;pointer-events:none}
+.datechip{position:absolute;top:8px;left:8px;font:500 13px var(--f-mono);background:var(--paper);border:1px solid var(--rule);padding:3px 8px;font-variant-numeric:tabular-nums}
+.datechip .p{color:var(--ink-3)}
+.controls{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-top:10px;font:14px var(--f-ui)}
+button{font:500 13px var(--f-ui);background:var(--paper);color:var(--ink);border:1px solid var(--rule);padding:5px 11px;cursor:pointer}
+button:hover{border-color:var(--ink-3)}
+button:focus-visible,input:focus-visible,.num:focus-visible,.stage:focus-visible{outline:2px solid var(--branch);outline-offset:2px}
+button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.toggles{display:flex;flex-wrap:wrap;gap:6px}
+.toggles button .n{font-family:var(--f-mono);font-size:11px;opacity:.7;margin-right:4px}
+.zoom{display:flex;align-items:center;gap:8px}
+.zoom input{width:140px}
+.side{min-width:0;display:flex;flex-direction:column;gap:14px}
+.inspect{font:14px var(--f-ui);color:var(--ink-2);min-height:42px;border-bottom:1px solid var(--rule);padding-bottom:10px}
+.inspect b{color:var(--ink)}
+.tray{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto}
+.tray li{display:grid;grid-template-columns:4px 1fr auto;gap:0 10px;background:var(--paper);border:1px solid var(--rule);font:13px/1.35 var(--f-ui);align-items:stretch}
+.tray li .bar{background:var(--ink-3)}
+.tray li.big .bar{background:var(--proof)}
+.tray li .t{padding:6px 0}
+.tray li .t small{display:block;color:var(--ink-3);font-family:var(--f-mono);font-size:11px}
+.tray li .cnt{font:500 12px var(--f-mono);color:var(--ink-2);margin-left:6px}
+.tray li button{align-self:center;margin-right:6px;padding:3px 8px;font-size:12px}
+.tray .sub{grid-column:2/4;font:12px var(--f-mono);color:var(--ink-3);padding:0 0 6px}
+.tray-empty{font:13px var(--f-ui);color:var(--ink-3)}
+.legend{font:12px var(--f-ui);color:var(--ink-3);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ramp{display:inline-block;width:110px;height:8px;background:linear-gradient(90deg,#d8e4e6,#2f6f86)}
+.note{font:13px var(--f-ui);color:var(--ink-3);margin-top:8px}
+
+/* plate 2 */
+.p2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px}
+@media (max-width:760px){.p2{grid-template-columns:minmax(0,1fr)}}
+.ptable{width:100%;border-collapse:collapse;font:14px var(--f-ui)}
+.ptable td{padding:6px 4px;border-bottom:1px solid var(--rule)}
+.ptable td.v{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.num{position:relative;cursor:help;border-bottom:1px dotted var(--ink-3)}
+.d-up{color:var(--up)}.d-dn{color:var(--down)}
+.ring{position:absolute;right:-18px;top:50%;width:14px;height:14px;margin-top:-7px;pointer-events:none}
+.tip{position:absolute;z-index:5;background:var(--paper);border:1px solid var(--ink-3);box-shadow:0 6px 18px rgba(0,0,0,.18);padding:10px 12px;font:13px/1.45 var(--f-ui);color:var(--ink);width:260px;max-width:calc(100vw - 40px)}
+.tip.locked{border-color:var(--ink)}
+.tip h4{margin:0 0 6px;font:600 13px var(--f-ui)}
+.tip table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.tip td{padding:1px 0}.tip td:last-child{text-align:right;font-family:var(--f-mono)}
+.tip tr.sum td{border-top:1px solid var(--ink);font-weight:600}
+.tip .term{border-bottom:1px solid var(--branch);cursor:help}
+.tip .foot{margin-top:6px;color:var(--ink-3);font-size:11px}
+.p2 .explain{font-size:15px;color:var(--ink-2)}
+.p2 .explain b{color:var(--ink);font-family:var(--f-ui)}
+
+/* register */
+.filters{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0}
+.tablebox{overflow-x:auto;border-top:2px solid var(--ink)}
+table.reg{border-collapse:collapse;width:100%;min-width:860px;font:14px/1.4 var(--f-ui)}
+.reg th{text-align:left;font:500 11px var(--f-ui);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);padding:8px 8px;border-bottom:1px solid var(--rule)}
+.reg td{vertical-align:top;padding:10px 8px;border-bottom:1px solid var(--rule)}
+.reg td.n{font:500 12px var(--f-mono);color:var(--ink-3)}
+.reg td.idea b{font:600 15px var(--f-serif);display:block}
+.reg td.src{color:var(--ink-2);width:24%}
+.reg td.cet{width:32%}
+.reg .tag{display:inline-block;font:500 11px var(--f-mono);padding:1px 6px;border:1px solid var(--rule);background:var(--paper);white-space:nowrap;margin:0 3px 3px 0}
+.reg .tag.v1{border-color:var(--ink);color:var(--ink)}
+.reg .tag.v2{color:var(--ink-3)}
+.reg .tag.cut{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.reg .feas{font-size:13px;color:var(--ink-2)}
+.reg tr.grp td{background:var(--paper-2);font:600 12px var(--f-ui);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2);padding:7px 8px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:26px}
+@media (max-width:760px){.two{grid-template-columns:minmax(0,1fr)}}
+.list{list-style:none;padding:0;margin:0;font:14px/1.45 var(--f-ui)}
+.list li{padding:7px 0;border-bottom:1px solid var(--rule);color:var(--ink-2)}
+.list li b{color:var(--ink)}
+.cost{width:100%;border-collapse:collapse;font:14px var(--f-ui);margin-top:10px}
+.cost td,.cost th{padding:7px 6px;border-bottom:1px solid var(--rule);text-align:left}
+.cost th{font:500 11px var(--f-ui);text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3)}
+.cost td:nth-child(3){font-family:var(--f-mono);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header class="col">
+  <div class="kicker">Ceteris Paribus · flavour, round three · 30 October 2026</div>
+  <h1>What Paradox does on the map, and what Ceteris can take</h1>
+  <p class="lede">Paradox games carry a lot of their charm in small cues: a map that changes character as you zoom out, names painted across the land, a selection that glows, notices you can fly to, a pause you can see from across the room. Twenty-eight such cues below, taken as patterns, not assets. Seventeen fit the pure-simulator 1.0; the rest wait for war or for the 2.0 game layer.</p>
+  <div class="meta"><span>Deduped against: art page v17, instrument charm (39), borrowed mechanics (20), character flavour, ADRs to 0250</span><span>Globe only (ADR 0250)</span><span>Demos use made-up toy data</span></div>
+</header>
+
+<section class="col">
+  <div class="label">Ground rules</div>
+  <h2>How a Paradox cue gets into Ceteris</h2>
+  <div class="rules">
+    <div><b>The pattern, never the asset</b>Paradox's cues are built for a player who owns a country. Ceteris borrows the mechanism (semantic zoom, coalesced notices) and draws it in the Modern Atlas register of ADR 0137.</div>
+    <div><b>1.0 cues help read the run</b>Under ADR 0240 a cue sits on the 1.0 path only when it helps a user read, edit or compare runs. Voice, drama and judgement wait for 2.0+.</div>
+    <div><b>Nothing fires on a date</b>Every pin, notice and sting comes from a detector event in the simulated run (ADRs 0049, 0241). No scripted event windows, no options to click.</div>
+    <div><b>No player, so no judgement colours</b>Paradox paints numbers green when they help you. 1.0 has no "you", so colour shows direction only (idea 17).</div>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+    <div class="label">Plate 1</div>
+    <h2>One toy globe, eight cues</h2>
+    <p>A made-up planet with nine countries. Drag to turn it, use the zoom slider to watch it change character, click a province to select it, press Run to let months pass and raise event pins. Each toggle is one idea from the register. Space pauses when the globe has focus.</p>
+  </div>
+  <div class="plate">
+    <div class="globe-grid">
+      <div>
+        <div class="stage" id="stage" tabindex="0" aria-label="Toy globe. Drag to rotate, click to select, Space to pause.">
+          <canvas id="g" width="480" height="480"></canvas>
+          <canvas id="o" width="480" height="480"></canvas>
+          <div class="datechip" id="date">2000-01-01</div>
+        </div>
+        <div class="controls">
+          <button id="play" aria-pressed="false">Run</button>
+          <button id="step">Next month</button>
+          <label class="zoom" for="zoom">Zoom <input id="zoom" type="range" min="1" max="3.2" step="0.01" value="1.15"></label>
+        </div>
+        <div class="controls toggles" id="toggles"></div>
+      </div>
+      <div class="side">
+        <div class="inspect" id="inspect">Click a province. With <b>Selection answers</b> on, the map turns into that country's trade view.</div>
+        <div>
+          <h3>Notices</h3>
+          <div class="legend" style="margin-bottom:6px">Same event, same month: one line with a count. Go to flies the globe there.</div>
+          <ul class="tray" id="tray"></ul>
+          <div class="tray-empty" id="trayEmpty">No notices yet. Press Run or Next month.</div>
+        </div>
+        <div class="legend" id="legend"><span>Import share from the selected country</span><span class="ramp"></span><span>0 to 40%</span></div>
+      </div>
+    </div>
+    <p class="note">Toy data, not Ceteris output. Country names are made up. The app would draw these in map.wgsl and the id-buffer border pass of ADR 0244.</p>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+    <div class="label">Plate 2</div>
+    <h2>Tooltips that lock, numbers that add up</h2>
+  </div>
+  <div class="plate p2">
+    <div>
+      <div class="label" style="margin-bottom:6px">Escalda · wheat market · 2003-09</div>
+      <table class="ptable">
+        <tr><td>Price, per tonne</td><td class="v"><span class="num" tabindex="0" data-tip="price">212.0</span></td><td class="v d-up">+4.1%</td></tr>
+        <tr><td>Imports, kt</td><td class="v"><span class="num" tabindex="0" data-tip="imports">1,840</span></td><td class="v d-dn">-6.3%</td></tr>
+        <tr><td>Stocks, weeks of use</td><td class="v"><span class="num" tabindex="0" data-tip="stocks">5.2</span></td><td class="v d-dn">-0.8</td></tr>
+      </table>
+      <p class="note">Hover or focus a number. The ring fills for 0.6 s, then the tooltip locks and its underlined terms open a nested tooltip. Esc or moving away closes them, innermost first.</p>
+    </div>
+    <div class="explain">
+      <p><b>Lock ring (idea 15).</b> Crusader Kings III and Victoria 3 let a tooltip become a small window you can move into, so terms inside it can open their own tooltips. The cue that it is about to lock is what makes it discoverable.</p>
+      <p><b>Breakdown (idea 16).</b> Europa Universalis IV lists every modifier behind a number. In Ceteris the breakdown is the accounting: price as cost, freight, tariff and margin, quantities as sources and uses, each line opening the explainer.</p>
+      <p><b>Direction colour (idea 17).</b> The changes on the left are blue when up and umber when down. Neither means good. Whether dearer wheat is good depends on who you are, and 1.0 has no seat.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="col">
+    <div class="label">Register</div>
+    <h2>All twenty-eight</h2>
+    <p>Version follows ADR 0240: <b>1.0</b> helps read, edit or compare runs and needs only P2 to P5 systems; <b>2.0+</b> is flavour, voice or judgement, or needs war. Effort is part-time owner time: <b>S</b> under a week, <b>M</b> one to three weeks, <b>L</b> more. Feasibility is for the native shell as merged through step 6 (Slint 1.18, wgpu, id-buffer borders, Slint labels, no audio crate yet). <b>Cut</b> marks the recommended first set.</p>
+  </div>
+  <div class="filters" id="filters"></div>
+  <div class="tablebox"><table class="reg" id="reg"><thead><tr><th>#</th><th>Idea</th><th>Paradox pattern</th><th>In Ceteris</th><th>Tags</th><th>Native feasibility</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section>
+  <div class="two">
+    <div>
+      <div class="label">Already in Ceteris</div>
+      <h2>Paradox cues we have</h2>
+      <ul class="list">
+        <li><b>Ships, trains and flights on trade lanes</b> · living map, art page</li>
+        <li><b>Weather fronts and cloud shadows</b> · living map</li>
+        <li><b>Seasons, snow, night lights</b> · atlas details; 2.0+ under ADR 0240 (0141)</li>
+        <li><b>Smooth map-mode blends</b> · next-colour mix, app step 6</li>
+        <li><b>Day and hour bar under the date</b> · ADRs 0208, 0232</li>
+        <li><b>Day and night during war</b> · ADR 0209</li>
+        <li><b>Mood music by situation</b> · ADR 0137</li>
+        <li><b>Floating numbers, rolling counters</b> · game feel, art page</li>
+        <li><b>Month tick and new-year sounds</b> · interactions, art page</li>
+        <li><b>Concept links in tooltips</b> · borrowed mechanics 08</li>
+        <li><b>Outliner, news feed, alerts</b> · DESIGN 23.8, ADR 0188</li>
+        <li><b>Ledger comparisons</b> · borrowed mechanics 07, peer radar</li>
+        <li><b>Flags and country colours</b> · art page, flag studio, colour rule</li>
+      </ul>
+    </div>
+    <div>
+      <div class="label">Seen and left out</div>
+      <h2>Paradox cues we skip</h2>
+      <ul class="list">
+        <li><b>Parchment, brass and wax-seal panels</b> · the Paradox Cabinet look, option B, not chosen</li>
+        <li><b>Terra incognita and fog of war</b> · fog of data is a game mechanic, 2.0+, and not drawn as clouds</li>
+        <li><b>Scripted flavour events with options</b> · railroading; events come only from the run (ADR 0241)</li>
+        <li><b>Painted event illustrations</b> · no commissioned art; 2.0+ at most</li>
+        <li><b>Portraits on every notice</b> · decided against (ADRs 0183 to 0187)</li>
+        <li><b>Achievements, missions, journal objectives</b> · collections rejected; objectives are 2.0+</li>
+        <li><b>3D building and unit models</b> · flat atlas pictograms instead (ideas 5, 22)</li>
+        <li><b>Country shield in the top bar</b> · seat chrome, 2.0+ (ADR 0140)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="col">
+  <div class="label">Cost</div>
+  <h2>What the 1.0 set would cost</h2>
+  <p>Most 1.0 items are shader uniforms, sprites or Slint panels over data the engine already produces. Two need real plumbing: curved names (Slint labels cannot follow a path, so names move to a glyph atlas in wgpu, which revisits the label half of ADR 0244) and the breakdown tooltip (every displayed quantity needs a decomposition the explainer can serve).</p>
+  <table class="cost">
+    <tr><th>Group</th><th>Ideas</th><th>Effort</th><th>Lands with</th></tr>
+    <tr><td>Recommended cut</td><td>1, 2, 3, 7, 8, 11, 17</td><td>2-3 weeks</td><td>P3 shell and inspector</td></tr>
+    <tr><td>Rest of the map set</td><td>4, 5, 6, 26</td><td>3-4 weeks</td><td>P3 map, with labels work</td></tr>
+    <tr><td>Rest of notices and chrome</td><td>10, 12, 13, 14</td><td>1.5-2 weeks</td><td>P3, beside 0188 rules</td></tr>
+    <tr><td>Tooltips</td><td>15, 16</td><td>2-3 weeks</td><td>P3 with the explainer (0118)</td></tr>
+    <tr><td>All seventeen</td><td></td><td>8-12 weeks</td><td>Needs a cut before a plan</td></tr>
+  </table>
+  <p class="note">No ADR yet. Decisions wait until you have seen enough ideas.</p>
+</section>
+</div>
+
+<script>
+(()=>{
+const REDUCED=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function rng(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const R=rng(20000101);
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const norm=v=>{const l=Math.hypot(v[0],v[1],v[2]);return[v[0]/l,v[1]/l,v[2]/l]};
+const fromLL=(lat,lon)=>[Math.cos(lat)*Math.cos(lon),Math.sin(lat),Math.cos(lat)*Math.sin(lon)];
+const toLL=v=>[Math.asin(Math.max(-1,Math.min(1,v[1]))),Math.atan2(v[2],v[0])];
+
+// world
+const N=420,seeds=[];
+for(let i=0;i<N;i++){const y=1-2*(i+.5)/N,r=Math.sqrt(1-y*y),th=i*2.399963;seeds.push(norm([r*Math.cos(th)+(R()-.5)*.12,y+(R()-.5)*.12,r*Math.sin(th)+(R()-.5)*.12]))}
+const NBR=seeds.map((s,i)=>seeds.map((_,j)=>j).filter(j=>j!==i&&dot(s,seeds[j])>Math.cos(.36)));
+const conts=[];for(let k=0;k<7;k++)conts.push({c:norm([R()-.5,(R()-.5)*1.3,R()-.5]),r:Math.cos(.5+R()*.3)});
+const land=seeds.map(s=>{let best=-1,bi=-1;conts.forEach((c,k)=>{const d=dot(s,c.c);if(d>c.r&&d>best){best=d;bi=k}});return bi});
+const landIdx=seeds.map((_,i)=>i).filter(i=>land[i]>=0);
+const NAMES=['Escalda','Tervane','Lusk','Oradel','Sammar','Quellin','Hadrel','Moravo','Isk','Velde'];
+const caps=[];
+for(const i of landIdx.slice().sort(()=>R()-.5)){if(caps.every(c=>dot(seeds[c],seeds[i])<Math.cos(.55)))caps.push(i);if(caps.length>=9)break}
+for(let k=0;k<conts.length;k++)if(!caps.some(c=>land[c]===k)){const m=landIdx.find(i=>land[i]===k);if(m!==undefined&&caps.length<NAMES.length)caps.push(m)}
+const country=seeds.map((s,i)=>{if(land[i]<0)return -1;let best=-2,bi=0;caps.forEach((c,k)=>{if(land[c]!==land[i])return;const d=dot(s,seeds[c]);if(d>best){best=d;bi=k}});return bi});
+const NC=caps.length;
+const HUES=[24,205,95,330,160,55,265,0,130,300];
+const tint=k=>hsl(HUES[k%HUES.length],.42,.80);
+function hsl(h,s,l){h/=360;const f=n=>{const k=(n+h*12)%12,a=s*Math.min(l,1-l);return l-a*Math.max(-1,Math.min(k-3,9-k,1))};return[f(0)*255,f(8)*255,f(4)*255]}
+const SECT=['grain','oil','metal','works','port'];
+const prov=seeds.map((s,i)=>({decile:1+Math.floor(R()*10),sector:SECT[Math.floor(R()*4)],coast:false}));
+// trade shares between countries
+const share=[...Array(NC)].map(()=>[...Array(NC)].map(()=>R()**2.2*.4));
+// coast flag
+seeds.forEach((s,i)=>{if(land[i]<0)return;for(let j=0;j<N;j++)if(land[j]<0&&dot(s,seeds[j])>Math.cos(.32)){prov[i].coast=true;if(R()<.35)prov[i].sector='port';break}});
+// country centroid and axis for curved names
+const ctry=[...Array(NC)].map((_,k)=>{const m=seeds.filter((_,i)=>country[i]===k);let c=[0,0,0];m.forEach(v=>{c[0]+=v[0];c[1]+=v[1];c[2]+=v[2]});c=norm(c);const[lat,lon]=toLL(c);const e=[-Math.sin(lon),0,Math.cos(lon)],n=[-Math.sin(lat)*Math.cos(lon),Math.cos(lat),-Math.sin(lat)*Math.sin(lon)];let sxx=0,syy=0,sxy=0;m.forEach(v=>{const x=dot(v,e),y=dot(v,n);sxx+=x*x;syy+=y*y;sxy+=x*y});const ang=.5*Math.atan2(2*sxy,sxx-syy);const ext=Math.sqrt(Math.max(sxx,syy)/m.length)*2+.18;return{c,ang,ext,name:NAMES[k],count:m.length}});
+// sea label: ocean seed farthest from land
+let seaBest=-1,seaI=0;seeds.forEach((s,i)=>{if(land[i]>=0)return;let md=2;landIdx.forEach(j=>{md=Math.min(md,1-dot(s,seeds[j]))});if(md>seaBest){seaBest=md;seaI=i}});
+
+// camera and state
+const g=document.getElementById('g'),o=document.getElementById('o'),gx=g.getContext('2d'),ox=o.getContext('2d');
+const W=g.width,H=g.height;
+const cam={lat:.35,lon:.4,z:1.15};
+const st={sel:-1,month:0,playing:false,events:[],t0:performance.now()};
+const T={answers:true,glow:true,names:true,glyphs:true,pins:true,term:true,pause:true,semantic:true};
+const TOG=[['semantic','1','Semantic zoom'],['answers','2','Selection answers'],['glow','3','Breathing edge'],['names','4','Curved names'],['glyphs','5','Sector glyphs'],['term','6','Terminator'],['pins','7','Event pins'],['pause','8','Visible pause']];
+const tg=document.getElementById('toggles');
+TOG.forEach(([k,n,l])=>{const b=document.createElement('button');b.innerHTML=`<span class="n">${n}</span>${l}`;b.setAttribute('aria-pressed','true');b.onclick=()=>{T[k]=!T[k];b.setAttribute('aria-pressed',T[k]);if(k==='pause')applyPause();dirty=true};tg.appendChild(b)});
+
+const ids=new Int16Array(W*H);
+const img=gx.createImageData(W,H);
+const selC=document.createElement('canvas');selC.width=W;selC.height=H;const sx=selC.getContext('2d');
+let dirty=true;
+let PAL;
+function readPal(){const p=n=>{const c=document.createElement('canvas').getContext('2d');c.fillStyle=css(n);c.fillRect(0,0,1,1);return[...c.getImageData(0,0,1,1).data].slice(0,3)};PAL={paper:p('--paper-2'),sea:p('--sea'),ink:p('--ink'),rule:p('--rule'),up:p('--up'),dark:document.documentElement.matches(':root[data-theme="dark"]')||(matchMedia('(prefers-color-scheme: dark)').matches&&!document.documentElement.matches('[data-theme="light"]'))}}
+readPal();
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{readPal();dirty=true});
+
+function basis(){const c=fromLL(cam.lat,cam.lon),e=[-Math.sin(cam.lon),0,Math.cos(cam.lon)],n=[-Math.sin(cam.lat)*Math.cos(cam.lon),Math.cos(cam.lat),-Math.sin(cam.lat)*Math.sin(cam.lon)];return{c,e,n}}
+function rad(){return 205*cam.z}
+function semantic(){return T.semantic?Math.max(0,Math.min(1,(cam.z-1.2)/1.4)):0.5}
+function sun(){const doy=(st.month%12)*30.4+15,dec=23.44*Math.PI/180*Math.sin(2*Math.PI*(doy-80)/365);return fromLL(dec,0)}
+function project(v,B){const z=dot(v,B.c);if(z<=0)return null;const r=rad();return[W/2+dot(v,B.e)*r,H/2-dot(v,B.n)*r,z]}
+function noise(p){return Math.sin(p[0]*11+p[1]*3)*Math.sin(p[1]*9-p[2]*5)*.5+Math.sin(p[2]*17+p[0]*7)*.25+Math.sin((p[0]+p[1]+p[2])*31)*.12}
+
+function render(){
+  const B=basis(),r=rad(),s=semantic(),S=sun(),d=img.data;
+  const sel=st.sel,selCountry=sel>=0?country[sel]:-1;
+  const answer=T.answers&&selCountry>=0;
+  const cx=W/2,cy=H/2;let hint=0;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const k=y*W+x,o4=k*4,vx=(x+.5-cx)/r,vy=-(y+.5-cy)/r,r2=vx*vx+vy*vy;
+    if(r2>1){ids[k]=-1;d[o4]=PAL.paper[0];d[o4+1]=PAL.paper[1];d[o4+2]=PAL.paper[2];d[o4+3]=255;continue}
+    const vz=Math.sqrt(1-r2);
+    const p=[vz*B.c[0]+vx*B.e[0]+vy*B.n[0],vz*B.c[1]+vx*B.e[1]+vy*B.n[1],vz*B.c[2]+vx*B.e[2]+vy*B.n[2]];
+    let bi=hint,q=seeds[bi],best=p[0]*q[0]+p[1]*q[1]+p[2]*q[2];for(;;){let mv=-1;const nb=NBR[bi];for(let j=0;j<nb.length;j++){const w=seeds[nb[j]],dd=p[0]*w[0]+p[1]*w[1]+p[2]*w[2];if(dd>best){best=dd;mv=nb[j]}}if(mv<0)break;bi=mv}hint=bi;
+    ids[k]=bi;
+    let col;const ct=country[bi];
+    if(ct<0){col=PAL.sea.slice()}
+    else{
+      if(answer){
+        if(ct===selCountry)col=PAL.dark?[90,104,110]:[70,84,90];
+        else{const t=Math.min(1,share[selCountry][ct]/.4);col=[228+(47-228)*t,221+(111-221)*t,204+(134-204)*t]}
+      }else col=tint(ct);
+      const amp=.03+.16*s,h=noise(p)*amp;
+      const ochre=[214,200,168];
+      for(let c=0;c<3;c++)col[c]=(col[c]*(1-.25*s)+ochre[c]*.25*s)*(1+h);
+    }
+    const limb=.86+.14*vz;
+    let night=1;if(T.term){const il=dot(p,S);night=.6+.4*Math.max(0,Math.min(1,(il+.06)/.12))}
+    d[o4]=col[0]*limb*night;d[o4+1]=col[1]*limb*night;d[o4+2]=col[2]*limb*night;d[o4+3]=255;
+  }
+  // borders from the id buffer
+  sx.clearRect(0,0,W,H);const sd=sx.createImageData(W,H),sdd=sd.data;
+  const provA=Math.max(0,(s-.25)/.5);
+  for(let y=0;y<H-1;y++)for(let x=0;x<W-1;x++){
+    const k=y*W+x,a=ids[k];if(a<0)continue;const b=ids[k+1],c=ids[k+W];
+    const edge=(n)=>n>=0&&n!==a;
+    if(!(edge(b)||edge(c)))continue;
+    const nb=edge(b)?b:c,o4=k*4;
+    if(country[a]!==country[nb]){const w=country[a]<0||country[nb]<0?.55:.75;for(let q=0;q<3;q++)d[o4+q]=d[o4+q]*(1-w)+PAL.ink[q]*w}
+    else if(provA>0){for(let q=0;q<3;q++)d[o4+q]=d[o4+q]*(1-.28*provA)+PAL.ink[q]*.28*provA}
+    if(sel>=0&&(a===sel)!==(nb===sel)){sdd[o4]=255;sdd[o4+1]=255;sdd[o4+2]=255;sdd[o4+3]=255}
+  }
+  gx.putImageData(img,0,0);sx.putImageData(sd,0,0);sx.globalCompositeOperation='source-in';sx.fillStyle=css('--proof');sx.fillRect(0,0,W,H);sx.globalCompositeOperation='source-over';
+  if(T.names&&s<.6)drawNames(B,1-s/.6);
+  dirty=false;
+}
+
+function drawNames(B,alpha){
+  gx.save();gx.globalAlpha=alpha;gx.textAlign='center';gx.textBaseline='middle';
+  const r=rad();
+  ctry.forEach(cn=>{
+    const P=project(cn.c,B);if(!P||P[2]<.3)return;
+    const len=Math.max(40,Math.min(200,cn.ext*r*.95*P[2]));
+    const size=Math.max(10,Math.min(19,len/cn.name.length*1.05));const fit=Math.min(len,cn.name.length*size*1.5);
+    arcText(cn.name.toUpperCase(),P[0],P[1],-cn.ang,fit,size,`600 ${size}px "IBM Plex Sans Condensed", Arial Narrow, sans-serif`,PAL.ink,.18);
+  });
+  const sp=project(seeds[seaI],B);
+  if(sp&&sp[2]>.3)arcText('Sea of Ilen',sp[0],sp[1],0,110,14,`italic 400 14px "Source Serif 4", Georgia, serif`,css('--water-ink'),-.25);
+  gx.restore();
+}
+function arcText(txt,x,y,ang,len,size,font,color,bend){
+  gx.font=font;
+  const n=txt.length,step=len/Math.max(1,n-1);
+  const halo=css('--paper');
+  for(let pass=0;pass<2;pass++)for(let i=0;i<n;i++){
+    const u=(i-(n-1)/2)*step,t=u/(len/2||1);
+    const off=bend*len*.5*(t*t-.33);
+    const px=x+Math.cos(ang)*u-Math.sin(ang)*off,py=y-Math.sin(ang)*u-Math.cos(ang)*off;
+    const slope=Math.atan(bend*2*t);
+    gx.save();gx.translate(px,py);gx.rotate(-ang+slope);
+    if(pass===0){gx.lineWidth=3;gx.strokeStyle=halo;gx.globalAlpha*=.8;gx.strokeText(txt[i],0,0)}
+    else{gx.fillStyle=color;gx.fillText(txt[i],0,0)}
+    gx.restore();
+  }
+}
+
+// overlay: glow, glyphs, pins
+function overlay(now){
+  ox.clearRect(0,0,W,H);
+  const B=basis(),s=semantic();
+  if(T.glyphs&&s>.45){
+    ox.save();ox.globalAlpha=Math.min(1,(s-.45)/.3);ox.strokeStyle=css('--ink');ox.fillStyle=css('--ink');ox.lineWidth=1.3;
+    seeds.forEach((v,i)=>{if(land[i]<0)return;const P=project(v,B);if(!P||P[2]<.25)return;glyph(prov[i].sector,P[0],P[1],5+prov[i].decile*.55)});
+    ox.restore();
+  }
+  if(st.sel>=0&&T.glow){
+    const a=REDUCED?.8:.45+.4*(.5+.5*Math.sin((now-st.t0)/2000*Math.PI*2));
+    ox.save();ox.globalAlpha=a;ox.shadowColor=css('--proof');ox.shadowBlur=8;ox.drawImage(selC,0,0);ox.restore();
+  }
+  if(T.pins){
+    st.events.forEach(ev=>{
+      const ageM=st.month-ev.month;if(ageM>12)return;
+      const P=project(seeds[ev.pid],B);if(!P||P[2]<.15)return;
+      const since=(now-ev.at)/1000,rise=REDUCED?1:Math.min(1,since/.45);
+      const hgt=(10+ev.mag*14)*rise,fade=1-ageM/13;
+      ox.save();ox.globalAlpha=fade;
+      const col=ev.mag>.75?css('--proof'):css('--ink');
+      ox.strokeStyle=col;ox.fillStyle=col;ox.lineWidth=1.5;
+      ox.beginPath();ox.moveTo(P[0],P[1]);ox.lineTo(P[0],P[1]-hgt);ox.stroke();
+      ox.beginPath();ox.arc(P[0],P[1]-hgt,2.5+ev.mag*2.5,0,7);ox.fill();
+      ox.beginPath();ox.ellipse(P[0],P[1],3,1.4,0,0,7);ox.fill();
+      if(!REDUCED&&since<1.6){ox.globalAlpha=fade*(1-since/1.6);ox.beginPath();ox.arc(P[0],P[1],4+since*22,0,7);ox.stroke()}
+      ox.restore();
+    });
+  }
+}
+function glyph(kind,x,y,sz){
+  ox.beginPath();
+  if(kind==='grain'){for(let k=-1;k<=1;k++){ox.moveTo(x+k*sz*.35,y+sz*.5);ox.lineTo(x+k*sz*.35,y-sz*.4)}ox.stroke()}
+  else if(kind==='oil'){ox.moveTo(x-sz*.4,y+sz*.5);ox.lineTo(x,y-sz*.5);ox.lineTo(x+sz*.4,y+sz*.5);ox.moveTo(x-sz*.2,y);ox.lineTo(x+sz*.2,y);ox.stroke()}
+  else if(kind==='metal'){ox.moveTo(x,y-sz*.5);ox.lineTo(x+sz*.45,y);ox.lineTo(x,y+sz*.5);ox.lineTo(x-sz*.45,y);ox.closePath();ox.stroke()}
+  else if(kind==='works'){ox.moveTo(x-sz*.5,y+sz*.4);ox.lineTo(x-sz*.5,y-sz*.1);ox.lineTo(x-sz*.15,y-sz*.4);ox.lineTo(x-sz*.15,y-sz*.1);ox.lineTo(x+sz*.2,y-sz*.4);ox.lineTo(x+sz*.2,y-sz*.1);ox.lineTo(x+sz*.5,y-sz*.4);ox.lineTo(x+sz*.5,y+sz*.4);ox.closePath();ox.stroke()}
+  else{ox.arc(x,y-sz*.35,sz*.15,0,7);ox.moveTo(x,y-sz*.2);ox.lineTo(x,y+sz*.45);ox.moveTo(x-sz*.4,y+sz*.15);ox.quadraticCurveTo(x,y+sz*.75,x+sz*.4,y+sz*.15);ox.stroke()}
+}
+
+// time
+const TYPES=[['Price spike','wheat'],['Rationing binds','steel'],['Bank run','deposits'],['Port closure','Port'],['Fuel shortage','diesel'],['Credit squeeze','loans']];
+const dateEl=document.getElementById('date');
+function ym(m){return`${2000+Math.floor(m/12)}-${String(m%12+1).padStart(2,'0')}`}
+function showDate(){dateEl.innerHTML=ym(st.month)+'-01'+(!st.playing&&T.pause&&st.month>0?' <span class="p">· Paused</span>':'')}
+function advance(){
+  st.month++;
+  const k=Math.floor(R()*4);
+  for(let i=0;i<k;i++){
+    const ty=Math.floor(R()*TYPES.length);
+    let pid=landIdx[Math.floor(R()*landIdx.length)];
+    if(R()<.6){const prev=st.events.filter(e=>e.month===st.month&&e.type===ty);if(prev.length){const c=country[prev[0].pid];const cand=landIdx.filter(j=>country[j]===c);pid=cand[Math.floor(R()*cand.length)]}}
+    st.events.push({pid,type:ty,mag:R()**1.6,month:st.month,at:performance.now()});
+  }
+  st.events=st.events.filter(e=>st.month-e.month<=13);
+  showDate();drawTray();if(T.term)dirty=true;
+}
+const tray=document.getElementById('tray'),trayEmpty=document.getElementById('trayEmpty');
+function drawTray(){
+  const groups=new Map();
+  st.events.filter(e=>st.month-e.month<3).forEach(e=>{const key=e.month+':'+e.type;if(!groups.has(key))groups.set(key,[]);groups.get(key).push(e)});
+  const rows=[...groups.values()].sort((a,b)=>b[0].month-a[0].month||Math.max(...b.map(e=>e.mag))-Math.max(...a.map(e=>e.mag)));
+  tray.innerHTML='';trayEmpty.hidden=rows.length>0;
+  rows.slice(0,12).forEach(evs=>{
+    const top=evs.reduce((a,b)=>b.mag>a.mag?b:a),ty=TYPES[top.type];
+    const places=[...new Set(evs.map(e=>NAMES[country[e.pid]]))];
+    const li=document.createElement('li');if(top.mag>.75)li.className='big';
+    li.innerHTML=`<span class="bar"></span><span class="t">${ty[0]}: ${ty[1]}${evs.length>1?`<span class="cnt">x${evs.length}</span>`:''}<small>${ym(top.month)} · ${places.join(', ')} · size ${(top.mag*10).toFixed(1)}</small></span>`;
+    const b=document.createElement('button');b.textContent='Go to';b.onclick=()=>{flyTo(top.pid);select(top.pid)};li.appendChild(b);
+    if(evs.length>1){const sub=document.createElement('div');sub.className='sub';sub.textContent=evs.map(e=>'prov '+e.pid).join(' · ');li.appendChild(sub)}
+    tray.appendChild(li);
+  });
+}
+let timer=null;
+const playB=document.getElementById('play'),stage=document.getElementById('stage');
+function applyPause(){stage.classList.toggle('paused',T.pause&&!st.playing&&st.month>0);showDate()}
+function setPlay(p){st.playing=p;playB.setAttribute('aria-pressed',p);playB.textContent=p?'Pause':'Run';clearInterval(timer);if(p)timer=setInterval(advance,1100);applyPause()}
+playB.onclick=()=>setPlay(!st.playing);
+document.getElementById('step').onclick=()=>{advance();applyPause()};
+stage.addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();setPlay(!st.playing)}});
+
+// interaction
+const zoomI=document.getElementById('zoom');zoomI.oninput=()=>{cam.z=+zoomI.value;dirty=true};
+let drag=null;
+g.addEventListener('pointerdown',e=>{g.setPointerCapture(e.pointerId);drag={x:e.clientX,y:e.clientY,lat:cam.lat,lon:cam.lon,moved:false};g.style.cursor='grabbing'});
+g.addEventListener('pointermove',e=>{if(!drag)return;const sc=W/g.getBoundingClientRect().width,dx=(e.clientX-drag.x)*sc,dy=(e.clientY-drag.y)*sc;if(Math.abs(dx)+Math.abs(dy)>3)drag.moved=true;cam.lon=drag.lon-dx/rad();cam.lat=Math.max(-1.3,Math.min(1.3,drag.lat+dy/rad()));dirty=true});
+g.addEventListener('pointerup',e=>{g.style.cursor='grab';if(drag&&!drag.moved){const b=g.getBoundingClientRect(),x=Math.floor((e.clientX-b.left)*W/b.width),y=Math.floor((e.clientY-b.top)*H/b.height),id=ids[y*W+x];select(id>=0&&land[id]>=0?id:-1)}drag=null});
+const insp=document.getElementById('inspect');
+function select(id){
+  st.sel=id;st.t0=performance.now();dirty=true;
+  if(id<0){insp.innerHTML='Click a province. With <b>Selection answers</b> on, the map turns into that country\'s trade view.';return}
+  const c=country[id],tops=share[c].map((v,k)=>[v,k]).filter(([,k])=>k!==c).sort((a,b)=>b[0]-a[0]).slice(0,3);
+  insp.innerHTML=`<b>Province ${id}, ${NAMES[c]}</b> · main sector ${prov[id].sector} · output decile ${prov[id].decile}${prov[id].coast?' · coastal':''}<br>Largest import shares: ${tops.map(([v,k])=>`${NAMES[k]} ${(v*100).toFixed(0)}%`).join(', ')}`;
+}
+let fly=null;
+function flyTo(pid){const[lat,lon]=toLL(seeds[pid]);let dl=lon-cam.lon;dl=Math.atan2(Math.sin(dl),Math.cos(dl));fly={a:{lat:cam.lat,lon:cam.lon},b:{lat,lon:cam.lon+dl},t:performance.now(),dur:REDUCED?0:650}}
+
+function frame(now){
+  if(fly){const u=fly.dur?Math.min(1,(now-fly.t)/fly.dur):1,e=u<.5?2*u*u:1-(-2*u+2)**2/2;cam.lat=fly.a.lat+(fly.b.lat-fly.a.lat)*e;cam.lon=fly.a.lon+(fly.b.lon-fly.a.lon)*e;dirty=true;if(u>=1)fly=null}
+  if(dirty)render();
+  overlay(now);
+  requestAnimationFrame(frame);
+}
+showDate();drawTray();
+// start with a selection so the first frame shows ideas 2 and 3
+select(caps[0]);
+requestAnimationFrame(frame);
+})();
+
+// Plate 2: lock ring, breakdown, nested term
+(()=>{
+const TIPS={
+  price:{h:'Wheat price, Escalda, 2003-09',rows:[['Origin cost','138.4'],['<span class="term" data-t="freight">Freight</span>','31.2'],['<span class="term" data-t="tariff">Tariff</span>','15.0'],['Trader margin','27.4']],sum:['Price','212.0'],foot:'Each line opens the explainer for that quantity.'},
+  imports:{h:'Wheat imports, Escalda, 2003-09',rows:[['From Tervane','1,020'],['From Lusk','560'],['From others','260']],sum:['Imports, kt','1,840'],foot:'Shares follow <span class="term" data-t="armington">Armington</span> demand.'},
+  stocks:{h:'Wheat stocks, Escalda, 2003-09',rows:[['Opening stock','1,310'],['Plus harvest and imports','2,020'],['Less use','-2,090'],['Less exports','-120']],sum:['Closing, kt','1,120'],foot:'5.2 weeks at this month\'s use. Sources minus uses: 0.'}
+};
+const TERMS={freight:'Iceberg freight: a share of the shipment is used up in transit. Set by route choice over the transport graph.',tariff:'Ad valorem tariff at 2000 rates; trade policy stays fixed until 2.0.',armington:'Goods from different origins are imperfect substitutes, so buyers spread purchases across suppliers by price.'};
+let tip=null,sub=null,timer=null,ringEl=null;
+function close(){if(sub){sub.remove();sub=null}if(tip){tip.remove();tip=null}if(ringEl){ringEl.remove();ringEl=null}clearTimeout(timer)}
+function place(el,anchor,dx){const r=anchor.getBoundingClientRect();el.style.left=Math.max(8,Math.min(window.scrollX+r.left+(dx||0),window.scrollX+document.documentElement.clientWidth-el.offsetWidth-8))+'px';el.style.top=(window.scrollY+r.bottom+6)+'px'}
+function open(num){
+  close();const d=TIPS[num.dataset.tip];
+  tip=document.createElement('div');tip.className='tip';
+  tip.innerHTML=`<h4>${d.h}</h4><table>${d.rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}<tr class="sum"><td>${d.sum[0]}</td><td>${d.sum[1]}</td></tr></table><div class="foot">${d.foot}</div>`;
+  document.body.appendChild(tip);tip.style.position='absolute';place(tip,num,-120);
+  ringEl=document.createElementNS('http://www.w3.org/2000/svg','svg');ringEl.setAttribute('class','ring');ringEl.setAttribute('viewBox','0 0 14 14');
+  ringEl.innerHTML='<circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="2"/><circle id="rc" cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="34.6" stroke-dashoffset="34.6" transform="rotate(-90 7 7)"/>';
+  num.appendChild(ringEl);
+  const rc=ringEl.querySelector('#rc'),t0=performance.now();
+  (function anim(){if(!ringEl)return;const u=Math.min(1,(performance.now()-t0)/600);rc.setAttribute('stroke-dashoffset',34.6*(1-u));if(u<1)requestAnimationFrame(anim);else lock()})();
+  function lock(){if(!tip)return;tip.classList.add('locked');if(ringEl){ringEl.remove();ringEl=null}
+    tip.querySelectorAll('.term').forEach(t=>{t.tabIndex=0;const show=()=>{if(sub)sub.remove();sub=document.createElement('div');sub.className='tip locked';sub.style.position='absolute';sub.style.width='230px';sub.innerHTML=`<h4>${t.textContent}</h4>${TERMS[t.dataset.t]}`;document.body.appendChild(sub);place(sub,t,0)};t.addEventListener('mouseenter',show);t.addEventListener('focus',show)});
+  }
+}
+let over=0;
+function track(){clearTimeout(timer);timer=setTimeout(()=>{if(!over)close()},250)}
+document.querySelectorAll('.num').forEach(n=>{
+  n.addEventListener('mouseenter',()=>{over++;open(n)});n.addEventListener('mouseleave',()=>{over=Math.max(0,over-1);track()});
+  n.addEventListener('focus',()=>open(n));
+});
+document.addEventListener('mouseover',e=>{if(!tip)return;const inside=(tip&&tip.contains(e.target))||(sub&&sub.contains(e.target))||e.target.closest?.('.num');over=inside?1:0;if(!inside)track();else clearTimeout(timer)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(sub){sub.remove();sub=null}else close()}});
+})();
+
+// Register
+(()=>{
+const D=[
+['g','The map'],
+[1,'Semantic zoom','EU4, CK3 and Imperator turn the 3D terrain into a flat political map as you zoom out; Victoria 3 fades terrain under map colours.','Far: flat pale tints and country names. Middle: tints over hillshade, province borders. Near: strong relief, county borders, sector glyphs. One crossfade by camera radius, plus a tint-strength slider.','1.0','S-M',1,'Easy. Uniforms in map.wgsl; the terrain mode already has relief.'],
+[2,'Selection answers','Selecting a country in EU4 tints the map by its relations: allies, rivals, subjects.','Select a country and every other one tints by its import or export share with it, or by exposure. Esc returns to the active mode. Plate 1.','1.0','S',1,'Easy. A recolour is 0.06 ms on the Mac bench.'],
+[3,'Breathing edge','CK3 and Stellaris give the selected realm or system a glowing animated outline.','The selected province or country edge glows and breathes on a two-second cycle in proof magenta. Still under reduced motion. Plate 1.','1.0','S',1,'Easy. The id-buffer border pass gets a selected-id uniform and time.'],
+[4,'Curved names','EU4 and CK3 stretch country names across the territory along a curve, sized to fit; seas get italic names.','Country names fitted along the territory spine, size from extent; seas, ranges and deserts in italic atlas lettering. Instrument idea 9 sizes town labels by population; this is the placement. Plate 1.','1.0','M',0,'Hard. Slint labels cannot follow a path; needs a glyph atlas in wgpu, which revisits the label half of ADR 0244.'],
+[5,'Sector glyphs','Victoria 3 shows each state\'s buildings as models on the map; Imperator\'s cities grow with population.','Flat pictograms (sheaf, derrick, ore, works, anchor) at each province\'s top sectors by value added, sized by output decile, near zoom only. Plate 1.','1.0','S-M',0,'Easy. Instanced quads from an icon atlas.'],
+[6,'Sun terminator','HOI4 runs a day-night cycle over the map.','The terminator for the presented date (ADR 0232), so the globe shows the season by its tilt. Night side dims lightly; no city lights in 1.0 (0141 moved them). Plate 1.','1.0','S',0,'Easy. One uniform. ADR 0209 already plans it for hourly war.'],
+[7,'Event pins','EU4 and HOI4 flash the province where an event happens and every message has a go-to.','Detector events (ADR 0049) raise a pin at the province, height by size, fading over twelve months. Every notice flies the globe there. Plate 1.','1.0','S',1,'Easy. Sprites and a camera tween.'],
+[8,'Visible pause','EU4 and HOI4 flash PAUSED on the date; CK3 frames the screen.','Paused: the map desaturates, a thin frame appears and the date chip says Paused. No flashing. Plate 1, press Space.','1.0','S',1,'Easy. A shader factor and one Slint state.'],
+[26,'Scars that fade','CK3 and EU4 darken devastated land and let it recover slowly.','A worn texture where capital stock was destroyed, fading as it is rebuilt. In 1.0 only if the endogenous hazards of ADR 0242 destroy capital; war reuses it.','1.0','S',0,'Easy. A per-province scalar and a texture in the shader.'],
+['g','Notices and pacing'],
+[10,'Notice settings','EU4, HOI4 and Stellaris let you set each message type to pause, pop up, log or ignore.','One table of detector event types with those four columns and a "near my focus" filter, written as the 0188 pause-on rules.','1.0','S',0,'Easy. A Slint table over the 0188 rule store.'],
+[11,'Coalesced notices','Victoria 3 and Stellaris stack repeated notices with a count.','Same event type in the same month collapses to one line with a count, expands to the list, sorts by size. Plate 1.','1.0','S',1,'Easy.'],
+[12,'Notice card with evidence','EU4, CK3 and Stellaris head every event window with an illustration; HOI4 uses press photos.','In 1.0 the header is the evidence: a locator crop of the globe and the series that crossed its threshold. No art and no options.','1.0','S-M',0,'Moderate. Render a map crop to a texture for Slint.'],
+[13,'Loading facts','Paradox loading screens show tips and quotes.','While the pack loads, one true sentence computed from the 1 January 2000 data, with its source. Never about anything after 2000.','1.0','S',0,'Easy.'],
+[14,'Start-screen globe','EU4\'s main menu pans across the map; Victoria 3 shows a painting.','The start screen shows the last saved run\'s globe at its last date, turning slowly, with its run seal (instrument idea 1).','1.0','S',0,'Easy.'],
+['g','Tooltips and numbers'],
+[15,'Lock ring','CK3 and Victoria 3 tooltips lock into small windows with nested tooltips; a filling indicator shows the lock coming.','A ring fills under the cursor for 0.6 s, then the tooltip locks and its terms open nested tooltips. Esc unwinds innermost first. Plate 2.','1.0','S',0,'Moderate. Nested Slint popups; ADR 0088 already lists nested tooltips.'],
+[16,'Breakdown tooltips','EU4 and Victoria 3 list every modifier behind a number.','Every displayed number\'s tooltip is its accounting: price as cost, freight, tariff and margin; stocks as sources and uses. Each line opens the explainer (ADR 0118). Plate 2.','1.0','M',0,'Moderate. The engine must serve a decomposition per quantity.'],
+[17,'Direction colour','Paradox colours numbers green or red by whether they help the player.','Changes are coloured by direction only, in a blue and umber pair. Judgement colours come with seats in 2.0+. Plate 2.','1.0','S',1,'Easy. A token rule in ADR 0137.'],
+['g','Sound'],
+[19,'Zoom ambience','CK3, EU4 and Imperator mix surf, wind and town sounds by what is on screen at close zoom.','Terrain beds (sea, wind, rain under living-map weather) at near zoom, fading out as you zoom. Never keyed to economic values, so not sonification. Follows the UI sound setting.','2.0+','M',0,'Hard. No audio crate yet (kira would be the pick).'],
+[20,'Rare-moment sting','Stellaris marks the end-game crisis and EU4 a new age with a sting and a tint.','A quiet sting and edge vignette for detector events above a world-level size, such as a synchronised recession.','2.0+','S',0,'Moderate. Needs the audio crate.'],
+[21,'Advisor voice','Stellaris speaks notices through a voiced advisor.','A narrator reading notices, after 0078 narration lands.','2.0+','L',0,'Hard.'],
+['g','War, after 1.0'],
+[22,'Counters with bars','HOI4 division counters carry a type symbol and strength and organisation bars; EU4 stacks show a number.','Atlas-style counters with strength and readiness bars and a stack count, merging into a front line at far zoom.','2.0+','M',0,'Easy to moderate. Instanced sprites with Slint overlays.'],
+[23,'Fronts and drawn plans','HOI4 draws front lines and plan arrows that advance as the offensive goes.','Front lines from control shares (ADR 0245), plan arrows drawn on the globe that fill as the operation progresses.','2.0+','M-L',0,'Moderate. Great-circle line meshes on the sphere.'],
+[24,'Battle marks','HOI4 and EU4 show a battle icon with a live bar of who is winning; sieges show progress on the fort.','A small mark per engagement with a two-sided bar, a progress ring on besieged cities.','2.0+','S-M',0,'Easy.'],
+[25,'Occupation hatch','EU4 and HOI4 stripe occupied land in the occupier\'s colour.','Diagonal hatch in the controller\'s tint over the owner\'s, density by control share (ADR 0245).','2.0+','S',0,'Easy. Screen-space hatch from the id buffer.'],
+[27,'Path with arrival date','EU4 and HOI4 draw an army\'s path with its arrival date.','Movement arrows on the globe ending in the arrival day (daily calendar, ADR 0232).','2.0+','S',0,'Easy.'],
+[28,'Territory washes in','HOI4 territory shifts visibly as the front moves.','When a province changes controller, the new tint washes in from the shared border over half a second.','2.0+','S',0,'Easy. Next-colour mix from step 6 with a distance field.'],
+['g','Game layer'],
+[9,'Headline moments','HOI4 shows full-screen news when a great power falls.','Front-page treatment for the largest detector events. Joins the 0144 front page in 2.0+.','2.0+','S',0,'Easy.'],
+[18,'Seat-coloured numbers','Paradox colours numbers by the player\'s interest.','With a seat, green and red by the seat\'s objectives, East Asian red-up where local standards apply.','2.0+','S',0,'Easy.']
+];
+const tb=document.querySelector('#reg tbody'),f=document.getElementById('filters');
+const FIL=[['all','All 28'],['1.0','1.0'],['2.0+','2.0+'],['cut','Recommended cut'],['S','Effort S'],['M','Effort M or more']];
+let cur='all';
+FIL.forEach(([k,l])=>{const b=document.createElement('button');b.textContent=l;b.setAttribute('aria-pressed',k===cur);b.onclick=()=>{cur=k;[...f.children].forEach(c=>c.setAttribute('aria-pressed',c===b));draw()};f.appendChild(b)});
+function ok(r){if(cur==='all')return true;if(cur==='1.0'||cur==='2.0+')return r[4]===cur;if(cur==='cut')return r[6]===1;if(cur==='S')return r[5]==='S';return r[5]!=='S'}
+function draw(){tb.innerHTML='';let grp=null;
+  D.forEach(r=>{if(r[0]==='g'){grp=r[1];return}if(!ok(r))return;
+    if(grp){tb.insertAdjacentHTML('beforeend',`<tr class="grp"><td colspan="6">${grp}</td></tr>`);grp=null}
+    tb.insertAdjacentHTML('beforeend',`<tr><td class="n">${r[0]}</td><td class="idea"><b>${r[1]}</b></td><td class="src">${r[2]}</td><td class="cet">${r[3]}</td><td><span class="tag ${r[4]==='1.0'?'v1':'v2'}">${r[4]}</span><span class="tag">${r[5]}</span>${r[6]?'<span class="tag cut">cut</span>':''}</td><td class="feas">${r[7]}</td></tr>`)});
+}
+draw();
+})();
+</script>

@@ -1,0 +1,402 @@
+<title>Companies in Ceteris</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Layout: an atlas research plate. Long-form single column with a left margin for provenance; tables for the model, data and scope. Tokens follow ADR 0137 (Modern Atlas). */
+:root {
+  --paper: #EDEFEA;
+  --sheet: #F6F7F3;
+  --ink: #1C292F;
+  --ink-2: #4A5A61;
+  --rule: #C9D0CC;
+  --sea: #BCD1DB;
+  --edit: #AE2459;
+  --fork: #5E45A3;
+  --ok: #2F6B4F;
+  --warn: #8A5A12;
+  --late: #5B6770;
+  --z1: #D7DDD9;
+  --z2: #E9C9B4;
+  --z3: #BCD1DB;
+  --z4: #9DB9C7;
+  --z5: #7FA2B4;
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #161E22; --sheet: #1C262B; --ink: #DCE3E0; --ink-2: #9AA8AE; --rule: #2E3B41;
+    --sea: #2B4350; --edit: #E06A93; --fork: #A390E4; --ok: #79C29C; --warn: #D9A85A; --late: #8E9BA3;
+    --z1: #2A3439; --z2: #5A3F30; --z3: #2B4350; --z4: #36586A; --z5: #436F85;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #161E22; --sheet: #1C262B; --ink: #DCE3E0; --ink-2: #9AA8AE; --rule: #2E3B41;
+  --sea: #2B4350; --edit: #E06A93; --fork: #A390E4; --ok: #79C29C; --warn: #D9A85A; --late: #8E9BA3;
+  --z1: #2A3439; --z2: #5A3F30; --z3: #2B4350; --z4: #36586A; --z5: #436F85;
+  color-scheme: dark;
+}
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 72px; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.1; letter-spacing: -0.01em; }
+h2 { font-size: 25px; line-height: 1.2; }
+h3 { font-size: 18px; line-height: 1.3; }
+p, li { max-width: 72ch; }
+p { margin: 0; }
+ul, ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+a { color: var(--fork); }
+a:focus-visible { outline: 2px solid var(--fork); outline-offset: 2px; }
+code, .mono { font-family: var(--mono); font-size: 0.86em; font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
+header.top { display: grid; gap: 14px; border-bottom: 2px solid var(--ink); padding-bottom: 22px; }
+header.top .lede { font-family: var(--serif); font-size: 18.5px; line-height: 1.5; max-width: 70ch; }
+header.top .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink-2); font-size: 13.5px; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; padding-top: 4px; }
+nav.toc a { text-decoration: none; border-bottom: 1px solid var(--rule); color: var(--ink); }
+nav.toc a:hover { border-color: var(--ink); }
+section { margin-top: 48px; display: grid; gap: 16px; scroll-margin-top: 16px; }
+.rule-label { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; border-bottom: 1px solid var(--rule); padding-bottom: 8px; }
+.rule-label .eyebrow { margin-left: auto; }
+.answer { display: grid; gap: 12px; background: var(--sheet); border: 1px solid var(--rule); border-left: 3px solid var(--ink); padding: 18px 20px; }
+.answer p { font-family: var(--serif); font-size: 17px; }
+.layers { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+.layer { display: grid; grid-template-columns: 64px minmax(0, 1fr) 150px; gap: 4px 20px; padding: 14px 0; border-bottom: 1px solid var(--rule); align-items: start; }
+.layer .n { font-family: var(--mono); font-size: 13px; color: var(--ink-2); padding-top: 2px; }
+.layer .what { display: grid; gap: 4px; min-width: 0; }
+.layer .what b { font-family: var(--serif); font-size: 16.5px; font-weight: 600; }
+.layer .what span { color: var(--ink-2); }
+.layer .when { display: grid; gap: 4px; justify-items: start; }
+.tag { font: 500 11.5px var(--mono); letter-spacing: 0.02em; padding: 2px 7px; border: 1px solid currentColor; white-space: nowrap; }
+.t10 { color: var(--ok); } .t1x { color: var(--fork); } .t20 { color: var(--warn); } .tno { color: var(--late); } .tfix { color: var(--edit); }
+.tablewrap { overflow-x: auto; border-top: 1px solid var(--ink); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--rule); }
+th { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; }
+td:first-child { font-weight: 500; }
+td.num { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.math { font-family: var(--mono); font-size: 13.5px; background: var(--sheet); border: 1px solid var(--rule); padding: 12px 14px; overflow-x: auto; white-space: pre; line-height: 1.6; }
+figure { margin: 0; display: grid; gap: 8px; }
+figure .fig { overflow-x: auto; background: var(--sheet); border: 1px solid var(--rule); padding: 10px; }
+figure svg { display: block; width: 100%; min-width: 560px; height: auto; }
+figcaption { font-size: 13.5px; color: var(--ink-2); max-width: 80ch; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px 28px; }
+.two > div { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.note { font-size: 13.5px; color: var(--ink-2); }
+.ask { display: grid; gap: 10px; border: 1px solid var(--edit); padding: 16px 18px; }
+.ask h3 { color: var(--edit); }
+.refs { columns: 2 320px; column-gap: 32px; font-size: 13.5px; color: var(--ink-2); padding-left: 0; list-style: none; display: block; }
+.refs li { break-inside: avoid; margin-bottom: 6px; }
+@media (max-width: 640px) {
+  .layer { grid-template-columns: 44px minmax(0, 1fr); }
+  .layer .when { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; }
+}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">Ceteris research plate · 28 October 2026 · main e7a754f</div>
+  <h1>How Ceteris should model companies</h1>
+  <p class="lede">Keep companies as a closed-form distribution of firms inside each enterprise cell, and give that distribution real work to do. The first job is to fix the welfare bug the P2 benchmark found. Then add an ownership axis from OECD data, entry and exit with a zombie band, and the state-firm rules already proposed. Named firms such as Toyota or Gazprom come later, first as labels and then as an opt-in.</p>
+  <div class="meta"><span>Read: DESIGN 3.2, 7, 8.3, 9; econ and trade SPECs; ADRs 0026, 0030, 0041, 0104, 0136, 0170-0172, 0189</span></div>
+  <nav class="toc" aria-label="Sections">
+    <a href="#answer">The proposal</a>
+    <a href="#today">What exists</a>
+    <a href="#selection">Selection and ACR</a>
+    <a href="#lit">Literature</a>
+    <a href="#games">Games</a>
+    <a href="#model">The model</a>
+    <a href="#calib">Calibration</a>
+    <a href="#data">Data and licences</a>
+    <a href="#scope">1.0 scope</a>
+    <a href="#adrs">ADRs to write</a>
+  </nav>
+</header>
+
+<section id="answer">
+  <div class="rule-label"><h2>The proposal in one screen</h2><span class="eyebrow">Five layers, cheapest first</span></div>
+  <div class="answer">
+    <p>A company in Ceteris is a slice of a Pareto distribution of firms inside each (province, sector, ownership) cell. The distribution is solved in closed form, so it costs a few numbers per cell and per trade link. Explicit firm agents stay out of the lab default until they beat the closed form out of sample, which is the bar DESIGN 15.7 already sets.</p>
+  </div>
+  <div class="layers">
+    <div class="layer"><div class="n">L1</div><div class="what"><b>Selection on every trade link</b><span>Exporters to a destination are the cell's best firms. One multiplier per link turns this into delivered quantities, buyers pay the Eaton-Kortum price index, and the ACR welfare formula holds. This fixes the P2 benchmark failure.</span></div><div class="when"><span class="tag tfix">fix · P2/P3</span><span class="tag t10">1.0</span></div></div>
+    <div class="layer"><div class="n">L2</div><div class="what"><b>Ownership axis</b><span>Split cells into domestic private, state and foreign-owned, with each foreign cell carrying a parent-country vector. The source is OECD Analytical AMNE, which covers 2000-2019 on the ICIO grid.</span></div><div class="when"><span class="tag t10">1.0 · P5</span></div></div>
+    <div class="layer"><div class="n">L3</div><div class="what"><b>Entry, exit and a zombie band</b><span>Free entry in the firm mass, exogenous death plus cutoff exit, and bank forbearance (0172) read as a lowered exit cutoff. The zombie share becomes an output.</span></div><div class="when"><span class="tag t10">1.0 · with 7.4</span></div></div>
+    <div class="layer"><div class="n">L4</div><div class="what"><b>Behaviour by ownership</b><span>SOE objective and soft budget (0171), input stocks (0170), Kimball markups behind S14 (0030), and leverage for Merton default (9.10).</span></div><div class="when"><span class="tag t10">1.0 · P5</span><span class="tag t1x">0030 by ablation</span></div></div>
+    <div class="layer"><div class="n">L5</div><div class="what"><b>Named firms</b><span>Real firms from 2000 label the top of each cell's tail as a view. Later they become explicit granular agents behind a switch, then political actors through ADR 0189, with executives drawn from the character pools.</span></div><div class="when"><span class="tag t1x">view 1.x</span><span class="tag t1x">granular ext.</span><span class="tag t20">politics 2.0</span></div></div>
+  </div>
+</section>
+
+<section id="today">
+  <div class="rule-label"><h2>What Ceteris already has</h2><span class="eyebrow">Built vs proposed</span></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Item</th><th>Where</th><th>Status</th><th>What it says</th></tr></thead>
+    <tbody>
+      <tr><td>Enterprise cell</td><td>DESIGN 3.2</td><td>design</td><td>Enterprises are aggregated per (province, sector, ownership: domestic private, state, foreign).</td></tr>
+      <tr><td>One enterprise per (province, good)</td><td>econ SPEC</td><td>built (P2)</td><td>The engine has no ownership dimension. Enterprises are price-taking, run putty-clay Leontief on one 2000 vintage, keep input stocks with a cover of 1 (P149), have limited liability, and write off losses beyond 3 months (0112).</td></tr>
+      <tr><td>Firm heterogeneity within cells</td><td>ADR 0026, amended by 0095</td><td>proposed</td><td>A Pareto mass per cell (Melitz-Chaney). Firm counts, size distribution and exporter share are closed form, and fixed export costs multiply gateway links. The tail shape is k = theta(sigma-1)/sigma, and register entries P50-P52 are added. Granular shocks are named as absent.</td></tr>
+      <tr><td>Variable markups</td><td>ADR 0030</td><td>proposed, switch S14</td><td>Kimball demand within cells, one superelasticity per class (P59), kept only if it passes ablation.</td></tr>
+      <tr><td>Investment, entry, exit</td><td>DESIGN 7.4</td><td>design</td><td>A quarterly Tobin-q logit by owners. Exit follows persistent losses with negative equity. Foreign ownership is foreign-owned capital.</td></tr>
+      <tr><td>Profit ownership</td><td>ADR 0104</td><td>accepted direction</td><td>Dividends are paid by wealth decile, plus a fixed foreign-owned share by country and sector. The full ownership network is deferred to P5 and 0041.</td></tr>
+      <tr><td>Profit shifting</td><td>ADR 0041</td><td>proposed, P5</td><td>A wedge that books foreign affiliates' profits in havens.</td></tr>
+      <tr><td>Input stocks, SOEs, zombies</td><td>ADRs 0170, 0171, 0172</td><td>proposed, P5</td><td>The firm-side gaps from the gap audit. Each has a "with it off, hashes unchanged" test.</td></tr>
+      <tr><td>Conglomerates, granular firms</td><td>DESIGN 23.7; brainstorm</td><td>idea</td><td>A few generated business groups per state act as lobbies. The brainstorm lists granular firms as an M-cost extended item.</td></tr>
+      <tr><td>Organizations</td><td>ADR 0189</td><td>proposed, P6</td><td>A lobby or business-association kind spawned from the business-owner pool (0186).</td></tr>
+      <tr><td>Firm seats</td><td>ADR 0130</td><td>proposed</td><td>Firms are listed among the existing seats.</td></tr>
+    </tbody>
+  </table></div>
+  <p>The design already chose the right family (0026). Nothing on the firm side is built, and the ownership dimension promised in 3.2 is missing from the engine.</p>
+</section>
+
+<section id="selection">
+  <div class="rule-label"><h2>Selection is the missing piece behind the ACR failure</h2><span class="eyebrow">L1 · the benchmark gap</span></div>
+  <p>The P2 benchmark found that buyers pay <code>q_d = 1/alpha_d</code>, with <code>alpha_d = sum_o pi_od / c_od</code>. That is a spending-weighted harmonic mean of delivered costs. When a border cost rises, spending moves away from the dearer source, and this mean can fall. That is why Japan gains from costlier borders, the EU gains from Brexit, and the ACR formula fails.</p>
+  <p>What is missing is selection. In Eaton-Kortum, a country buys from a far source only the goods that source is unusually good at, so the average price paid per source is the same for every source and equals the price index <code>P_d</code>. In Melitz-Chaney the same thing happens through firms: only a cell's most productive firms clear the fixed and variable cost of serving a distant market. The engine spreads spending with EK shares but then charges buyers each source's average cost, as if the goods shipped were average goods.</p>
+<div class="math">EK:   pi_od = K_od c_od^-theta / Phi_d        P_d = Gamma * Phi_d^(-1/theta)
+      selection multiplier on link od:   s_od = c_od / P_d  =  Gamma^-1 (K_od / pi_od)^(1/theta)
+      alpha_d' = sum_o pi_od s_od / c_od = 1 / P_d          so   q_d = P_d   exactly
+
+Melitz-Chaney (Pareto shape k, CES sigma, fixed cost f_od):
+      share of cell o's firms serving d     n_od = (phi_min / phi*_od)^k
+      mean efficiency of those firms         phi~_od = (k / (k - sigma + 1))^(1/(sigma-1)) * phi*_od
+      s_od  proportional to  n_od^(-1/k)     (same form as EK, extensive margin in place of pi)</div>
+  <p>The proposal: every kernel leg carries <code>s_od</code>, computed from shares the kernel already has, at one <code>powf</code> per active leg. Units leave the origin in base units and arrive as <code>s_od</code> times as many delivered units. The gain is booked as origin productivity: the firms serving <code>d</code> need <code>1/s_od</code> of the cell's average inputs per unit. The goods invariant of 4.6 then holds in delivered units, with selection as one explicit term beside iceberg melt. This also resolves the trade SPEC's objection to <code>P_d</code>, that "a unit bought at P_d delivers fewer than one unit": with <code>s_od</code> applied, it delivers exactly one.</p>
+  <figure>
+    <div class="fig">
+    <svg viewBox="0 0 640 262" role="img" aria-labelledby="figt figd">
+      <title id="figt">Firm productivity distribution in one cell, with cutoffs</title>
+      <desc id="figd">Pareto density over log productivity. Below the forbearance cutoff firms exit. Between the forbearance and market cutoffs are zombies. Then domestic-only firms, firms that also export to near markets, and firms that export to far markets.</desc>
+      <path d="M40.0,200 L40.0,20.0 L41.8,22.1 L43.5,24.3 L45.3,26.4 L47.0,28.4 L48.8,30.5 L50.5,32.5 L52.3,34.5 L54.0,36.5 L55.8,38.4 L57.5,40.4 L59.3,42.3 L61.0,44.1 L62.8,46.0 L64.5,47.8 L66.3,49.7 L68.0,51.5 L69.8,53.2 L71.5,55.0 L73.3,56.7 L75.0,58.4 L76.8,60.1 L78.5,61.8 L80.3,63.4 L82.0,65.1 L83.8,66.7 L85.5,68.3 L87.3,69.8 L89.0,71.4 L90.8,72.9 L92.5,74.4 L94.3,75.9 L96.0,77.4 L97.8,78.9 L99.5,80.3 L101.3,81.7 L103.0,83.2 L104.8,84.6 L106.5,85.9 L108.3,87.3 L110.0,88.6 L110.0,200 Z" fill="var(--z1)"/>
+      <path d="M110.0,200 L110.0,88.6 L112.0,90.1 L114.0,91.6 L116.0,93.1 L118.0,94.5 L120.0,96.0 L121.9,97.4 L123.9,98.7 L125.9,100.1 L127.9,101.5 L129.9,102.8 L131.9,104.1 L133.8,105.4 L135.8,106.7 L137.8,107.9 L139.8,109.2 L141.8,110.4 L143.8,111.6 L145.7,112.8 L147.7,114.0 L149.7,115.1 L149.7,200 Z" fill="var(--z2)"/>
+      <path d="M149.7,200 L149.7,115.1 L155.4,118.4 L161.0,121.5 L166.7,124.5 L172.4,127.4 L178.0,130.1 L183.7,132.8 L189.4,135.3 L195.0,137.8 L200.7,140.2 L206.4,142.5 L212.0,144.6 L217.7,146.8 L223.4,148.8 L229.0,150.7 L234.7,152.6 L240.4,154.4 L246.0,156.2 L251.7,157.8 L257.4,159.4 L263.0,161.0 L263.0,200 Z" fill="var(--z3)"/>
+      <path d="M263.0,200 L263.0,161.0 L269.4,162.7 L275.8,164.3 L282.2,165.8 L288.6,167.3 L295.0,168.7 L301.4,170.0 L307.8,171.3 L314.2,172.5 L320.6,173.7 L327.0,174.8 L333.4,175.9 L339.8,177.0 L346.3,177.9 L352.7,178.9 L359.1,179.8 L365.5,180.7 L371.9,181.5 L378.3,182.3 L384.7,183.0 L391.1,183.8 L391.1,200 Z" fill="var(--z4)"/>
+      <path d="M391.1,200 L391.1,183.8 L402.5,185.0 L414.0,186.1 L425.4,187.2 L436.9,188.1 L448.3,189.0 L459.7,189.9 L471.2,190.6 L482.6,191.3 L494.1,192.0 L505.5,192.6 L517.0,193.2 L528.4,193.7 L539.9,194.2 L551.3,194.6 L562.8,195.0 L574.2,195.4 L585.7,195.7 L597.1,196.0 L608.6,196.3 L620.0,196.6 L620.0,200 Z" fill="var(--z5)"/>
+      <path d="M40.0,20.0 L54.5,37.0 L69.0,52.5 L83.5,66.4 L98.0,79.1 L112.5,90.5 L127.0,100.9 L141.5,110.2 L156.0,118.7 L170.5,126.4 L185.0,133.4 L199.5,139.7 L214.0,145.4 L228.5,150.6 L243.0,155.2 L257.5,159.5 L272.0,163.3 L286.5,166.8 L301.0,169.9 L315.5,172.8 L330.0,175.3 L344.5,177.7 L359.0,179.8 L373.5,181.7 L388.0,183.4 L402.5,185.0 L417.0,186.4 L431.5,187.7 L446.0,188.9 L460.5,189.9 L475.0,190.9 L489.5,191.7 L504.0,192.5 L518.5,193.2 L533.0,193.9 L547.5,194.4 L562.0,195.0 L576.5,195.4 L591.0,195.9 L605.5,196.3 L620.0,196.6" fill="none" stroke="var(--ink)" stroke-width="1.6"/>
+      <line x1="40" y1="200" x2="620" y2="200" stroke="var(--ink)" stroke-width="1"/>
+      <g stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 3">
+        <line x1="110" y1="30" x2="110" y2="200"/>
+        <line x1="149.7" y1="30" x2="149.7" y2="200"/>
+        <line x1="263" y1="30" x2="263" y2="200"/>
+        <line x1="391.1" y1="30" x2="391.1" y2="200"/>
+      </g>
+      <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="var(--ink)">
+        <text x="112" y="26">phi_z</text>
+        <text x="152" y="40">phi*_dom</text>
+        <text x="266" y="26">phi*_near</text>
+        <text x="394" y="26">phi*_far</text>
+      </g>
+      <g font-family="IBM Plex Sans Condensed, Arial Narrow, sans-serif" font-size="12" fill="var(--ink-2)">
+        <text x="75" y="222" text-anchor="middle">exit</text>
+        <text x="130" y="222" text-anchor="middle">zombies</text>
+        <text x="206" y="222" text-anchor="middle">domestic only</text>
+        <text x="327" y="222" text-anchor="middle">+ near exports</text>
+        <text x="505" y="222" text-anchor="middle">+ far exports</text>
+        <text x="330" y="250" text-anchor="middle">log firm productivity (Pareto, shape k)</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>One cell's firms. Each cutoff is closed form. A rise in border cost to far markets moves <code>phi*_far</code> right, which leaves fewer and better far exporters, so the delivered cost rises by less than tau. Forbearance (0172) moves the exit cutoff left from <code>phi*_dom</code> to <code>phi_z</code>, and the band between them is the zombie share.</figcaption>
+  </figure>
+  <p class="note">Tests for the ADR: a two-country toy reproduces ACR's <code>W' = lambda_dd'^(-1/epsilon)</code> to machine precision; rerunning the benchmark removes the gains from costlier borders for Japan and from Brexit for the EU; with fixed costs and selection off, hashes equal today's. One open point for the econ owner: under the 0089 calibration, <code>Gamma</code> and the base-unit normalization should be set so that <code>s_dd = 1</code> at the 2000 data state. Then the calibrated steady state is unchanged, and only counterfactuals move.</p>
+</section>
+
+<section id="lit">
+  <div class="rule-label"><h2>Literature, and what each strand gives Ceteris</h2><span class="eyebrow">Adopt, defer, or reject</span></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Strand</th><th>Key work</th><th>Use in Ceteris</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td>Heterogeneous firms and trade</td><td>Melitz 2003; Chaney 2008; Eaton-Kortum 2002; Eaton-Kortum-Kramarz 2011; Arkolakis-Costinot-Rodriguez-Clare 2012</td><td>EKK show that French exporters' entry into markets follows a single productivity ranking plus market-specific noise. That supports one Pareto tail per cell with per-link cutoffs. ACR gives the welfare test.</td><td><span class="tag t10">adopt (L1)</span></td></tr>
+      <tr><td>Tariff vs Pareto elasticity</td><td>Costinot-Rodriguez-Clare 2014; Felbermayr-Jung-Larch 2015</td><td>Already in 0095: k = theta(sigma-1)/sigma.</td><td><span class="tag t10">adopted</span></td></tr>
+      <tr><td>Firm size distribution</td><td>Axtell 2001 (Zipf for US firms); di Giovanni-Levchenko-Ranciere 2011</td><td>The sales tail exponent is k/(sigma-1) = theta/sigma. Zipf (about 1.05) therefore pins sigma near theta for each class. This is a cheap identification of P50.</td><td><span class="tag t10">calibration rule</span></td></tr>
+      <tr><td>Firm dynamics</td><td>Hopenhayn 1992; Haltiwanger-Jarmin-Miranda 2013; Pugsley-Sahin 2019; Sedlacek-Sterk 2017</td><td>Free entry, death rates and cutoff exit for L3. Startup cohorts born in a slump stay small. That needs cohort vintages, which are deferred.</td><td><span class="tag t10">entry/exit</span> <span class="tag t1x">cohorts ext.</span></td></tr>
+      <tr><td>Granularity</td><td>Gabaix 2011; di Giovanni-Levchenko-Mejean 2014</td><td>Idiosyncratic shocks to the largest firms move GDP. This needs explicit top firms.</td><td><span class="tag t1x">opt-in (L5)</span></td></tr>
+      <tr><td>Markups and concentration</td><td>De Loecker-Eeckhout-Unger 2020; Autor et al. 2020; Atkeson-Burstein 2008; Edmond-Midrigan-Xu 2023</td><td>Kimball (0030) for pass-through. Atkeson-Burstein oligopoly needs explicit top firms, so it waits for L5.</td><td><span class="tag t1x">0030 by ablation</span></td></tr>
+      <tr><td>Multinationals</td><td>Helpman-Melitz-Yeaple 2004; Ramondo-Rodriguez-Clare 2013; Arkolakis-Ramondo-Rodriguez-Clare-Yeaple 2018; Torslov-Wier-Zucman 2023</td><td>Affiliates come from the top of the tail (a productivity premium). FDI is a substitute for exporting when distance is large. Profit shifting is 0041.</td><td><span class="tag t10">adopt (L2)</span></td></tr>
+      <tr><td>Misallocation and SOEs</td><td>Hsieh-Klenow 2009; Song-Storesletten-Zilibotti 2011; Kornai 1986</td><td>The ownership-specific wedge and soft budget of 0171.</td><td><span class="tag t10">adopt (L4)</span></td></tr>
+      <tr><td>Zombies and forbearance</td><td>Caballero-Hoshi-Kashyap 2008; Banerjee-Hofmann 2018; Acharya et al. 2019</td><td>BIS: zombies rose from about 2% of listed firms in 14 advanced economies in the late 1980s to about 12% in 2016 (broad measure). This is a target for the zombie band.</td><td><span class="tag t10">adopt (L3)</span></td></tr>
+      <tr><td>Production networks</td><td>Acemoglu et al. 2012; Baqaee-Farhi 2019; Bernard-Moxnes-Saito 2019</td><td>Sector-level IO plus putty-clay (0020) already carries this. Firm-to-firm networks need proprietary data (FactSet, national VAT registers).</td><td><span class="tag tno">reject at firm level</span></td></tr>
+      <tr><td>Firm-level macro ABMs</td><td>Poledna et al. 2023; Assenza-Delli Gatti-Grazzini 2015; Axtell 2018; Dosi et al. (K+S)</td><td>Poledna's model simulates every Austrian firm from the business register. That works for one country with register access, but no open source exists for 200 countries in 2000. 15.7 excludes it.</td><td><span class="tag tno">reject as default</span></td></tr>
+      <tr><td>Political economy of firms</td><td>Grossman-Helpman 1994; Hellman-Jones-Kaufmann 2000; Guriev-Rachinsky 2005</td><td>Protection for sale, state capture and oligarchs, through 0189 organizations.</td><td><span class="tag t20">2.0</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="games">
+  <div class="rule-label"><h2>How games handle companies</h2><span class="eyebrow">Legibility lessons</span></div>
+  <div class="two">
+    <div>
+      <h3>Victoria 3</h3>
+      <p>Companies arrived in 1.5 as national boosters. Each one was tied to a set of building types and raised throughput for all of them in the country. A company's Prosperity rose when its earnings per worker beat the global average. It owned no buildings and was not multinational (<a href="https://admin-forum.paradoxplaza.com/forum/developer-diary/victoria-3-dev-diary-92-companies.1595826">DD 92</a>). The 1.9 Charters of Commerce update let companies buy building levels and open Regional HQs abroad. Charters (colonization, trade, industry, investment, monopoly) became the player's verbs, and executives became characters whose interest group gains power when the company does well (<a href="https://admin-forum.paradoxplaza.com/forum/developer-diary/victoria-3-dev-diary-147-everything-companies.1747321">DD 147</a>).</p>
+      <p class="note">Lesson: players read companies as named, ownable, political things. Their mechanics still sit on top of the building economy as modifiers, and Ceteris should avoid that: here a named firm must be a part of the cell, never an extra bonus on top of it.</p>
+    </div>
+    <div>
+      <h3>Victoria 2</h3>
+      <p>Factories are owned by capitalist pops or the state. Profits feed pop savings, and unprofitable factories close. Ownership is a pop stratum, and there are no firms as such.</p>
+      <p class="note">Lesson: the profit-to-owner-to-investment loop of 7.4 and 0104 already covers this.</p>
+      <h3>Capitalism Lab, OpenTTD, Offworld Trading Company</h3>
+      <p>In these games the player is a firm. Capitalism Lab simulates product quality, brand and stock markets. OpenTTD and Offworld let rivals buy you out once you are weak.</p>
+      <p class="note">Lesson: a firm seat (0130) needs an explicit firm with a balance sheet and an owner, which here means L5's granular firms.</p>
+    </div>
+  </div>
+</section>
+
+<section id="model">
+  <div class="rule-label"><h2>The proposed model</h2><span class="eyebrow">State, rules and cost per layer</span></div>
+
+  <h3>L1. Cell distribution and link selection</h3>
+  <ul>
+    <li>State per cell: firm mass <code>M</code>, lower bound <code>phi_min</code> (absorbed into the cell's A), domestic cutoff <code>phi*_dom</code>. State per active cross-border link (gateway level, country pair by good): cutoff <code>phi*_od</code>, kept as <code>s_od</code>.</li>
+    <li>Fixed export costs <code>f_od</code> (P51) by border crossing, as 0026 has it. They are paid in origin labour, which the labour accounts must count.</li>
+    <li>Outputs at no extra cost: firm count, exporter count and share by destination, mean exporter size, and the size distribution. All are in the inspector and on the scorecard.</li>
+    <li>Cost: about 200 x 200 x 45 links at most, mostly empty. That is one pow per active leg per tick, well inside the P2 budget.</li>
+  </ul>
+
+  <h3>L2. Ownership axis</h3>
+  <ul>
+    <li>Cells split into domestic private, state and foreign only where a type has at least 5% of cell VA in 2000 (a register threshold). The foreign cell carries a parent-country share vector (top five parents plus rest of world), so dividends, sanctions freezes and 0041 shifting route by parent.</li>
+    <li>Foreign cells sit higher in the tail, following Helpman-Melitz-Yeaple. Their <code>phi_min</code> premium comes from AAMNE VA per worker by ownership. State cells take the 0171 objective.</li>
+    <li>The foreign-owned share moves through the 7.4 logit. Foreign owners see host provinces with an FDI barrier wedge from the OECD FDI Regulatory Restrictiveness Index. AAMNE 2000-2019 then gives an out-of-sample path for the foreign share, a new 15.4 target.</li>
+    <li>This replaces 0104's fixed foreign share <code>f_c,g</code> with state that evolves. Nationalization and privatization (10.4, 2.0) become moves of mass between ownership cells.</li>
+  </ul>
+
+  <h3>L3. Entry, exit and zombies</h3>
+<div class="math">quarterly, per cell:
+  entry     E = eta_e * M * max(0, V_e / (w f_e) - 1)          V_e: expected PV of a draw from the tail
+  exit      X = delta * M + M * [1 - (phi*_old / phi*_new)^k]+   death plus cutoff exit
+  zombies   phi_z = phi*_dom * (1 - z_b)                        z_b from bank capital gap (0172)
+            zombie share = 1 - (phi_z / phi*_dom)^k , zombies hold inputs and labour, earn below cost</div>
+  <ul>
+    <li>The cell's 7.4 exit rule (persistent losses, negative equity) is the cell-wide limit of this. Exit within the cell is continuous instead.</li>
+    <li>With Pareto and free entry, the steady-state firm mass scales with labour and does not depend on trade costs. That gives the equilibrium-nesting test.</li>
+    <li>Cohort vintages (age bins with their own mass, reusing the putty-clay vintage machinery) are an extended-profile follow-up for the Sedlacek-Sterk "lost cohort" after 2008.</li>
+  </ul>
+
+  <h3>L4. Behaviour by ownership</h3>
+  <ul>
+    <li>0171 for state cells, 0170 for every cell, 0172 as above, and 0030 behind S14. None changes: L2 gives 0171 the cell it was written for.</li>
+    <li>Leverage per cell feeds the Merton default probability of 9.10. Pareto dispersion also gives a cell a share of financially constrained small firms. That stays a scorecard pattern, not a mechanism, until P5 shows it is needed.</li>
+  </ul>
+
+  <h3>L5. Named firms</h3>
+  <ul>
+    <li><b>View (1.x minor).</b> Wikidata (CC0) supplies the real 2000 firms per country and sector: name, headquarters, inception, parent and industry. Rank <code>r</code> in a cell shows the expected <code>r</code>-th order statistic of the cell's tail. Reported 2000 revenues check the tail (the Zipf test) and are never inputs. Named firms change no state, so under 0136 this is a minor. It gives the inspector and the chronicle the names players expect.</li>
+    <li><b>Granular firms (extended opt-in).</b> The top N firms per cell become explicit agents with idiosyncratic shocks, and the closed-form tail is truncated above them, so aggregates stay consistent. Atkeson-Burstein markups and a firm seat need this layer. It enters the lab only if it beats L1-L4 on out-of-sample GDP volatility.</li>
+    <li><b>Political actors (2.0).</b> Business groups and large firms become 0189 organizations of the lobby kind, funded from tail profits. Executives come from the 0186 business-owner pool. Protection for sale and state capture act through the 2.0 policy levers.</li>
+  </ul>
+  <p class="note">Interface agreed with the "Design construction and investment" thread: an investment order's owner is an OwnerId. In 1.0 it is always an enterprise cell, so every project is in one province. Granular firms would emit one order per province. Firm entry changes M and places no capacity order.</p>
+</section>
+
+<section id="calib">
+  <div class="rule-label"><h2>Calibration</h2><span class="eyebrow">Parameter, source, target</span></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Parameter</th><th>Source</th><th>Target or check</th></tr></thead>
+    <tbody>
+      <tr><td>theta, k per class</td><td>Caliendo-Parro classes (2.62, 5.19, 10.57); k = theta(sigma-1)/sigma (0095)</td><td>PPML on simulated flows recovers k (0026 test)</td></tr>
+      <tr><td>sigma per class (P50)</td><td>Zipf rule sigma = theta / 1.05; cross-check with Broda-Weinstein 2006 and Soderbery 2015 elasticities</td><td>Implied markups sigma/(sigma-1) of about 1.6, 1.25 and 1.1 by class, against De Loecker-Eeckhout-Unger levels. The first class sits near k = sigma - 1 and must be checked.</td></tr>
+      <tr><td>Fixed export cost f_od (P51)</td><td>World Bank Exporter Dynamics Database: exporter counts by destination, 70 countries, mostly 2005-2012</td><td>Exporter count by country pair and good class; exporter share of manufacturing firms (US 2002 about 18%, Bernard et al. 2007)</td></tr>
+      <tr><td>Entry cost f_e (P52)</td><td>Firm counts by size class: OECD SDBS, Eurostat SBS, US SUSB. Prior from World Bank Doing Business start-up cost (from 2003)</td><td>Firms per 1,000 workers by country and sector in 2000</td></tr>
+      <tr><td>Exogenous death delta</td><td>US BDS, OECD DynEmp published tables</td><td>Firm death rates of 7-10% a year in the 2000s</td></tr>
+      <tr><td>Entry speed eta_e</td><td>BDS and World Bank Entrepreneurship Database (new registrations, 2006 onward)</td><td>Start-up rate response 2008-2010</td></tr>
+      <tr><td>Ownership shares 2000</td><td>OECD Analytical AMNE, 2000-2019, 76 economies plus the rest of the world, 41 industries, by parent country</td><td>Foreign share of output by host and sector, 2000 (input) and 2019 (holdout)</td></tr>
+      <tr><td>Foreign productivity premium</td><td>AAMNE VA and OECD AMNE employment by ownership</td><td>VA per worker of foreign to domestic cells</td></tr>
+      <tr><td>State shares, SOE weight</td><td>OECD SOE data; IMF Fiscal Monitor April 2020 (published tables)</td><td>0171's productivity gap; China's 2009-2012 investment share</td></tr>
+      <tr><td>Forbearance buffer (0172)</td><td>BIS (Banerjee-Hofmann 2018); Caballero-Hoshi-Kashyap 2008 for Japan</td><td>Zombie share about 12% in 2016 across 14 advanced economies; Japan's rise in the late 1990s</td></tr>
+      <tr><td>FDI barrier wedge</td><td>OECD FDI Regulatory Restrictiveness Index</td><td>Bilateral FDI positions (IMF CDIS, already in the manifest)</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="data">
+  <div class="rule-label"><h2>Firm data and licences</h2><span class="eyebrow">For sources.toml (ADRs 0005, 0050)</span></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Source</th><th>Gives</th><th>Licence</th><th>Use</th></tr></thead>
+    <tbody>
+      <tr><td>OECD Analytical AMNE</td><td>ICIO split by domestic and foreign-owned firms, with parent country, 2000-2019</td><td>CC BY 4.0 (OECD open by default since July 2024)</td><td><span class="tag t10">pack input</span></td></tr>
+      <tr><td>OECD AMNE statistics, SDBS, FDI RRI, SOE data</td><td>Affiliate employment; firms by size class; FDI restrictions; state ownership</td><td>CC BY 4.0</td><td><span class="tag t10">pack input</span></td></tr>
+      <tr><td>Eurostat SBS and FATS</td><td>Enterprise counts, foreign affiliates (EU)</td><td>CC BY 4.0 (Commission reuse decision)</td><td><span class="tag t10">pack input</span></td></tr>
+      <tr><td>US Census BDS, SUSB; BEA MNE</td><td>Birth and death rates, size classes, US multinationals</td><td>US public domain</td><td><span class="tag t10">pack input</span></td></tr>
+      <tr><td>World Bank Exporter Dynamics Database</td><td>Exporters by destination, entry, survival</td><td>No licence stated; citation required</td><td><span class="tag t20">check before bundling</span></td></tr>
+      <tr><td>World Bank Doing Business (historical), Entrepreneurship Database</td><td>Start-up cost; new firm registrations</td><td>CC BY 4.0 for World Bank open data (confirm per dataset)</td><td><span class="tag t10">prior / target</span></td></tr>
+      <tr><td>GLEIF LEI levels 1 and 2</td><td>Legal entities, direct and ultimate accounting parents</td><td>CC0 (<a href="https://www.gleif.org/en/meta/lei-data-terms-of-use">terms</a>)</td><td><span class="tag t1x">ownership graph from 2012</span></td></tr>
+      <tr><td>Wikidata</td><td>Named firms, headquarters, industry, parent, inception</td><td>CC0</td><td><span class="tag t1x">named-firm view</span></td></tr>
+      <tr><td>Missing Profits of Nations</td><td>Shifted profits by country</td><td>Already in 0041's audit</td><td><span class="tag t10">P5</span></td></tr>
+      <tr><td>UNCTAD WIR top 100 MNEs</td><td>Largest multinationals' foreign assets, sales, jobs</td><td>Check</td><td><span class="tag t20">validation only</span></td></tr>
+      <tr><td>World Bank Enterprise Surveys, CompNet</td><td>Firm-level survey and productivity indicators</td><td>Registration; no microdata redistribution</td><td><span class="tag t20">published moments only</span></td></tr>
+      <tr><td>Orbis, Compustat, Worldscope, FactSet</td><td>Firm accounts and ownership worldwide; supply links</td><td>Proprietary, no redistribution</td><td><span class="tag tno">published moments only</span></td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">Under the 28 October decision that each user downloads their own data, a user-side importer for Orbis or Compustat is possible later. The user's own licence would govern it, and it would feed only the extended profile. Nothing in L1-L4 needs it.</p>
+</section>
+
+<section id="scope">
+  <div class="rule-label"><h2>What fits economy-only 1.0</h2><span class="eyebrow">ADR 0136</span></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Item</th><th>Release</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>L1 link selection</td><td><span class="tag tfix">1.0, early</span></td><td>This is a correctness fix. Every welfare number in a trade counterfactual depends on it, and the P2 benchmark is on hold until the next econ phase.</td></tr>
+      <tr><td>Rest of 0026: firm mass, cutoffs, firm counts</td><td><span class="tag t10">1.0</span></td><td>The extensive margin and the firm-size target (V2) come with it.</td></tr>
+      <tr><td>L2 ownership cells</td><td><span class="tag t10">1.0 · P5</span></td><td>This is economy. 0104 and 0041 already assume it, and DESIGN 3.2 promises it.</td></tr>
+      <tr><td>L3 entry, exit, zombie band</td><td><span class="tag t10">1.0 · with 7.4</span></td><td>Needed for the 2008 case (15.5) and the Japan and euro-area paths.</td></tr>
+      <tr><td>L4 0170, 0171, 0172</td><td><span class="tag t10">1.0 · P5</span></td><td>Each is already scheduled for P5 and is switchable.</td></tr>
+      <tr><td>0030 Kimball</td><td><span class="tag t1x">by ablation</span></td><td>It is in the lab only if it improves pass-through skill.</td></tr>
+      <tr><td>Named-firm view</td><td><span class="tag t1x">1.x minor</span></td><td>It changes no state, so it is a view under 0136.</td></tr>
+      <tr><td>Cohort vintages, granular firms, firm seat</td><td><span class="tag t1x">extended opt-in</span></td><td>New mechanisms. They enter the lab default only at a major, after ablation.</td></tr>
+      <tr><td>Firms as lobbies, capture, nationalization as policy</td><td><span class="tag t20">2.0</span></td><td>1.0 holds institutions and policy fixed.</td></tr>
+      <tr><td>Executives with causal traits</td><td><span class="tag t20">4.0 candidate</span></td><td>Follows the character rule in 0136.</td></tr>
+      <tr><td>All firms as agents; firm-to-firm networks</td><td><span class="tag tno">no</span></td><td>No open global data, and 15.7 excludes it.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="adrs">
+  <div class="rule-label"><h2>ADRs this would need</h2><span class="eyebrow">Not written yet</span></div>
+  <div class="ask">
+    <h3>Four proposed ADRs, waiting for your go</h3>
+    <ol>
+      <li><b>Selection multiplier on trade links.</b> Buyers pay the EK index, and <code>s_od</code> is booked at the origin. This amends 0015, 0026 and the trade SPEC's <code>q_d</code> row. It is a P2 module, so it needs your approval of the spec change before any code.</li>
+      <li><b>Ownership cells from OECD AAMNE.</b> Domestic, state and foreign with a parent vector, and an FDI barrier wedge. This amends 3.2, 0104 and 0041.</li>
+      <li><b>Entry, exit and the zombie band.</b> Free entry in M, death plus cutoff exit, and 0172 read as an exit cutoff. It adds the Zipf rule for sigma (P50).</li>
+      <li><b>Named firms.</b> A view from Wikidata in 1.x, granular firms as an extended opt-in, and political actors deferred to 0189.</li>
+    </ol>
+    <p class="note">Other threads are writing ADRs today, so numbers get assigned from main at push time.</p>
+  </div>
+</section>
+
+<section>
+  <div class="rule-label"><h2>References</h2></div>
+  <ul class="refs">
+    <li>Acemoglu, Carvalho, Ozdaglar, Tahbaz-Salehi (2012). The network origins of aggregate fluctuations. Econometrica.</li>
+    <li>Acharya, Eisert, Eufinger, Hirsch (2019). Whatever it takes: the real effects of unconventional monetary policy. RFS.</li>
+    <li>Arkolakis, Costinot, Rodriguez-Clare (2012). New trade models, same old gains? AER.</li>
+    <li>Arkolakis, Ramondo, Rodriguez-Clare, Yeaple (2018). Innovation and production in the global economy. AER.</li>
+    <li>Atkeson, Burstein (2008). Pricing-to-market, trade costs, and international relative prices. AER.</li>
+    <li>Autor, Dorn, Katz, Patterson, Van Reenen (2020). The fall of the labor share and the rise of superstar firms. QJE.</li>
+    <li>Axtell (2001). Zipf distribution of U.S. firm sizes. Science.</li>
+    <li>Banerjee, Hofmann (2018). <a href="https://www.bis.org/publ/qtrpdf/r_qt1809g.htm">The rise of zombie firms: causes and consequences</a>. BIS Quarterly Review.</li>
+    <li>Bernard, Jensen, Redding, Schott (2007). Firms in international trade. JEP.</li>
+    <li>Caballero, Hoshi, Kashyap (2008). Zombie lending and depressed restructuring in Japan. AER.</li>
+    <li>Cebeci, Fernandes, Freund, Pierola (2012). <a href="https://microdata.worldbank.org/catalog/2545">Exporter Dynamics Database</a>. World Bank.</li>
+    <li>Chaney (2008). Distorted gravity. AER.</li>
+    <li>De Loecker, Eeckhout, Unger (2020). The rise of market power and the macroeconomic implications. QJE.</li>
+    <li>di Giovanni, Levchenko, Mejean (2014). Firms, destinations, and aggregate fluctuations. Econometrica.</li>
+    <li>Eaton, Kortum (2002). Technology, geography, and trade. Econometrica.</li>
+    <li>Eaton, Kortum, Kramarz (2011). An anatomy of international trade: evidence from French firms. Econometrica.</li>
+    <li>Gabaix (2011). The granular origins of aggregate fluctuations. Econometrica.</li>
+    <li>Haltiwanger, Jarmin, Miranda (2013). Who creates jobs? Small versus large versus young. REStat.</li>
+    <li>Helpman, Melitz, Yeaple (2004). Export versus FDI with heterogeneous firms. AER.</li>
+    <li>Hopenhayn (1992). Entry, exit, and firm dynamics in long run equilibrium. Econometrica.</li>
+    <li>Hsieh, Klenow (2009). Misallocation and manufacturing TFP in China and India. QJE.</li>
+    <li>Melitz (2003). The impact of trade on intra-industry reallocations. Econometrica.</li>
+    <li>OECD (2018, 2023). <a href="https://www.iioa.org/conferences/29th/papers/files/4568_AAMNE2023_IIOA_paper_final.pdf">Analytical AMNE database</a>.</li>
+    <li>Poledna, Miess, Hommes, Rabitsch (2023). Economic forecasting with an agent-based model. EER.</li>
+    <li>Sedlacek, Sterk (2017). The growth potential of startups over the business cycle. AER.</li>
+    <li>Song, Storesletten, Zilibotti (2011). Growing like China. AER.</li>
+    <li>Torslov, Wier, Zucman (2023). The missing profits of nations. REStud.</li>
+    <li>Paradox Interactive. Victoria 3 dev diaries <a href="https://admin-forum.paradoxplaza.com/forum/developer-diary/victoria-3-dev-diary-92-companies.1595826">92</a> and <a href="https://admin-forum.paradoxplaza.com/forum/developer-diary/victoria-3-dev-diary-147-everything-companies.1747321">147</a>.</li>
+  </ul>
+</section>
+</div>

@@ -17,11 +17,11 @@ superset of what the study decided.
 | 2026-11-10 | [P5 E3: why the mainland dies at x10 under the credit limit](p5-e3-mainland-deflation-2026-11-10.md) | root cause: anchor index; fix go; RFC 0342 (accepted) |
 | 2026-11-10 | [P5 E2 spike: bounded price gap at zero output under the money anchor](p5-e2-zero-output-step-spike-2026-11-10.md) | ADR 0340, 0341 |
 | 2026-11-10 | [P5 price-anchor spike: money anchor and good-level term on the fixture](p5-price-anchor-spike-2026-11-10.md) | ADR 0338, 0339 |
-| 2026-11-04 | [Open substitute for WID 2000 wealth-bracket shares: candidate sources and licences, US DFA anchor, lognormal proxies from the income Gini](/mnt/project-files/research/wealth-shares-open-2026-11-04.md) | ADR 0311, 0312 |
+| 2026-11-04 | [Open substitute for WID 2000 wealth-bracket shares: candidate sources and licences, US DFA anchor, lognormal proxies from the income Gini](wealth-shares-open-2026-11-04.md) | ADR 0311, 0312 |
 | 2026-11-04 | Tick speed profile and brainstorm: 148 ms single-thread against 43 ms at 14 threads, serial sections and T2b per-good imbalance, 23 ranked ideas by determinism class; project files tick-speed-brainstorm-2026-11-04.md | RFC 0287; ADR 0294 to 0298 |
 | 2026-11-01 | Why PWT 11 and WDI disagree on 2000 price levels (ICP 2011 backcast vs PWT's 1996/2005 benchmarks), the corrupt archive PA.NUS.PPPC.RF file, and an enforceable variant of ADR 0098's real GDP check; project files research/pwt-wdi-price-levels-2026-11-01.md | none yet (feeds RFC 0282 D1, D7; ADR 0285) |
 | 2026-11-01 | Storage-on frictionless V1 misses of ADR 0280: cause (Q = 0 bang-bang steps at stored origins), fix screen of six rounds, local-goods trap (project files, `storage-misses/storage-on-frictionless-v1-2026-11-01.md`) | RFC 0286 (deferred) |
-| 2026-11-01 | [Filling the Eurostat 2000 manufacturing gaps for ADR 0275 (DK, CZ, HU, NO, BG, SI, FI, PT): coverage measured, replacement sources and licences](/mnt/project-files/research/eurostat-2000-mfg-gaps-2026-11-01.md) | ADR 0287 |
+| 2026-11-01 | [Filling the Eurostat 2000 manufacturing gaps for ADR 0275 (DK, CZ, HU, NO, BG, SI, FI, PT): coverage measured, replacement sources and licences](eurostat-2000-mfg-gaps-2026-11-01.md) | ADR 0287 |
 | 2026-10-31 | 2026-10-31 explainer of how energy/electricity are modelled and tie to state, companies, construction | ADR 0028, 0034, 0035, 0084, 0095, 0122, 0171, 0178 and more |
 | 2026-10-31 | Plan for the ADR 0271 50-goods pack (P4): B09 local, 7 theta classes, manufacturing spread by plants+census+RAS, goods count as pack value | ADR 0023, 0248, 0271, 0273, 0274, 0275 |
 | 2026-10-31 | 2026-10-31 brainstorm of other Ceteris-like side projects for Antonio | none recorded |
@@ -88,46 +88,46 @@ superset of what the study decided.
 | 2026-10-25 | 2026-10-25 survey of speed/memory techniques for the economic core vs determinism rules | ADR 0017, 0024 |
 | 2026-10-24 | Antonio's framing of Ceteris as a deeper, less gamey Paradox game, and the sim/game boundary agreed in discussion | ADR 0089, 0103 |
 
-## Project files
+## Other studies
 
-Studies kept in the project's shared folder (not in the repository), by path there:
+Studies copied from the project's shared folder on 2026-11-12, by file:
 
-- C7-LITERATURE.md
-- b7-storage-bounds.md
-- oil-rent/0270-extraction-column-for-rent-economies.md
-- price-gain/0263-price-gain-cap-draft.md
-- price-gain/kappa-study-README.md
-- research/battle-companion-2026-10-29.html
-- research/blind-spots-2026-10-28.html
-- research/borrowed-mechanics-2026-10-28.html
-- research/ceteris-brainstorm-additions.md
-- research/ceteris-game-design-notes.md
-- research/ceteris-modular-2026-10-29.html
-- research/ceteris-narrative-and-explanation.md
-- research/character-flavour-2026-10-28.html
-- research/characters-2026-10-28.html
-- research/companies-2026-10-28.html
-- research/companion-names-2026-10-29.html
-- research/construction-2026-10-28.html
-- research/equipment-designers-2026-10-28.html
-- research/f32-recheck-2026-10-29.md
-- research/financial-markets-2026-10-28.html
-- research/held-out-validation-sources-2026-11-04.md
-- research/hohmann-2026-10-29.html
-- research/identity-change-2026-10-28.html
-- research/initial-conditions-only-2026-10-29.html
-- research/instrument-charm-2026-10-29.html
-- research/keyboard-interaction-2026-10-28.html
-- research/leadership-dossiers-2026-10-28.html
-- research/ocean-freight-2000/ocean-freight-2000.md
-- research/paradox-cues-2026-10-30.html
-- research/polish-bench-2026-10-30.html
-- research/pwt-wdi-price-levels-2026-11-01.md
-- research/royal-houses-2026-10-30.html
-- research/space-2026-10-29.html
-- research/tick-speed-check-2026-10-28.html
-- research/time-and-war-clock-2026-10-28.html
-- research/ui-surfaces-2026-10-29.html
-- research/war-and-occupation-2026-10-30.html
-- research/wars-since-2000-2026-10-30.html
-- sudan-diagnosis/sudan-frictionless-2026-10-31.md
+- [C7-LITERATURE.md](C7-LITERATURE.md)
+- [b7-storage-bounds.md](b7-storage-bounds.md)
+- [0270-extraction-column-for-rent-economies.md](0270-extraction-column-for-rent-economies.md)
+- [0263-price-gain-cap-draft.md](0263-price-gain-cap-draft.md)
+- [kappa-study-README.md](kappa-study-README.md)
+- [battle-companion-2026-10-29.html](battle-companion-2026-10-29.html)
+- [blind-spots-2026-10-28.html](blind-spots-2026-10-28.html)
+- [borrowed-mechanics-2026-10-28.html](borrowed-mechanics-2026-10-28.html)
+- [ceteris-brainstorm-additions.md](ceteris-brainstorm-additions.md)
+- [ceteris-game-design-notes.md](ceteris-game-design-notes.md)
+- [ceteris-modular-2026-10-29.html](ceteris-modular-2026-10-29.html)
+- [ceteris-narrative-and-explanation.md](ceteris-narrative-and-explanation.md)
+- [character-flavour-2026-10-28.html](character-flavour-2026-10-28.html)
+- [characters-2026-10-28.html](characters-2026-10-28.html)
+- [companies-2026-10-28.html](companies-2026-10-28.html)
+- [companion-names-2026-10-29.html](companion-names-2026-10-29.html)
+- [construction-2026-10-28.html](construction-2026-10-28.html)
+- [equipment-designers-2026-10-28.html](equipment-designers-2026-10-28.html)
+- [f32-recheck-2026-10-29.md](f32-recheck-2026-10-29.md)
+- [financial-markets-2026-10-28.html](financial-markets-2026-10-28.html)
+- [held-out-validation-sources-2026-11-04.md](held-out-validation-sources-2026-11-04.md)
+- [hohmann-2026-10-29.html](hohmann-2026-10-29.html)
+- [identity-change-2026-10-28.html](identity-change-2026-10-28.html)
+- [initial-conditions-only-2026-10-29.html](initial-conditions-only-2026-10-29.html)
+- [instrument-charm-2026-10-29.html](instrument-charm-2026-10-29.html)
+- [keyboard-interaction-2026-10-28.html](keyboard-interaction-2026-10-28.html)
+- [leadership-dossiers-2026-10-28.html](leadership-dossiers-2026-10-28.html)
+- [ocean-freight-2000.md](ocean-freight-2000.md)
+- [paradox-cues-2026-10-30.html](paradox-cues-2026-10-30.html)
+- [polish-bench-2026-10-30.html](polish-bench-2026-10-30.html)
+- [pwt-wdi-price-levels-2026-11-01.md](pwt-wdi-price-levels-2026-11-01.md)
+- [royal-houses-2026-10-30.html](royal-houses-2026-10-30.html)
+- [space-2026-10-29.html](space-2026-10-29.html)
+- [tick-speed-check-2026-10-28.html](tick-speed-check-2026-10-28.html)
+- [time-and-war-clock-2026-10-28.html](time-and-war-clock-2026-10-28.html)
+- [ui-surfaces-2026-10-29.html](ui-surfaces-2026-10-29.html)
+- [war-and-occupation-2026-10-30.html](war-and-occupation-2026-10-30.html)
+- [wars-since-2000-2026-10-30.html](wars-since-2000-2026-10-30.html)
+- [sudan-frictionless-2026-10-31.md](sudan-frictionless-2026-10-31.md)
