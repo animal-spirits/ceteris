@@ -1705,3 +1705,28 @@ sections = "7.7, 15.4"
 rows = "0358"
 topic = "[EIA International Energy Statistics electricity series calibrate power generation and capacity by fuel; Ember rejected](../rfcs/0348-electricity-source-after-ember.md)"
 sections = "7.7, 15.4"
+
+[[entry]]
+rows = "0359"
+topic = "[One wide government ledger account per country, opened in every world after the foreign account; zero and untouched with the fiscal system off](../rfcs/0349-government-ledger-account.md)"
+sections = "9.6"
+
+[[entry]]
+rows = "0360"
+topic = "[Fiscal journal Flows TAX, GOV_TRANSFER and GOV_INTEREST, one per SFC flow row; excises use TAX, state-cell profits use DIVIDEND](../rfcs/0349-government-ledger-account.md)"
+sections = "9.6"
+
+[[entry]]
+rows = "0361"
+topic = "[Government spending is paid to pops as transfers by population, pops keep the ADR 0099 government share; the government as a buyer waits for P6 budgets](../rfcs/0349-government-ledger-account.md)"
+sections = "9.6"
+
+[[entry]]
+rows = "0362"
+topic = "[Taxes are collected once per tick in system 232 after E4: income and payroll from pops by wage income, VAT from pops by spending, corporate from the profit pool](../rfcs/0349-government-ledger-account.md)"
+sections = "9.6"
+
+[[entry]]
+rows = "0363"
+topic = "[The deficit is financed by borrowing: the government account may go negative, its balance minus the debt; no monetary financing until the central bank balance sheet](../rfcs/0349-government-ledger-account.md)"
+sections = "9.6"
