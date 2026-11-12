@@ -1414,6 +1414,16 @@ impl EconWorld {
     /// Switches the government accounts (system 232) on, one per country.
     pub fn with_fiscal(mut self, government: crate::fiscal::Government) -> EconWorld {
         assert_eq!(government.fiscal.len(), self.inputs.n_countries());
+        let unit = |x: f64| (0.0..=1.0).contains(&x);
+        for f in &government.fiscal {
+            assert!(unit(f.compliance), "fiscal compliance outside [0, 1]");
+            for x in &f.instruments {
+                assert!(
+                    unit(x.rate) && unit(x.informality) && unit(x.capacity),
+                    "fiscal rate, informality or capacity outside [0, 1]"
+                );
+            }
+        }
         self.fiscal = Some(government);
         self
     }
@@ -2833,7 +2843,13 @@ impl State for EconWorld {
         let fiscal = if d.at_end() {
             None
         } else {
-            Some(crate::fiscal::Government::decode(d)?)
+            let g = crate::fiscal::Government::decode(d)?;
+            expect_len(
+                "fiscal countries",
+                g.fiscal.len(),
+                self.inputs.n_countries(),
+            )?;
+            Some(g)
         };
 
         let inp = &*self.inputs;
