@@ -505,16 +505,17 @@ pub fn invert_pigl_pops(
         let lambda = hi * illinois(|u| short(hi * u));
         (lambda, clamped(lambda))
     };
-    let miss = |fixed: &[Fixed], b: usize, t: f64| -> f64 {
-        let o1 = others(b).0;
+    // category c's aggregate at the split t less its target
+    let gap = |fixed: &[Fixed], b: usize, t: f64, c: usize| -> f64 {
         let (_, shares) = at(fixed, b, t);
         shares
             .iter()
             .zip(&pops)
-            .map(|(s, k)| k.spend * s[o1])
+            .map(|(s, k)| k.spend * s[c])
             .sum::<f64>()
-            - cat[o1] * spent
+            - cat[c] * spent
     };
+    let miss = |fixed: &[Fixed], b: usize, t: f64| -> f64 { gap(fixed, b, t, others(b).0) };
     for _ in 0..MAX_ROUNDS {
         let fixed: Vec<Fixed> = pops
             .iter()
@@ -540,13 +541,20 @@ pub fn invert_pigl_pops(
         if bind != 0 && (miss(&fixed, bind, 0.0) > 0.0 || miss(&fixed, bind, 1.0) < 0.0) {
             negative();
         }
-        let t = illinois(|t| miss(&fixed, bind, t));
+        // The split meets the smaller of the two aggregates: the other is the rest of the
+        // spending and takes the rounding of the sums over pops, an absolute 1e-16 per pop
+        // that was up to 1e-11 of a services share of 2e-3 (`--no-border-fit`, ADR 0313).
+        let (o1, o2) = others(bind);
+        let t = if cat[o2] < cat[o1] {
+            illinois(|t| -gap(&fixed, bind, t, o2))
+        } else {
+            illinois(|t| miss(&fixed, bind, t))
+        };
         let (lambda, shares) = at(&fixed, bind, t);
         if !(lambda.is_finite() && lambda >= 0.0) {
             negative();
         }
         w.scale = lambda;
-        let (o1, o2) = others(bind);
         w.omega = [0.0; N_CATEGORIES];
         (w.omega[o1], w.omega[o2]) = (t, 1.0 - t);
         let mut model = vec![0.0; n];
@@ -981,6 +989,50 @@ mod tests {
                 let miss = agg[g] / spent / (omega[g] / total) - 1.0;
                 assert!(miss.abs() <= 1e-11, "good {g}: {miss}");
             }
+        }
+    }
+
+    /// Where M binds and food takes nearly all of the weight, the split meets the small services
+    /// aggregate itself: met through food's, the rounding of the sum over many pops missed
+    /// services by 4e-13 to 1e-11 and the rounds did not settle (`--no-border-fit`, country 222).
+    #[test]
+    fn inversion_settles_with_many_pops_and_a_small_services_share() {
+        let p = EconParams::default();
+        let omega = [
+            0.23, 6e-9, 0.0, 0.21, 6e-9, 8e-9, 1.3e-9, 3e-6, 1e-7, 5.35e-4,
+        ];
+        let pops: Vec<PopAt> = (0..1000)
+            .map(|k| {
+                let f = k as f64 / 1000.0;
+                PopAt {
+                    price: (0..N_GOODS)
+                        .map(|g| {
+                            if g < N_TRADED {
+                                1.0 + 0.3 * f * (g as f64 - 3.0)
+                            } else {
+                                0.5 + f
+                            }
+                        })
+                        .collect(),
+                    income: BASE * (0.5 + 2.0 * f * f),
+                    spend: 1.0 + f,
+                }
+            })
+            .collect();
+        let w = invert_pigl_pops(&omega, &CATEGORY, &pops, SIGMA, &p);
+        assert!(w.omega[1] == 0.0 && w.omega[2] < 0.01, "{:?}", w.omega);
+        let total: f64 = omega.iter().sum();
+        let (mut agg, mut s) = ([0.0; N_GOODS], [0.0; N_GOODS]);
+        for k in &pops {
+            pigl_shares(&w, &k.price, k.income, SIGMA, &p, &mut s);
+            for g in 0..N_GOODS {
+                agg[g] += s[g] * k.spend;
+            }
+        }
+        let spent: f64 = agg.iter().sum();
+        for g in (0..N_GOODS).filter(|&g| omega[g] > 0.0) {
+            let miss = agg[g] / spent / (omega[g] / total) - 1.0;
+            assert!(miss.abs() <= 1e-11, "good {g}: {miss}");
         }
     }
 

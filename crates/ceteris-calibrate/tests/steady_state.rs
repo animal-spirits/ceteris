@@ -465,27 +465,6 @@ fn slow_rates(m: &Model, spend: &Mat, lw: &Mat) -> Vec<f64> {
         .collect()
 }
 
-/// The longest chain of additions in one of `Model::origin_sums` or `Model::destination_sums`
-/// for traded good g, the depth D_g of the rounding derivation in
-/// [`sinkhorn_is_unique_up_to_scale`]: a cell's sum is its own term plus the domestic legs into
-/// it plus the access legs into it of the gateway sums, each of which sums crossings of access
-/// sums, so D_g = max(m_dom, m_gate + m_cross + m_prov) + 2, each m the most legs of good g in
-/// one bucket of that sum (by origin or by destination, whichever is larger).
-fn summation_depth(inp: &Inputs, g: usize) -> f64 {
-    let most = |good: &[usize], key: &[usize]| -> usize {
-        let mut count = std::collections::BTreeMap::new();
-        for (_, &k) in good.iter().zip(key).filter(|&(&h, _)| h == g) {
-            *count.entry(k).or_insert(0usize) += 1;
-        }
-        count.into_values().max().unwrap_or(0)
-    };
-    let (d, a, c) = (&inp.domestic, &inp.access, &inp.crossing);
-    let dom = most(&d.good, &d.row).max(most(&d.good, &d.col));
-    let cross = most(&c.good, &c.row).max(most(&c.good, &c.col));
-    let chain = most(&a.good, &a.col) + cross + most(&a.good, &a.row);
-    (dom.max(chain) + 2) as f64
-}
-
 /// Stage 2: from two starts the scaling reaches the same weights up to one scale per good.
 ///
 /// The bound on the spread is derived from the stop rule. Let g(ln w) = ln received - ln target
@@ -503,7 +482,7 @@ fn summation_depth(inp: &Inputs, g: usize) -> f64 {
 ///
 /// delta_g, from the operations of the step that computes the gap (u = eps / 2, first order;
 /// libm's exp and ln within 1 ulp, 2u relative; L = max |ln w| over the good's origins in either
-/// solution, T = max |ln (r v)| over them, D = [`summation_depth`]):
+/// solution, T = max |ln (r v)| over them, D = [`steady::summation_depth`]):
 /// - w = exp(ln w - top): the subtraction rounds by u |ln w - top| <= 2uL, exp by 2u, so w has
 ///   relative error e_w <= 2uL + 2u;
 /// - Phi, a sum of positive terms each with relative error e_w, D additions and one product per
@@ -562,7 +541,7 @@ fn sinkhorn_is_unique_up_to_scale() {
                     .max(other.log_weight[(p, g)].abs())
             });
             let target = cells().fold(0.0f64, |a, p| a.max((one.r[g] * v[(p, g)]).ln().abs()));
-            let depth = summation_depth(inp, g);
+            let depth = steady::summation_depth(inp, g);
             let stop = 1.5 * 2.0 * SINKHORN_TOL / (1.0 - lambda2[g]);
             let rounding = 1.5 * 2.0 * f64::EPSILON * (2.0 * big + 2.0 * target + depth + 4.5)
                 / (1.0 - lambda2[g]);
@@ -630,6 +609,41 @@ fn sinkhorn_pins_the_level_of_the_weights() {
                 top.abs() <= 1e-12,
                 "good {g}: largest ln w {top} from start {level}"
             );
+        }
+    }
+}
+
+/// The gap rounds by up to eps (2L + 2T + D + 4.5) (`steady::summation_depth`), which can pass
+/// SINKHORN_TOL: with storage on, the full pack's residual stalled at 1.6e-13 for 100,000
+/// sweeps. Sales and spending at e^-640 put |ln (r v)| near 640, where ln is 1.1e-13 apart: the
+/// scaling stops once it has stalled within that floor (137 sweeps), at the weights of the
+/// unscaled world, where the bare tolerance waited for a sweep that rounds to 0 (271).
+#[test]
+fn sinkhorn_stops_at_the_rounding_floor() {
+    let w = &worlds()[0];
+    let (inp, s) = (&w.inp, &w.s);
+    let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
+    let m = Model::new(inp).unwrap();
+    let spend = Mat::from_fn(n_p, n_g, |p, g| s.spend_hh[(p, g)] + s.spend_int[(p, g)]);
+    let mut v = Mat::zeros(n_p, n_g);
+    for (e, (&p, &g)) in inp.ent_province.iter().zip(&inp.ent_good).enumerate() {
+        if inp.traded[g] {
+            v[(p, g)] += s.value[e] / (1.0 + s.spoilage[g]);
+        }
+    }
+    let k = (-640.0f64).exp();
+    let small = |x: &Mat| Mat::from_fn(n_p, n_g, |p, g| x[(p, g)] * k);
+    let one = steady::sinkhorn(&m, &spend, &v, None).unwrap();
+    let scaled = steady::sinkhorn_limited(&m, &small(&spend), &small(&v), None, 200).unwrap();
+    assert!(
+        scaled.residual > SINKHORN_TOL,
+        "residual {}",
+        scaled.residual
+    );
+    for p in 0..n_p {
+        for g in (0..n_g).filter(|&g| inp.active[p][g] && inp.traded[g]) {
+            let d = (one.log_weight[(p, g)] - scaled.log_weight[(p, g)]).abs();
+            assert!(d <= 1e-9, "province {p} good {g}: {d}");
         }
     }
 }

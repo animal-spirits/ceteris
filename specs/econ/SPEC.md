@@ -1021,7 +1021,11 @@ relative (or, below 1e-12, has stopped improving for 20 rounds); more than 1,000
 Where the M aggregate is above Omega_M even at t = 0, M binds instead of A (ADR 0313): omega_M =
 0, lambda follows from the M aggregate and t = omega_A of omega_A + omega_S = 1 solves the food
 aggregate by the same secant; where it is below Omega_M at t = 1, S binds likewise (omega_S = 0,
-t = omega_A of omega_A + omega_M = 1). The income-effect weight is so the largest at which every
+t = omega_A of omega_A + omega_M = 1). Each split's secant meets the smaller of its two
+categories' aggregates; the other is the rest of the spending and takes the rounding of the sums
+over pops (met through a food aggregate near 1, about 1e-16 a pop over 1,000 pops missed a services
+share of 2e-3 by up to 1e-11, and the rounds did not settle: `--no-border-fit`, country 222,
+2026-11-12). The income-effect weight is so the largest at which every
 omega is nonnegative, and the same as with omega_A = 0 wherever that fits. No sign change for the
 binding category or a negative lambda stops the load (never clipped). At load without a calibration the pops are at the data state's prices (1
 for traded goods, p_c for local goods, ADR 0098) with E_k their base
@@ -1188,7 +1192,11 @@ next pass otherwise moved freely. On the B8 pack at the export's nu 0.3 coal and
 reached 532 by pass 3, where a unit in the last place of ln w is 1.1e-13, and pass 9's residual
 froze at 1.208e-13 (the same value from sweep 22,199 to the 100,000 cap, after falling from
 1.15e-12 at sweep 1,000 at about 0.9987 a sweep): a rounding floor of the unpinned level, not
-conditioning (pinned, pass 9 converges in 1,960 sweeps). The tolerance does not change. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
+conditioning (pinned, pass 9 converges in 1,960 sweeps). The tolerance does not change, but a
+residual that has not fallen for the 20-sweep stall window and is within every good's rounding
+bound, 1e-13 + eps (2L + 2T + D_g + 4.5) (`steady::summation_depth`, derived below), also stops
+the scaling: with storage on (ADR 0356) the full pack's residual held at 1.599e-13 to the cap, 65
+minutes (2026-11-12), where the bare tolerance waits for a sweep that happens to round lower. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
 price index (Omega_g times calibrated province VA as weights) is 1; local goods take their price
 level p = p_c (ADR 0098), so the normalization runs over traded goods only and their index is 1. q_d, the arrival slots and the lead follow from sourcing: q_d = 1 / alpha_d, the
 delivered unit price of the physical arrivals, at every pass (`Model::physical`), and the
