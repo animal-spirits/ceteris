@@ -49,5 +49,5 @@ Differences from Ember: EIA reports net generation where Ember used gross for Eu
 countries (gross is about 3 to 7 percent higher, own use of plants; **estimate**, not measured
 here); EIA's latest year lags Ember's by about a year. Neither matters at T0 (2000).
 
-Fetch: `api.eia.gov` is blocked from the cloud host (403 on 2026-11-12), so the `INTL.zip` size
-and sha256 are pinned on the Mac with `pack fetch --record`, together with the #499 entry.
+Fetch: `INTL.zip` is already pinned in `fetch.toml` under the `eia` source (#537, Mac fetch of
+2026-11-11); this source needs no new fetch entry.
