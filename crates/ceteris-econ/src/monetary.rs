@@ -369,7 +369,7 @@ impl Policy {
             .iter()
             .map(|c| NeutralRateFilter::decode(c))
             .collect();
-        let (hazards, peg_break_month) = if d.at_end() {
+        let (hazards, peg_break_month) = if d.peek_count() != Ok(HAZARD_TAG as usize) {
             (None, Vec::new())
         } else {
             if d.u32()? != HAZARD_TAG {

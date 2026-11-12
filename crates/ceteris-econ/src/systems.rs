@@ -103,6 +103,7 @@ pub fn schedule() -> Schedule<EconWorld> {
         def(227, "migration", |w, ctx| migration(w, ctx.tick)),
         def(229, "settlement", |w, _| settlement(w)),
         def(230, "monetary", monetary),
+        def(232, "fiscal", |w, _| fiscal(w)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
 }
@@ -2051,6 +2052,37 @@ pub fn monetary(w: &mut EconWorld, ctx: &Ctx) {
             policy.switch_regimes(&u);
         }
     }
+}
+
+/// System 232 (`specs/money/SPEC.md`, P5 C1): monthly collection and spending in each
+/// country's government account. Income, payroll, sales and corporate bases are the tick's wage
+/// bill, sales and positive profits; the other instruments keep the bases they were given.
+/// Changes only the government accounts. A no-op when the fiscal system is off.
+pub fn fiscal(w: &mut EconWorld) {
+    use crate::fiscal::{CORPORATE, N_REVENUE, PAYROLL, PERSONAL_INCOME, VAT};
+    let Some(government) = &mut w.fiscal else {
+        return;
+    };
+    let nc = government.fiscal.len();
+    let (mut wages, mut sales, mut profit) = (vec![0.0; nc], vec![0.0; nc], vec![0.0; nc]);
+    for (e, &p) in w.inputs.enterprises.province.iter().enumerate() {
+        let c = w.inputs.country_of(p as usize);
+        wages[c] += w.wage[p as usize] * w.employment[e];
+        sales[c] += w.sales[e];
+        profit[c] += w.profit[e].max(0.0);
+    }
+    let minor = |x: f64| (x * crate::world::MINOR_PER_UNIT).round() as i128;
+    let bases: Vec<[Option<i128>; N_REVENUE]> = (0..nc)
+        .map(|c| {
+            let mut b = [None; N_REVENUE];
+            b[PERSONAL_INCOME] = Some(minor(wages[c]));
+            b[PAYROLL] = Some(minor(wages[c]));
+            b[VAT] = Some(minor(sales[c]));
+            b[CORPORATE] = Some(minor(profit[c]));
+            b
+        })
+        .collect();
+    government.step(&bases);
 }
 
 /// E5: the invariants are checked by `State::end_tick` after the schedule; debug builds also

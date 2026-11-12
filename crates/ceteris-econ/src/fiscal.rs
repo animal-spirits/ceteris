@@ -1,16 +1,24 @@
 //! Fiscal state of one country (P5 Branch C1, spec/09 9.6, ADR 0042, `specs/money/SPEC.md`).
 //! Revenue `R_i = tau_i Base_i (1 - informality_i) kappa_i compliance`, capacity kappa built by
 //! spending and eroded slowly (Besley and Persson 2009), deficit financed by borrowing. The kernel
-//! is not yet in the tick.
+//! runs in the tick as system 232 through [`Government`], off by default.
 
 use crate::sfc::{
-    BANKS, BONDS, DEPOSITS, GOVERNMENT, HOUSEHOLDS, INTEREST, N_INSTRUMENT, N_SECTOR, TAXES,
-    TRANSFERS, Transactions,
+    BANKS, BONDS, BalanceSheets, DEPOSITS, GOVERNMENT, HOUSEHOLDS, INTEREST, N_INSTRUMENT,
+    N_SECTOR, TAXES, TRANSFERS, Transactions, closes,
 };
+use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
+
+/// Opens the fiscal section of a snapshot, which follows the monetary one.
+pub const SNAPSHOT_TAG: u32 = 0x3A6E_6F01;
 
 /// Personal income, payroll and social contributions, VAT and sales, corporate, tariffs, excises,
 /// resource royalties and state-enterprise profits, seigniorage.
 pub const N_REVENUE: usize = 8;
+pub const PERSONAL_INCOME: usize = 0;
+pub const PAYROLL: usize = 1;
+pub const VAT: usize = 2;
+pub const CORPORATE: usize = 3;
 /// Pensions, health, education, social transfers, defence, infrastructure, energy subsidies.
 pub const N_SPENDING: usize = 7;
 
@@ -83,6 +91,140 @@ impl Fiscal {
     }
 }
 
+/// The government account of every country (system 232, `specs/money/SPEC.md`): its fiscal
+/// state and its column of the sector balance sheet, which holds the debt as bonds. State only:
+/// taxes and spending are booked here and in the SFC matrices, not moved on the money ledger, so
+/// they feed no demand yet (shortcut, #546).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Government {
+    pub fiscal: Vec<Fiscal>,
+    pub sheets: Vec<BalanceSheets>,
+    /// Spending by category as a share of the tick's revenue; shares summing to 1 balance the
+    /// primary budget. Held for the run until budgets are set by the state AI (P6).
+    pub spending_share: [f64; N_SPENDING],
+    /// Capacity spending per instrument as a share of GDP, held for the run.
+    pub capacity_spend: [f64; N_REVENUE],
+    /// Interest per tick on the debt.
+    pub interest_rate: f64,
+}
+
+impl Government {
+    /// Every country starts from `fiscal` with no debt and an empty balance sheet.
+    pub fn uniform(
+        n_countries: usize,
+        fiscal: Fiscal,
+        spending_share: [f64; N_SPENDING],
+        capacity_spend: [f64; N_REVENUE],
+        interest_rate: f64,
+    ) -> Self {
+        Self {
+            fiscal: vec![fiscal; n_countries],
+            sheets: vec![BalanceSheets::default(); n_countries],
+            spending_share,
+            capacity_spend,
+            interest_rate,
+        }
+    }
+
+    /// One tick: set the bases the tick measured (`None` leaves an instrument's base as it is),
+    /// collect, spend, pay interest, finance the deficit and post it all to the government
+    /// account, then update capacity.
+    pub fn step(&mut self, bases: &[[Option<i128>; N_REVENUE]]) {
+        for ((f, sheet), base) in self.fiscal.iter_mut().zip(&mut self.sheets).zip(bases) {
+            for (x, b) in f.instruments.iter_mut().zip(base) {
+                if let Some(b) = *b {
+                    x.base = b;
+                }
+            }
+            let revenue = f.total_revenue() as f64;
+            let spending = self.spending_share.map(|s| (s * revenue).round() as i128);
+            let interest = ((f.debt as f64) * self.interest_rate).round() as i128;
+            let before = *sheet;
+            let (tx, acq) = f.close_tick(&spending, interest);
+            sheet.apply(&acq, &[[0; N_SECTOR]; N_INSTRUMENT]);
+            debug_assert!(closes(
+                &before,
+                sheet,
+                &tx,
+                &acq,
+                &[[0; N_SECTOR]; N_INSTRUMENT]
+            ));
+            f.update_capacity(&self.capacity_spend);
+        }
+    }
+
+    pub fn encode(&self, e: &mut Encoder) {
+        e.u32(SNAPSHOT_TAG);
+        e.f64s(&self.spending_share);
+        e.f64s(&self.capacity_spend);
+        e.f64(self.interest_rate);
+        e.count(self.fiscal.len());
+        for (f, sheet) in self.fiscal.iter().zip(&self.sheets) {
+            for x in &f.instruments {
+                e.f64s(&[x.rate, x.informality, x.capacity]);
+                e.i128(x.base);
+            }
+            e.f64s(&[f.compliance, f.depreciation, f.build_rate]);
+            e.i128(f.debt);
+            for &v in sheet.positions.as_flattened() {
+                e.i128(v);
+            }
+        }
+    }
+
+    pub fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
+        if d.u32()? != SNAPSHOT_TAG {
+            return Err(DecodeError("fiscal section tag".into()));
+        }
+        fn array<const N: usize>(v: Vec<f64>, what: &str) -> Result<[f64; N], DecodeError> {
+            v.try_into()
+                .map_err(|_| DecodeError(format!("fiscal {what} length")))
+        }
+        let spending_share = array(d.f64s()?, "spending share")?;
+        let capacity_spend = array(d.f64s()?, "capacity spend")?;
+        let interest_rate = d.f64()?;
+        let n = d.count()?;
+        let (mut fiscal, mut sheets) = (Vec::with_capacity(n), Vec::with_capacity(n));
+        for _ in 0..n {
+            let mut instruments = [Instrument {
+                rate: 0.0,
+                base: 0,
+                informality: 0.0,
+                capacity: 0.0,
+            }; N_REVENUE];
+            for x in &mut instruments {
+                let v: [f64; 3] = array(d.f64s()?, "instrument")?;
+                *x = Instrument {
+                    rate: v[0],
+                    base: d.i128()?,
+                    informality: v[1],
+                    capacity: v[2],
+                };
+            }
+            let [compliance, depreciation, build_rate]: [f64; 3] = array(d.f64s()?, "state")?;
+            fiscal.push(Fiscal {
+                instruments,
+                compliance,
+                depreciation,
+                build_rate,
+                debt: d.i128()?,
+            });
+            let mut sheet = BalanceSheets::default();
+            for v in sheet.positions.as_flattened_mut() {
+                *v = d.i128()?;
+            }
+            sheets.push(sheet);
+        }
+        Ok(Self {
+            fiscal,
+            sheets,
+            spending_share,
+            capacity_spend,
+            interest_rate,
+        })
+    }
+}
+
 /// Public capital of one type (core infrastructure or other), ADR 0042. Productivity factor
 /// `A / A_cal = (K_g / K_g0)^P173`; investment is scaled by an efficiency factor (P174).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -116,7 +258,6 @@ pub fn r_minus_g(interest_rate: f64, growth: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sfc::{BalanceSheets, closes};
 
     fn fiscal() -> Fiscal {
         let x = |rate, base: i128, informality, capacity| Instrument {
