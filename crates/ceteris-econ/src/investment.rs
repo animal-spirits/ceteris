@@ -5,8 +5,15 @@
 //! at the order's locked input mix. Orders enter the first stage the tick they leave the permit
 //! queue, so `k = 1, T = 1, lag = 0` is the instant rule. The kernel is not yet in the tick;
 //! paused work-in-progress depreciation, cash calls and write-offs wait on Branch F.
+//! In the tick as system 234, off by default (`EconWorld::with_capital`, #534): one pipeline per
+//! enterprise, fed a fixed order per tick, fully filled; nothing reads the capital yet.
 
 use std::collections::VecDeque;
+
+use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
+
+/// Opens the capital section of a snapshot, which follows the state cells one.
+pub const SNAPSHOT_TAG: u32 = 0x3A6E_6F04;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Order {
@@ -15,7 +22,7 @@ pub struct Order {
     pub mix: Vec<f64>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Pipeline {
     k: usize,
     mean_time: f64,
@@ -78,6 +85,58 @@ impl Pipeline {
             })
             .collect();
         p
+    }
+
+    fn encode(&self, e: &mut Encoder) {
+        e.count(self.k);
+        e.f64(self.mean_time);
+        e.f64(self.delta);
+        e.f64(self.capital);
+        e.f64s(&self.stages);
+        for m in &self.stage_mix {
+            e.f64s(m);
+        }
+        e.count(self.permit.len());
+        for o in &self.permit {
+            match o {
+                Some(o) => {
+                    e.u8(1);
+                    e.f64(o.size);
+                    e.f64s(&o.mix);
+                }
+                None => e.u8(0),
+            }
+        }
+    }
+
+    fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
+        let k = d.count()?;
+        let (mean_time, delta, capital) = (d.f64()?, d.f64()?, d.f64()?);
+        let stages = d.f64s()?;
+        if stages.len() != k || k == 0 {
+            return Err(DecodeError("capital stages".into()));
+        }
+        let stage_mix = (0..k).map(|_| d.f64s()).collect::<Result<_, _>>()?;
+        let lag = d.count()?;
+        let permit = (0..lag)
+            .map(|_| match d.u8()? {
+                0 => Ok(None),
+                1 => Ok(Some(Order {
+                    size: d.f64()?,
+                    mix: d.f64s()?,
+                })),
+                _ => Err(DecodeError("capital permit flag".into())),
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            k,
+            mean_time,
+            delta,
+            capital,
+            stages,
+            stage_mix,
+            permit,
+        })
     }
 
     pub fn capital(&self) -> f64 {
@@ -150,6 +209,56 @@ impl Pipeline {
         }
         self.capital = (1.0 - self.delta) * self.capital + flows[self.k - 1];
         paid
+    }
+}
+
+/// The capital state of the tick: one pipeline per enterprise and the order each places per tick.
+/// The order is a stand-in for the 7.4 logit.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Capital {
+    pub pipelines: Vec<Pipeline>,
+    pub order: Vec<f64>,
+}
+
+impl Capital {
+    /// Advances every pipeline one tick, fully filled; returns total capital after the step.
+    pub fn step(&mut self) -> f64 {
+        let mut total = 0.0;
+        for (p, &size) in self.pipelines.iter_mut().zip(&self.order) {
+            p.step(
+                1.0,
+                (size > 0.0).then(|| Order {
+                    size,
+                    mix: Vec::new(),
+                }),
+            );
+            total += p.capital();
+        }
+        total
+    }
+
+    pub fn encode(&self, e: &mut Encoder) {
+        e.u32(SNAPSHOT_TAG);
+        e.count(self.pipelines.len());
+        for p in &self.pipelines {
+            p.encode(e);
+        }
+        e.f64s(&self.order);
+    }
+
+    pub fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
+        if d.u32()? != SNAPSHOT_TAG {
+            return Err(DecodeError("capital section tag".into()));
+        }
+        let n = d.count()?;
+        let pipelines = (0..n)
+            .map(|_| Pipeline::decode(d))
+            .collect::<Result<Vec<_>, _>>()?;
+        let order = d.f64s()?;
+        if order.len() != n {
+            return Err(DecodeError("capital orders".into()));
+        }
+        Ok(Self { pipelines, order })
     }
 }
 
