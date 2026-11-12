@@ -1,0 +1,36 @@
+Ceteris Paribus
+Copyright (C) 2026 the Ceteris Paribus authors
+
+The simulator source code in this repository is licensed under the GNU Affero General Public
+License, version 3 or later (see LICENSE). Commercial licences are available from the copyright
+holder under separate terms (RFC 0343). Contributions are accepted under CLA.md.
+
+The repository contains no third-party datasets. The data pack is built from public sources by
+`ceteris pack build`; it is not part of the AGPL-licensed code and keeps each source's own
+licence. The authoritative list, with licence, licence URL and commercial-use flag per source,
+is crates/ceteris-pack/config/sources.toml. `ceteris pack check-sources` enforces it.
+
+Data licence terms that bind users and redistributors of the pack:
+
+- EXIOBASE (LicenseRef-EXIOBASE-licence): used for validation only. No EXIOBASE value feeds
+  calibration, directly or indirectly. Cite the EXIOBASE licence in any derived documentation.
+- Ethnic Power Relations and GeoEPR (ETH Zurich / ICR), CC BY-NC-SA 4.0: non-commercial,
+  share-alike, attribution. Not included in commercial builds.
+- UNU-WIDER GRD and WIID, CC BY-NC-SA 3.0 IGO: non-commercial, share-alike. Not included in
+  commercial builds.
+- Global Flood Database, CC BY-NC 4.0: non-commercial. Not included in commercial builds.
+- Wittgenstein Centre human capital projections (IIASA), CC BY 4.0: attribution.
+- FAOSTAT and FAO GAEZ/GAUL, per FAO terms (FAOSTAT CC BY 4.0): attribution.
+- UN WPP, UN IMS, UNCTADstat, OCHA COD-AB, CC BY 3.0 IGO: attribution; the provider's
+  endorsement is not implied.
+- OpenStreetMap and SPEIbase, ODbL 1.0: attribution and share-alike for database derivatives.
+- V-Dem and V-Party, CC BY-SA 4.0: attribution and share-alike.
+- Sources under provider-specific terms (OECD, IMF, BIS, ADB, WTO, UNCTAD TRAINS, IEA, LIS,
+  ACLED, EM-DAT and others) are used under those terms as recorded in sources.toml. Sources whose
+  terms forbid redistribution are fetched by the user and are never redistributed by this project.
+
+Rust dependencies keep their own licences; `cargo deny check licenses` enforces the allowlist in
+deny.toml.
+
+"Ceteris Paribus" and the project's art, icon and wordmark are not licensed under the AGPL.
+All rights reserved.
