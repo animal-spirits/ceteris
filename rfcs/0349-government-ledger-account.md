@@ -91,7 +91,7 @@ Options:
 Recommendation: B, because it keeps the tick's money paths untouched and the incidence close
 enough for 1.0; A can come by its own RFC if validation asks for it.
 
-Decision: pending.
+Decision: B, Antonio, 2026-11-12.
 Row: pending
 
 ### D5. How is the deficit financed on the ledger?
