@@ -1,0 +1,267 @@
+diff --git a/crates/ceteris-econ/src/anchor_spike.rs b/crates/ceteris-econ/src/anchor_spike.rs
+new file mode 100644
+index 0000000..ed4e7e2
+--- /dev/null
++++ b/crates/ceteris-econ/src/anchor_spike.rs
+@@ -0,0 +1,98 @@
++//! SPIKE (P5 Branch E, not for merge): money-anchored split price rule.
++//! dlnp_o = pi^e + clip( a_o (l_o - lbar_g) + kb (lbar_g - lbar) - km (ln(I/I0) - ln(M/M0)) )
++//! l_o = (D [+ b] - Q) / Q_eff as built; a_o = cell gain (REL=cell) or kr_g / E_g (REL=split).
++use std::sync::Mutex;
++
++use crate::world::{EconWorld, to_numeraire_wide};
++
++#[derive(Clone, Copy, Debug)]
++pub struct Anchor {
++    pub split: bool,
++    pub kr_traded: f64,
++    pub kr_local: f64,
++    pub kb: f64,
++    pub km: f64,
++    pub pie: bool,
++}
++
++pub static ANCHOR: Mutex<Option<Anchor>> = Mutex::new(None);
++pub static BASE: Mutex<Option<(f64, f64)>> = Mutex::new(None);
++
++pub fn money(w: &EconWorld) -> f64 {
++    -to_numeraire_wide(w.ledger.money_wide(w.layout.accounts.mint))
++}
++
++pub fn reprice(w: &mut EconWorld, a: Anchor) {
++    let index = w.world_price_index();
++    let m = money(w);
++    let (i0, m0) = *BASE.lock().unwrap().get_or_insert((index, m));
++    let nominal = -a.km * ((index / i0).ln() - (m / m0).ln());
++    let (p, mk) = (&w.trade, &mut w.markets);
++    let ng = p.goods.n();
++    let n = mk.price.len();
++    let mut floor = vec![0.0; ng];
++    let mut count = vec![0usize; ng];
++    for i in 0..n {
++        if mk.active[i] {
++            floor[i % ng] += mk.supply[i];
++            count[i % ng] += 1;
++        }
++    }
++    for g in 0..ng {
++        floor[g] = 1e-9 * floor[g] / count[g].max(1) as f64;
++    }
++    let mut l = vec![0.0; n];
++    let (mut num, mut den) = (vec![0.0; ng], vec![0.0; ng]);
++    for i in 0..n {
++        let g = i % ng;
++        if !mk.active[i] || floor[g] <= 0.0 {
++            continue;
++        }
++        let (q, d) = (mk.supply[i], mk.demand[i]);
++        let b = if p.stores(g) { mk.storage[i] } else { 0.0 };
++        l[i] = (d + b - q) / q.max(floor[g]);
++        let v = mk.price[i] * 0.5 * (q + d);
++        num[g] += v * l[i];
++        den[g] += v;
++    }
++    let lg: Vec<f64> = (0..ng).map(|g| if den[g] > 0.0 { num[g] / den[g] } else { 0.0 }).collect();
++    let lbar = num.iter().sum::<f64>() / den.iter().sum::<f64>();
++    let pie = if a.pie { w.expected_inflation } else { 0.0 };
++    for i in 0..n {
++        let g = i % ng;
++        if !mk.active[i] || floor[g] <= 0.0 {
++            continue;
++        }
++        let rel = if a.split {
++            if p.goods.is_traded(g) { a.kr_traded / (p.theta[g] + 1.0) } else { a.kr_local }
++        } else {
++            w.layout.price_gain[i]
++        };
++        let mut gap = rel * (l[i] - lg[g]) + a.kb * (lg[g] - lbar) + nominal;
++        if p.coverage[g] > 0.0 && !p.stores(g) {
++            let target = p.coverage[g] * mk.demand[i];
++            gap -= p.kappa2 * (mk.inventory[i] - target) / target.max(floor[g]);
++        }
++        let c = p.price_clip(g);
++        if gap.abs() > c {
++            mk.clip_ticks[i] += 1;
++        }
++        let step = pie + gap.clamp(-c, c);
++        mk.price[i] *= step.exp();
++        if p.stores(g) {
++            let e = mk.expectation[i];
++            mk.expectation[i] = e + p.storage_gain * (step - e);
++        }
++    }
++}
++
++/// Mints `f` times each pop's positive balance to it (the nominal-shock test of ADR 0090).
++pub fn money_shock(w: &mut EconWorld, f: f64) {
++    let acc = &w.layout.accounts;
++    for &k in &acc.pop {
++        let b = w.ledger.money(k);
++        if b > 0 {
++            w.ledger.transfer(crate::world::MINT, acc.mint, k, (b as f64 * f) as i64);
++        }
++    }
++}
+diff --git a/crates/ceteris-econ/src/lib.rs b/crates/ceteris-econ/src/lib.rs
+index 09691ef..359d37a 100644
+--- a/crates/ceteris-econ/src/lib.rs
++++ b/crates/ceteris-econ/src/lib.rs
+@@ -1,6 +1,7 @@
+ //! The P2 economic core: enterprises, labour markets, wages and final demand on top of
+ //! the trade layer. See `specs/econ/SPEC.md`.
+ 
++pub mod anchor_spike;
+ pub mod admission;
+ pub mod calibration;
+ pub mod channels;
+diff --git a/crates/ceteris-econ/src/systems.rs b/crates/ceteris-econ/src/systems.rs
+index f961590..bd436b5 100644
+--- a/crates/ceteris-econ/src/systems.rs
++++ b/crates/ceteris-econ/src/systems.rs
+@@ -1483,6 +1483,12 @@ fn trade_legs(
+ /// without a market keep their price, which nothing reads), then the update of expected
+ /// inflation from the world price index (ADR 0019).
+ pub fn reprice(w: &mut EconWorld) {
++    let spike = *crate::anchor_spike::ANCHOR.lock().unwrap();
++    if let Some(a) = spike {
++        crate::anchor_spike::reprice(w, a);
++        w.update_expectation();
++        return;
++    }
+     w.markets
+         .reprice(&w.trade, &w.layout.price_gain, w.expected_inflation);
+     w.update_expectation();
+diff --git a/crates/ceteris-econ/tests/anchor_spike.rs b/crates/ceteris-econ/tests/anchor_spike.rs
+new file mode 100644
+index 0000000..0b31841
+--- /dev/null
++++ b/crates/ceteris-econ/tests/anchor_spike.rs
+@@ -0,0 +1,128 @@
++#![allow(clippy::disallowed_methods)]
++//! SPIKE (P5 Branch E): money anchor. ANCHOR="split,krt,krl,kb,km,pie" or "cell,_,_,kb,km,pie"; unset = as built.
++use std::panic::{AssertUnwindSafe, catch_unwind};
++use std::path::Path;
++use std::sync::Arc;
++
++use ceteris_core::sim::Sim;
++use ceteris_econ::anchor_spike::{ANCHOR, Anchor, BASE, money, money_shock};
++use ceteris_econ::equilibrium::Equilibrium;
++use ceteris_econ::fixture::small_world;
++use ceteris_econ::systems::{SEED, schedule};
++use ceteris_econ::{EconParams, EconWorld};
++use ceteris_trade::TradeParams;
++
++fn set_anchor() -> String {
++    let spec = std::env::var("ANCHOR").unwrap_or_default();
++    *BASE.lock().unwrap() = None;
++    *ANCHOR.lock().unwrap() = if spec.is_empty() {
++        None
++    } else {
++        let f: Vec<&str> = spec.split(',').collect();
++        let x = |i: usize| f[i].parse::<f64>().unwrap_or(0.0);
++        Some(Anchor { split: f[0] == "split", kr_traded: x(1), kr_local: x(2), kb: x(3), km: x(4), pie: f[5] == "1" })
++    };
++    spec
++}
++
++fn params() -> EconParams {
++    if std::env::var_os("DEFAULT").is_some() { EconParams::default() } else { EconParams::frictionless() }
++}
++
++#[test]
++#[ignore = "spike"]
++fn data_state() {
++    let spec = set_anchor();
++    let w = EconWorld::new(Arc::new(small_world()), params(), TradeParams::default());
++    let mut sim = Sim::new(w, schedule(), SEED);
++    let (mut max, mut at, mut i60, mut last50) = (0.0f64, 0, 0.0, 0.0f64);
++    let mut prev: Vec<f64> = vec![];
++    let mut stop = String::new();
++    let n = std::env::var("TICKS").map_or(1200, |v| v.parse().unwrap());
++    for t in 1..=n {
++        if let Err(e) = catch_unwind(AssertUnwindSafe(|| sim.run_until(t).unwrap())) {
++            stop = format!("panic at {t}: {:?}", e.downcast_ref::<String>().map(|s| &s[..s.len().min(80)]));
++            break;
++        }
++        let w = sim.world();
++        let ix = w.world_price_index();
++        if !ix.is_finite() { stop = format!("non-finite index at {t}"); break; }
++        if ix > max { (max, at) = (ix, t); }
++        if t == 60 { i60 = ix; }
++        if t > n - 50 {
++            let d = w.markets.price.iter().zip(&prev).zip(&w.markets.active)
++                .filter(|(_, a)| **a).map(|((p, q), _)| (p / q).ln().abs()).fold(0.0, f64::max);
++            last50 = last50.max(d);
++        }
++        prev = w.markets.price.clone();
++    }
++    let w = sim.world();
++    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/p2-fixture/reference");
++    let s = Equilibrium::read(&dir).unwrap();
++    let ix = w.world_price_index();
++    let v1p = (0..w.markets.price.len()).filter(|&c| w.markets.active[c])
++        .map(|c| (w.markets.price[c] / ix / s.price[c] - 1.0).abs()).fold(0.0, f64::max);
++    let v1w = (0..w.wage.len()).map(|i| (w.wage[i] / ix / s.wage[i] - 1.0).abs()).fold(0.0, f64::max);
++    eprintln!("RESULT [{spec}] V1 price {v1p:.2e} wage {v1w:.2e}; default={} max {max:.3} at {at}, t60 {i60:.3}, end {:.3}, last50 max|dlnp| {last50:.2e} {stop}",
++        std::env::var_os("DEFAULT").is_some(), w.world_price_index());
++}
++
++#[test]
++#[ignore = "spike"]
++fn nominal_shock() {
++    let spec = set_anchor();
++    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/p2-fixture/reference");
++    let s = Equilibrium::read(&dir).unwrap();
++    let mut w = EconWorld::new(Arc::new(small_world()), params(), TradeParams::default());
++    w.settle(&s);
++    let i0 = w.world_price_index();
++    // baseline first so BASE holds the pre-shock money
++    let m_before = money(&w);
++    *BASE.lock().unwrap() = Some((i0, m_before));
++    money_shock(&mut w, 0.05);
++    let target = i0 * money(&w) / m_before;
++    let mut sim = Sim::new(w, schedule(), SEED);
++    let mut inside = None;
++    let mut path = String::new();
++    for t in 1..=300 {
++        if catch_unwind(AssertUnwindSafe(|| sim.run_until(t).unwrap())).is_err() { path += &format!(" panic {t}"); break; }
++        let ix = sim.world().world_price_index();
++        let off = (ix / target).ln().abs();
++        if off < 0.01 { inside.get_or_insert(t); } else { inside = None; }
++        if [1, 5, 10, 20, 30, 60, 120, 300].contains(&t) { path += &format!(" {t}:{:.4}", ix / i0); }
++    }
++    eprintln!("RESULT [{spec}] nominal: target {:.4} enters 1% band for good at {inside:?}; I/I0{path}", target / i0);
++}
++
++#[test]
++#[ignore = "spike"]
++fn x10() {
++    let spec = set_anchor();
++    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/p2-fixture/reference");
++    let s = Equilibrium::read(&dir).unwrap();
++    let mut w = EconWorld::new(Arc::new(small_world()), params(), TradeParams::default());
++    w.settle(&s);
++    let nc = w.inputs().n_countries();
++    let mut wedges = ceteris_trade::network::Wedges::none(nc);
++    wedges.ntb = vec![10.0; wedges.tariff.len()];
++    w.set_wedges(wedges);
++    let mut sim = Sim::new(w, schedule(), SEED);
++    let (mut max, mut last50, mut stop) = (0.0f64, 0.0f64, String::new());
++    let mut prev: Vec<f64> = vec![];
++    for t in 1..=1200 {
++        if let Err(e) = catch_unwind(AssertUnwindSafe(|| sim.run_until(t).unwrap())) {
++            stop = format!("panic at {t}: {:?}", e.downcast_ref::<String>().map(|s| &s[..s.len().min(80)]));
++            break;
++        }
++        let w = sim.world();
++        max = max.max(w.world_price_index());
++        if t > 1150 {
++            let d = w.markets.price.iter().zip(&prev).zip(&w.markets.active)
++                .filter(|(_, a)| **a).map(|((p, q), _)| (p / q).ln().abs()).fold(0.0, f64::max);
++            last50 = last50.max(d);
++        }
++        prev = w.markets.price.clone();
++    }
++    eprintln!("RESULT [{spec}] x10 default={} max index {max:.3}, end {:.3}, last50 max|dlnp| {last50:.2e} {stop}",
++        std::env::var_os("DEFAULT").is_some(), sim.world().world_price_index());
++}

@@ -1,7 +1,7 @@
 # P5 E2 spike: the price step at Q = 0 under the money anchor, 2026-11-10
 
 Spike before build (development laws) for E2 (RFC 0286, ADR 0339). Fixture only: the pack is
-built owner-side. Code: project files `p5-e2/spike.patch` (an env switch `GAP` in
+built owner-side. Code: `docs/research/spikes/p5-e2/spike.patch` (an env switch `GAP` in
 `Markets::reprice_anchored` and harness `crates/ceteris-econ/tests/e2_spike.rs`; not for merge).
 All runs on main at 40e6c26 with `PriceAnchor::default()` (kappa_r 0.25 / 0.05, kappa_b 0.3,
 kappa_m 0.2), one thread, from the calibrated steady state unless noted. x10 is every crossing's

@@ -5,7 +5,7 @@ Follows: [credit-limit follow-up](p5-e3-d1d2-spike-2026-11-10.md#follow-up-credi
 
 Setup: `small_world` fixture, frictionless, anchor on (ADR 0338, gap of ADR 0340), ntb 10,
 pay on sales (RFC 0341 D2) and a credit line of CL loss caps on traded input orders.
-Harness and spike code: `/mnt/project-files/p5-e3/anchor-index-spike-2026-11-10.patch`
+Harness and spike code: `docs/research/spikes/p5-e3/anchor-index-spike-2026-11-10.patch`
 (the credit-limit patch plus env `TG` per-good trace, `G9` per-province trace, `XI`, `ZQ`, `CH`).
 Run: `CL=1 PS=1 TG=1 cargo test --release -p ceteris-econ --test p5_e3_d1d2 -- --ignored --nocapture`.
 

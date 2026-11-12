@@ -1,8 +1,8 @@
 # P5 price-anchor spike (Branch E1), 2026-11-10
 
 Spike before build (development laws) for ADR 0090's nominal anchor. Fixture only: the pack is
-built owner-side and was not available in the cloud. Code: project files
-`p5-anchor/spike.patch` (a switchable `reprice` in `ceteris-econ`, harness
+built owner-side and was not available in the cloud. Code: `docs/research/spikes/p5-anchor/spike.patch`
+(a switchable `reprice` in `ceteris-econ`, harness
 `tests/anchor_spike.rs`; not for merge). All runs on main at 3a8e926, 1,200 ticks, one thread.
 
 ## Rule tried
