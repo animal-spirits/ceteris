@@ -399,6 +399,15 @@ sha256 = "f541facb1d1ab1cdb1ca564700c1a27fa09e0a153f5be16341582198d143e654"
 bytes = 86526567
 url = "https://www.eia.gov/state/seds/CDF/Complete_SEDS.csv"
 
+# EIA International Energy Statistics bulk file (INTL.txt, JSON lines), current release on 2026-11-11 (#499).
+# The pin breaks when EIA republishes the file, by design.
+[[file]]
+source = "eia"
+name = "INTL.zip"
+sha256 = "fcc89cff31122a166a02c6e62e8b33932cc3a5f099426c20ad88f426fa33b957"
+bytes = 24148612
+url = "https://www.eia.gov/opendata/bulk/INTL.zip"
+
 # Dryad serves files only with an API bearer token (401) or a browser session (403).
 [[file]]
 source = "kummu-gdp"
