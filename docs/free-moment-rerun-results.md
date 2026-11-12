@@ -1,7 +1,7 @@
 # Free-moment rerun results, 11-12 November 2026 (partial)
 
 Run per `docs/free-moment-rerun.md` on the Mac, logs in `~/ceteris-logs/rerun/` (steps.log). Only
-the `P` pack columns completed. Two packs failed calibration, and the H2 gate did not run.
+the `P` pack columns completed. Two packs failed calibration. H2 was rerun afterwards (below).
 
 ## Completed: P (off, e1, e3)
 
@@ -21,6 +21,18 @@ Benchmark failures (`crates/ceteris-calibrate/tests/benchmark.rs`):
 - off: all 16 pass, but the "border x10" case panicked inside `ceteris-econ/src/world.rs:89` and
   was reported as a failed case, not a test failure.
 
+## H2 distance elasticity (P; rerun after fetching the pinned Gravity and Natural Earth zips)
+
+| column | elasticity (s.e.) | contiguity | pairs |
+|---|---|---|---|
+| off | -0.4720 (0.0107) | -0.1663 | 47,306 |
+| e1 | -0.4720 (0.0107) | -0.1663 | 47,306 |
+| e3 | -0.4720 (0.0107) | -0.1663 | 47,306 |
+
+Outside the data's -1.1 to -0.7 in every column, and identical across the three anchor settings to
+the 10th digit: the anchor does not move H2. The gate prints it as a diagnostic (ADR 0264); a
+log-distance leg-cost component is the scheduled fix. Logs: `~/ceteris-logs/rerun2/`.
+
 ## Not completed
 
 - `P_NU` (`--no-border-fit`): calibration failed, "the PIGL inversion over the pops of country 222
@@ -29,8 +41,6 @@ Benchmark failures (`crates/ceteris-calibrate/tests/benchmark.rs`):
 - `P_ST` (storage on, ADR 0356): `ceteris calibrate --storage` ran 65 min and failed, "Sinkhorn
   did not converge in 100000 sweeps, residual 1.599e-13". New failure, no fix. Every storage-on
   RFC 0286 screen died at p2_gate.rs:111, "the calibration tables belong to other inputs".
-- H2 distance elasticity: all three runs printed "skipping: no Gravity_csv_V202211.zip" in
-  `data/cache` and passed vacuously. No H2 numbers exist. Needs `ceteris pack fetch` (a download).
 - Brexit, ACR-IO and US-China #245 free-moment rows exist only in the logs' printed tables.
 
 ## Next
