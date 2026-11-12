@@ -35,11 +35,18 @@ use ceteris_trade::{Kernel, TradeParams};
 
 use steady::{CalibrationError, Limits, Steady};
 
-/// Exports the data state of the pack in `pack` into `out`, as `ceteris export --pack` does.
-pub fn export_pack(pack: &Path, out: &Path) -> Result<(), String> {
+/// Exports the data state of the pack in `pack` into `out`, as `ceteris export --pack` does;
+/// `storage` under the approved storage values (`TradeParams::with_storage`), which a
+/// calibration of the export then carries (RFC 0286 screen).
+pub fn export_pack(pack: &Path, out: &Path, storage: bool) -> Result<(), String> {
     let graph = Pack::load(pack, &TransportParams::default()).map_err(|e| e.to_string())?;
     let inputs = EconInputs::from_pack_data(&graph, pack).map_err(|e| e.to_string())?;
-    let (params, trade) = (EconParams::default(), TradeParams::default());
+    let params = EconParams::default();
+    let trade = if storage {
+        TradeParams::default().with_storage()
+    } else {
+        TradeParams::default()
+    };
     let kernel = Kernel::build(&inputs.network, &inputs.weight, &inputs.wedges, &trade);
     write_inputs(out, &inputs, &kernel, &params, &trade).map_err(|e| e.to_string())
 }

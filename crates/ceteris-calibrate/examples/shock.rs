@@ -8,7 +8,8 @@
 //!
 //! SHOCKS is a shock file (`ceteris_calibrate::shock`, countries by ISO3 code), or `-` for none.
 //! Writes `conv.csv` (largest |d ln p| per 50 ticks), `countries.csv`, `goods.csv` and
-//! `flows.csv` (mean flows of the last 12 ticks, at origin prices) into OUT.
+//! `flows.csv` (mean flows of the last 12 ticks, at origin prices) into OUT. The price rule is
+//! `CETERIS_PRICE_ANCHOR` (`off`, `e1` or `e3`; `ceteris_calibrate::benchmark::price_anchor`).
 
 use std::fs;
 use std::io::Write;
@@ -50,7 +51,12 @@ fn main() {
     };
 
     let mut sim = Sim::new(
-        benchmark::world(&pack, &shocks).expect("world"),
+        benchmark::world(
+            &pack,
+            &shocks,
+            benchmark::anchor_from_env().expect("anchor"),
+        )
+        .expect("world"),
         schedule(),
         SEED,
     );

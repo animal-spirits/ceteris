@@ -26,6 +26,7 @@ use ceteris_econ::systems::{SEED, schedule};
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
+use ceteris_trade::{PriceAnchor, TradeParams};
 
 use crate::shock::{self, Shock};
 use crate::write::Table;
@@ -75,8 +76,37 @@ pub fn n_goods(pack: &Path) -> Result<usize, String> {
     Ok(Table::open(&pack.join("econ_goods.arrow"))?.rows())
 }
 
-/// The calibrated world of `pack` with `shocks` applied, frictionless.
-pub fn world(pack: &Path, shocks: &[Shock]) -> Result<EconWorld, String> {
+/// The price rule a pack run takes by name, as `ceteris run --price-anchor` and
+/// [`ANCHOR_VAR`] name it: `off` the stock-flow rule (the default), `e1` the anchored rule of
+/// ADRs 0338 and 0340, `e3` that rule with ADR 0343's package (`PriceAnchor::e3`).
+pub fn price_anchor(name: &str) -> Result<Option<PriceAnchor>, String> {
+    match name {
+        "off" => Ok(None),
+        "e1" => Ok(Some(PriceAnchor::default())),
+        "e3" => Ok(Some(PriceAnchor {
+            e3: true,
+            ..PriceAnchor::default()
+        })),
+        _ => Err(format!("price anchor '{name}': choose off, e1 or e3")),
+    }
+}
+
+/// The environment variable the pack tests read the price rule from ([`price_anchor`]; unset is
+/// `off`), so that one test suite gives each column of the free-moment rerun.
+pub const ANCHOR_VAR: &str = "CETERIS_PRICE_ANCHOR";
+
+/// [`price_anchor`] of [`ANCHOR_VAR`], `off` where it is unset.
+pub fn anchor_from_env() -> Result<Option<PriceAnchor>, String> {
+    std::env::var(ANCHOR_VAR).map_or(Ok(None), |v| price_anchor(&v))
+}
+
+/// The calibrated world of `pack` with `shocks` applied, frictionless, under the price rule
+/// `anchor` (not structural: the calibrated steady state holds under either rule).
+pub fn world(
+    pack: &Path,
+    shocks: &[Shock],
+    anchor: Option<PriceAnchor>,
+) -> Result<EconWorld, String> {
     let graph = Pack::load(pack, &TransportParams::default()).map_err(|e| e.to_string())?;
     let mut inputs = EconInputs::from_pack(&graph, pack).map_err(|e| e.to_string())?;
     if inputs.steady.is_none() {
@@ -84,7 +114,10 @@ pub fn world(pack: &Path, shocks: &[Shock]) -> Result<EconWorld, String> {
     }
     let trade = inputs.trade_params();
     shock::apply(&mut inputs, shocks, &trade);
-    let trade = shock::trade_params(&inputs, trade);
+    let trade = TradeParams {
+        anchor,
+        ..shock::trade_params(&inputs, trade)
+    };
     Ok(EconWorld::new(
         Arc::new(inputs),
         // shocks are read against the steady state, which the initial drift leaves (ADR 0103)
@@ -97,9 +130,14 @@ pub fn world(pack: &Path, shocks: &[Shock]) -> Result<EconWorld, String> {
 }
 
 /// Runs the calibrated pack in `pack` under `shocks` for `ticks` ticks, frictionless from its
-/// steady state.
-pub fn run(pack: &Path, shocks: &[Shock], ticks: u32) -> Result<Outcome, String> {
-    let mut sim = Sim::new(world(pack, shocks)?, schedule(), SEED);
+/// steady state, under the price rule `anchor`.
+pub fn run(
+    pack: &Path,
+    shocks: &[Shock],
+    ticks: u32,
+    anchor: Option<PriceAnchor>,
+) -> Result<Outcome, String> {
+    let mut sim = Sim::new(world(pack, shocks, anchor)?, schedule(), SEED);
     sim.run_until(ticks.saturating_sub(LAST))
         .map_err(|v| v.to_string())?;
     let before = sim.world().markets.price.clone();
