@@ -1,6 +1,6 @@
 # RFC 0349. Government ledger account for the fiscal system
 
-Status: proposed
+Status: accepted
 Date: 2026-11-12
 Design sections: 9.6, 4.6
 Release: 1.0 (P5a)
@@ -38,7 +38,7 @@ Recommendation: A, because it follows the ADR 0100 precedent and keeps the off s
 Decision: B, Antonio, 2026-11-12. Every world opens the accounts; the goldens move once, in a
 reviewed re-bless commit of the wiring PR. With the fiscal system off the accounts stay at zero
 and nothing posts to them, so off equals the re-blessed status quo.
-Row: pending
+Row: ADR 0359
 
 ### D2. Which new Flows does the journal get?
 
@@ -55,7 +55,7 @@ Recommendation: A, because the transactions-flow matrix is built from journal po
 (`specs/money/SPEC.md`) and one Flow per row keeps that build mechanical.
 
 Decision: A, Antonio, 2026-11-12.
-Row: pending
+Row: ADR 0360
 
 ### D3. Where does government spending go, given that ADR 0099 already puts government demand in pops' spending?
 
@@ -73,7 +73,7 @@ Recommendation: C, because A is small and correct in money, and the government a
 belongs with budgets set by the state AI (Section 10, P6).
 
 Decision: C, Antonio, 2026-11-12.
-Row: pending
+Row: ADR 0361
 
 ### D4. Where are taxes collected?
 
@@ -92,7 +92,7 @@ Recommendation: B, because it keeps the tick's money paths untouched and the inc
 enough for 1.0; A can come by its own RFC if validation asks for it.
 
 Decision: B, Antonio, 2026-11-12.
-Row: pending
+Row: ADR 0362
 
 ### D5. How is the deficit financed on the ledger?
 
@@ -107,10 +107,12 @@ Options:
 Recommendation: A, because banks and bonds are not ledger accounts yet and A keeps the money
 anchor of ADR 0338 untouched; monetary financing waits for the central bank balance sheet.
 
-Decision: pending.
-Row: pending
+Decision: A, Antonio, 2026-11-12.
+Row: ADR 0363
 
 ## Spec changes
 
-Filled in once the items are decided: `specs/money/SPEC.md` (state components, fiscal state,
-system 232), spec 09 9.6, spec 04 4.6 (ledger accounts and Flows).
+- 9.6: the government's ledger account, Flows, spending as transfers, collection once per tick
+  and borrowing by a negative balance (ADRs 0359 to 0363).
+- `specs/money/SPEC.md`: fiscal state equations and system 232 read and write sets (ADRs 0359 to
+  0363).
