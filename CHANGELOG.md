@@ -6,8 +6,10 @@
 
 - `EconWorld::with_capital`, off by default: system 234 steps one `investment::Pipeline` per
   enterprise each tick, fully filled, from a fixed order per tick (a stand-in for the 7.4 logit).
-  Nothing reads the capital yet, so the real economy is unchanged on or off. Tagged snapshot
-  section after the state cells one; goldens unchanged with the switch off.
+  Tagged snapshot section after the state cells one; goldens unchanged with the switch off.
+- Production reads the capital (RFC 0351, ADR 0366): A is scaled by `(K/K0)^(1-s_L)`, K0 the stock
+  at switch-on, and `Capital::from_gfcf` orders the GFCF share of final demand times value added
+  per enterprise from its steady state. Off by default, so goldens do not move.
 
 ### Calibration stops at its rounding floors (#552)
 

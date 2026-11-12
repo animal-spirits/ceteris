@@ -353,4 +353,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0363 | [The deficit is financed by borrowing: the government account may go negative, its balance minus the debt; no monetary financing until the central bank balance sheet](../rfcs/0349-government-ledger-account.md) | 9.6 |
 | 0364 | [Free moments are hard gates with fixed pass bands (H2, Brexit, ACR-IO, openness, x10, US-China, PPML theta, short-run elasticity); a miss blocks the gate unless an ADR traces it to an unbuilt mechanism](../rfcs/0350-free-moment-pass-bands.md) | 15.7 |
 | 0365 | [The bands apply from the P4 gate on; the short-run elasticity band from the gate after #200 lands](../rfcs/0350-free-moment-pass-bands.md) | 15.7, 21.1 |
+| 0366 | [Capital enters production as A scaled by (K/K0)^(1-s_L); investment orders use the calibrated GFCF share of final demand times value added per enterprise until the 7.4 logit exists](../rfcs/0351-capital-stock-in-production.md) | 7.4 |
 <!-- rows:end -->

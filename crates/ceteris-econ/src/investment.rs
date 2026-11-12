@@ -6,11 +6,14 @@
 //! queue, so `k = 1, T = 1, lag = 0` is the instant rule. The kernel is not yet in the tick;
 //! paused work-in-progress depreciation, cash calls and write-offs wait on Branch F.
 //! In the tick as system 234, off by default (`EconWorld::with_capital`, #534): one pipeline per
-//! enterprise, fed a fixed order per tick, fully filled; nothing reads the capital yet.
+//! enterprise, fully filled. Production reads the capital: A scales by `(K/K0)^(1-s_L)`
+//! (`Capital::factor`), K0 the stock at switch-on.
 
 use std::collections::VecDeque;
 
 use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
+
+use crate::inputs::EconInputs;
 
 /// Opens the capital section of a snapshot, which follows the state cells one.
 pub const SNAPSHOT_TAG: u32 = 0x3A6E_6F04;
@@ -218,9 +221,59 @@ impl Pipeline {
 pub struct Capital {
     pub pipelines: Vec<Pipeline>,
     pub order: Vec<f64>,
+    /// Each pipeline's capital at switch-on, the reference of [`Capital::factor`].
+    base: Vec<f64>,
 }
 
 impl Capital {
+    pub fn new(pipelines: Vec<Pipeline>, order: Vec<f64>) -> Self {
+        assert_eq!(pipelines.len(), order.len());
+        let base = pipelines.iter().map(Pipeline::capital).collect();
+        Self {
+            pipelines,
+            order,
+            base,
+        }
+    }
+
+    /// The data state: each enterprise orders the GFCF share of its good's final demand in
+    /// its country (`inv / omega`) times its value added every tick, from the steady state that
+    /// order sustains (ADR 0204; a stand-in for the 7.4 logit). Empty `inv` gives no orders.
+    pub fn from_gfcf(
+        inp: &EconInputs,
+        stages: usize,
+        mean_time: f64,
+        delta: f64,
+        permit_lag: usize,
+    ) -> Self {
+        let order: Vec<f64> = (0..inp.n_enterprises())
+            .map(|e| {
+                let c = inp.country_of(inp.enterprises.province[e] as usize);
+                let g = usize::from(inp.enterprises.good[e]);
+                let cs = &inp.countries;
+                if cs.inv.is_empty() || cs.omega[c][g] <= 0.0 {
+                    return 0.0;
+                }
+                cs.inv[c][g] / cs.omega[c][g] * inp.enterprises.va0[e]
+            })
+            .collect();
+        let pipelines = order
+            .iter()
+            .map(|&i| Pipeline::steady_state(stages, mean_time, delta, permit_lag, i, &[]))
+            .collect();
+        Self::new(pipelines, order)
+    }
+
+    /// Enterprise `e`'s capital factor on A, `(K/K0)^(1-s_L)`; 1 without a base stock.
+    pub fn factor(&self, e: usize, s_l: f64) -> f64 {
+        let k0 = self.base[e];
+        if k0 > 0.0 {
+            libm::pow(self.pipelines[e].capital() / k0, 1.0 - s_l)
+        } else {
+            1.0
+        }
+    }
+
     /// Advances every pipeline one tick, fully filled; returns total capital after the step.
     pub fn step(&mut self) -> f64 {
         let mut total = 0.0;
@@ -244,6 +297,7 @@ impl Capital {
             p.encode(e);
         }
         e.f64s(&self.order);
+        e.f64s(&self.base);
     }
 
     pub fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
@@ -258,7 +312,15 @@ impl Capital {
         if order.len() != n {
             return Err(DecodeError("capital orders".into()));
         }
-        Ok(Self { pipelines, order })
+        let base = d.f64s()?;
+        if base.len() != n {
+            return Err(DecodeError("capital base".into()));
+        }
+        Ok(Self {
+            pipelines,
+            order,
+            base,
+        })
     }
 }
 
