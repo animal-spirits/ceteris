@@ -568,12 +568,11 @@ pub fn invert_pigl_pops(
             .filter(|&g| share[g] > 0.0)
             .map(rel)
             .fold(0.0, f64::max);
-        // A good's aggregate is a sum over pops of shares carrying an absolute rounding of
-        // order eps each, so its relative miss floors at eps sqrt(pops) over its category's
-        // share (country 222: 4.8e-12 on a services share of 1e-3).
-        let floored = (0..n).filter(|&g| share[g] > 0.0).all(|g| {
-            rel(g) <= 1e-12_f64.max(4.0 * f64::EPSILON * (pops.len() as f64).sqrt() / cat[of(g)])
-        });
+        // A good's aggregate sums pops shares each carrying an absolute rounding of order eps:
+        // a relative 16 eps pops / cat (country 222: 4.8e-12 over 333 pops, cat 0.13).
+        let floored = (0..n)
+            .filter(|&g| share[g] > 0.0)
+            .all(|g| rel(g) <= 1e-12_f64.max(16.0 * f64::EPSILON * pops.len() as f64 / cat[of(g)]));
         if miss <= 1e-14 || (floored && stalled >= 20) {
             return w;
         }

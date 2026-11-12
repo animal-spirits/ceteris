@@ -200,6 +200,13 @@ const MAX_DOUBLINGS: usize = 64;
 /// Largest relative miss of an aggregate good share at which [`invert_pops`] stops.
 const SHARE_TOL: f64 = 1e-14;
 
+/// The relative miss below which a stalled [`invert_pops`] stops: a good's aggregate sums
+/// `pops` shares each carrying an absolute rounding of order eps, a relative 16 eps pops / cat
+/// of its category's share `cat` (country 222: 4.8e-12 over 333 pops, cat 0.13), at least 1e-12.
+fn rounding_floor(pops: usize, cat: f64) -> f64 {
+    1e-12_f64.max(16.0 * f64::EPSILON * pops as f64 / cat)
+}
+
 /// ADR 0094, Amendment: per country, the weights at which its pops' PIGL shares, each pop at its
 /// own buyer prices, income per person and the country's within-pop dispersion `sigma` (C,),
 /// weighted by their spending, are its final demand shares `omega` (normalized). Rounds of two
@@ -571,11 +578,15 @@ impl Country<'_> {
                     model[g] += spend(i) * shares[i][self.category[g]] * f.within[g];
                 }
             }
+            let rel = |g: usize| (model[g] / total / self.om[g] - 1.0).abs();
             let miss = (0..n_g)
                 .filter(|&g| self.om[g] > 0.0)
-                .map(|g| (model[g] / total / self.om[g] - 1.0).abs())
+                .map(rel)
                 .fold(0.0f64, f64::max);
-            if miss <= SHARE_TOL || (miss <= 1e-12 && stalled >= 20) {
+            let floored = (0..n_g)
+                .filter(|&g| self.om[g] > 0.0)
+                .all(|g| rel(g) <= rounding_floor(fixed.len(), self.cat[self.category[g]]));
+            if miss <= SHARE_TOL || (floored && stalled >= 20) {
                 return Ok((lambda, weights(bind, t), alpha));
             }
             if miss < best {
@@ -739,4 +750,16 @@ pub fn quantities(share: &Mat, price: &Mat, money: &[f64]) -> Mat {
             0.0
         }
     })
+}
+
+#[cfg(test)]
+mod floor_tests {
+    use super::rounding_floor;
+
+    /// Country 222 of the pack: 333 pops, category share 0.13, a stalled miss of 4.8e-12.
+    #[test]
+    fn rounding_floor_covers_the_country_222_stall() {
+        assert!(rounding_floor(333, 0.130_148_289) > 4.8e-12);
+        assert!(rounding_floor(1, 0.5) == 1e-12);
+    }
 }
