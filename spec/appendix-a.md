@@ -343,4 +343,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0353 | [Wire-or-park: no new P4/P5 kernel until each unwired kernel has a wiring issue; at most three kernels unwired at a time](../rfcs/0345-retrospective-process-laws.md) | 21.2 |
 | 0354 | [At each phase gate every off-by-default switch becomes the default, gets a dated issue, or is deleted](../rfcs/0345-retrospective-process-laws.md) | 21.2 |
 | 0355 | [Antonio alone decides spec, RFC and research questions; threads merge those PRs on green](../rfcs/0345-retrospective-process-laws.md) | 21.2 |
+| 0356 | [EIA International Energy Statistics calibrates the energy rows in all packs; IEA balances stay held out](../rfcs/0346-eia-calibrates-energy-iea-held-out.md) | 7.7, 15.4 |
 <!-- rows:end -->
