@@ -80,8 +80,8 @@ rules (Section 10). Energy wedges and state energy cells (ADR 0278) enter as per
 profits to the government account. The government account is a ledger account per country
 (ADR 0359) with Flows TAX, GOV_TRANSFER and GOV_INTEREST (ADR 0360); spending is paid to pops as
 transfers by population (ADR 0361); taxes are collected once per tick after E4, income and payroll
-from pops by wage income, VAT from pops by spending, corporate from the profit pool, split by
-largest remainder (ADR 0362); the deficit is borrowing, the account's balance minus the debt
+from pops on their wage income, VAT from pops on their spending, each split by largest remainder,
+and corporate tax from the profit pool at E4 before it pays out (ADR 0362); the deficit is borrowing, the account's balance minus the debt
 (ADR 0363). Public capital: `A = A_cal (K_g / K_g0)^P173`, public investment
 times an efficiency factor from PIMA scores and governance (P174); the rest is lost. r minus g is
 reported per state.
@@ -139,7 +139,7 @@ the tick (E4) and population, and before the next tick's E1.
 |---|---|---|---|---|---|
 | 230 | policy and regimes | monthly | pi, y, reserves, r* | policy rate, regime | after 228 |
 | 231 | r* filter (B3) | yearly | pi, y, i | filter state | after 230 |
-| 232 | fiscal collection and spending | monthly | Base, kappa, rules, pop and profit-pool accounts | government ledger account, pop accounts, profit pools, kappa, K_g | after 230 |
+| 232 | fiscal collection and spending | monthly | Base, kappa, rules, pop accounts | government ledger account, pop accounts, kappa, K_g (corporate tax: E4 writes the profit pools and the government account) | after 230 |
 | 233 | investment financing | monthly | orders, credit | pipeline, loans | after 232 |
 | 234 | demand-system clearing | monthly | holdings, eta, expectations | P, Q, FX | after 233 |
 | 235 | banks and contagion | monthly, inside 234's loop | B, P | bank books, runs | with 234 |

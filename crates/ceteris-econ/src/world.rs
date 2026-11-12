@@ -82,6 +82,10 @@ pub const MINT: Flow = Flow(8);
 pub const WRITE_OFF: Flow = Flow(9);
 pub const TRANSFER: Flow = Flow(10);
 pub const FOREIGN_DIVIDEND: Flow = Flow(11);
+/// Fiscal Flows (ADR 0360): taxes to, transfers and interest from the government account.
+pub const TAX: Flow = Flow(12);
+pub const GOV_TRANSFER: Flow = Flow(13);
+pub const GOV_INTEREST: Flow = Flow(14);
 
 /// A numeraire amount as ledger minor units, rounded half to even.
 pub fn to_minor(value: f64) -> i64 {
@@ -136,6 +140,10 @@ pub struct Accounts {
     /// foreign-owned share is nonzero, after the transfer account, so a world without foreign
     /// owners keeps its ledger.
     pub foreign: Option<AccountId>,
+    /// Per country: the government account of the fiscal system (ADR 0359), opened in every
+    /// world after the foreign account; zero and untouched with the fiscal system off, negative
+    /// by the debt when it borrows (ADR 0363).
+    pub government: Vec<AccountId>,
 }
 
 /// Static structure derived at load from the inputs and parameters: never in snapshots,
@@ -714,6 +722,9 @@ pub struct EconWorld {
     pub wage_grid: Option<WageGrid>,
     /// Central banks of system 230; `None` is off.
     pub monetary: Option<crate::monetary::Policy>,
+    /// Government accounts of system 232; `None` is off. Its section is tagged and after the
+    /// monetary one.
+    pub fiscal: Option<crate::fiscal::Government>,
     /// Endemic disease and its coverage levers per province (P4 B2); needs `pop`. Prevalence adds
     /// excess deaths in the demography step. `None` is off and adds nothing to the snapshot.
     pub disease: Option<(Disease, Coverage)>,
@@ -1400,6 +1411,23 @@ impl EconWorld {
         self
     }
 
+    /// Switches the government accounts (system 232) on, one per country.
+    pub fn with_fiscal(mut self, government: crate::fiscal::Government) -> EconWorld {
+        assert_eq!(government.fiscal.len(), self.inputs.n_countries());
+        let unit = |x: f64| (0.0..=1.0).contains(&x);
+        for f in &government.fiscal {
+            assert!(unit(f.compliance), "fiscal compliance outside [0, 1]");
+            for x in &f.instruments {
+                assert!(
+                    unit(x.rate) && unit(x.informality) && unit(x.capacity),
+                    "fiscal rate, informality or capacity outside [0, 1]"
+                );
+            }
+        }
+        self.fiscal = Some(government);
+        self
+    }
+
     /// [`EconWorld::new`] on a kernel built from these inputs and trade parameters, which
     /// worlds of equal trade parameters share (ADR 0024).
     pub fn with_kernel(
@@ -1435,6 +1463,7 @@ impl EconWorld {
             mint: ledger.open_wide(),
             transfer: transfers_on(inp, &params).then(|| ledger.open_wide()),
             foreign: inp.has_foreign().then(|| ledger.open_wide()),
+            government: open_wide_n(&mut ledger, nc),
         };
 
         let edu_eff = |k: usize| params.edu_eff[usize::from(inp.pops.edu[k])];
@@ -1480,6 +1509,7 @@ impl EconWorld {
             settlement: None,
             wage_grid: None,
             monetary: None,
+            fiscal: None,
             disease: None,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -2415,11 +2445,21 @@ impl Encode for EconWorld {
         if let Some(m) = &self.monetary {
             m.encode(e);
         }
+        if let Some(g) = &self.fiscal {
+            g.encode(e);
+        }
     }
 }
 
 fn monetary_next(d: &Decoder) -> bool {
     d.peek_count() == Ok(crate::monetary::SNAPSHOT_TAG as usize)
+}
+
+/// Whether one of the tagged sections that close the snapshot comes next.
+fn tagged_next(d: &Decoder) -> bool {
+    wage_grid_next(d)
+        || monetary_next(d)
+        || d.peek_count() == Ok(crate::fiscal::SNAPSHOT_TAG as usize)
 }
 
 fn wage_grid_next(d: &Decoder) -> bool {
@@ -2767,7 +2807,7 @@ impl State for EconWorld {
         let wage_clip_ticks = d.u32s()?;
         let lagged = d.f64s()?;
         let smooth_state = d.f64s()?;
-        let pop = if d.at_end() || wage_grid_next(d) || monetary_next(d) {
+        let pop = if d.at_end() || tagged_next(d) {
             None
         } else {
             Some(Demography::decode(d)?)
@@ -2780,26 +2820,36 @@ impl State for EconWorld {
         } else {
             None
         };
-        let migration = if pop.is_some() && !d.at_end() && !wage_grid_next(d) && !monetary_next(d) {
+        let migration = if pop.is_some() && !d.at_end() && !tagged_next(d) {
             Some(Migration::decode(d)?)
         } else {
             None
         };
-        let settlement =
-            if migration.is_some() && !d.at_end() && !wage_grid_next(d) && !monetary_next(d) {
-                Some(Settlement::decode(d)?)
-            } else {
-                None
-            };
+        let settlement = if migration.is_some() && !d.at_end() && !tagged_next(d) {
+            Some(Settlement::decode(d)?)
+        } else {
+            None
+        };
         let wage_grid = if wage_grid_next(d) {
             Some(WageGrid::decode(d)?)
         } else {
             None
         };
-        let monetary = if d.at_end() {
+        let monetary = if monetary_next(d) {
+            Some(crate::monetary::Policy::decode(d)?)
+        } else {
+            None
+        };
+        let fiscal = if d.at_end() {
             None
         } else {
-            Some(crate::monetary::Policy::decode(d)?)
+            let g = crate::fiscal::Government::decode(d)?;
+            expect_len(
+                "fiscal countries",
+                g.fiscal.len(),
+                self.inputs.n_countries(),
+            )?;
+            Some(g)
         };
 
         let inp = &*self.inputs;
@@ -2866,6 +2916,7 @@ impl State for EconWorld {
             settlement,
             wage_grid,
             monetary,
+            fiscal,
             disease,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -3061,6 +3112,7 @@ mod tests {
             .map(|a| a.0)
             .collect();
         all.push(acc.mint.0);
+        all.extend(acc.government.iter().map(|a| a.0));
         assert_eq!(all, (0..all.len() as u32).collect::<Vec<_>>());
     }
 
@@ -3653,6 +3705,108 @@ mod tests {
         let (bytes, back) = round_trip(w);
         assert_eq!(canonical(12, &back), bytes);
         assert_eq!(back.monetary, w.monetary);
+    }
+
+    fn government(nc: usize) -> crate::fiscal::Government {
+        use crate::fiscal::{
+            CORPORATE, Fiscal, Government, Instrument, N_REVENUE, PERSONAL_INCOME, VAT,
+        };
+        let mut instruments = [Instrument {
+            rate: 0.0,
+            base: 0,
+            informality: 0.0,
+            capacity: 0.0,
+        }; N_REVENUE];
+        for (i, rate) in [(PERSONAL_INCOME, 0.2), (VAT, 0.15), (CORPORATE, 0.25)] {
+            instruments[i] = Instrument {
+                rate,
+                base: 0,
+                informality: 0.2,
+                capacity: 0.6,
+            };
+        }
+        let fiscal = Fiscal {
+            instruments,
+            compliance: 0.9,
+            depreciation: 0.001,
+            build_rate: 0.5,
+            debt: 0,
+        };
+        let mut capacity = [0.0; N_REVENUE];
+        capacity[VAT] = 0.02;
+        Government::uniform(
+            nc,
+            fiscal,
+            [0.3, 0.2, 0.2, 0.2, 0.1, 0.05, 0.05],
+            capacity,
+            0.004,
+        )
+    }
+
+    /// With the fiscal system off the government accounts stay at zero; on, each country collects
+    /// revenue from the tick's bases, runs the 10% deficit its spending shares imply into debt
+    /// that its ledger account holds as a negative balance and its balance sheet as bonds,
+    /// builds VAT capacity, moves pops' money and so the real economy, and the section survives a
+    /// snapshot next to the monetary one.
+    #[test]
+    fn fiscal_off_equals_status_quo_and_on_books_the_government_account() {
+        use crate::fiscal::{CORPORATE, PERSONAL_INCOME, VAT};
+        use crate::sfc::{BONDS, GOVERNMENT};
+        let mut off = Sim::new(world(), crate::systems::schedule(), crate::systems::SEED);
+        let w = monetary_sim().world().clone();
+        let nc = w.inputs().n_countries();
+        let mut on = Sim::new(
+            w.with_fiscal(government(nc)),
+            crate::systems::schedule(),
+            crate::systems::SEED,
+        );
+        off.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        on.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        let w = on.world();
+        let quo = off.world();
+        for &a in &quo.layout.accounts.government {
+            assert_eq!(quo.ledger.money_wide(a), 0);
+        }
+        let pops = |w: &EconWorld| -> Vec<i64> {
+            w.layout
+                .accounts
+                .pop
+                .iter()
+                .map(|&a| w.ledger.money(a))
+                .collect()
+        };
+        assert_ne!(pops(w), pops(quo));
+        assert_ne!(w.employment, quo.employment);
+        let g = w.fiscal.as_ref().unwrap();
+        for ((f, sheet), &a) in g
+            .fiscal
+            .iter()
+            .zip(&g.sheets)
+            .zip(&w.layout.accounts.government)
+        {
+            assert_eq!(w.ledger.money_wide(a), -f.debt);
+            for i in [PERSONAL_INCOME, VAT, CORPORATE] {
+                assert!(f.instruments[i].base > 0, "instrument {i} has no base");
+            }
+            assert!(f.total_revenue() > 0);
+            assert!(f.debt > 0);
+            assert_eq!(sheet.positions[BONDS][GOVERNMENT], -f.debt);
+            assert!(sheet.rows_close());
+            assert!(f.instruments[VAT].capacity > 0.6);
+            assert!(f.instruments[PERSONAL_INCOME].capacity < 0.6);
+        }
+        let (bytes, back) = round_trip(w);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.fiscal.as_ref(), Some(g));
+        assert_eq!(back.monetary, w.monetary);
+    }
+
+    #[test]
+    fn fiscal_off_adds_nothing_to_the_snapshot() {
+        let a = canonical(12, &world());
+        let mut w = world();
+        w.fiscal = None;
+        assert_eq!(canonical(12, &w), a);
     }
 
     #[test]

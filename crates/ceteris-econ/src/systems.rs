@@ -39,9 +39,9 @@ use crate::production::{
     value_added,
 };
 use crate::world::{
-    Accounts, Buyer, DIVIDEND, EconWorld, FOREIGN_DIVIDEND, Layout, LocalClear, Order, PURCHASE,
-    Payments, REBATE, SALE, SPEND_BLOCK, TARIFF, TRADE, TRANSFER, WAGE, WRITE_OFF, adjust_stock,
-    to_minor, to_numeraire,
+    Accounts, Buyer, DIVIDEND, EconWorld, FOREIGN_DIVIDEND, GOV_INTEREST, GOV_TRANSFER, Layout,
+    LocalClear, Order, PURCHASE, Payments, REBATE, SALE, SPEND_BLOCK, TARIFF, TAX, TRADE, TRANSFER,
+    WAGE, WRITE_OFF, adjust_stock, to_minor, to_numeraire,
 };
 
 /// P149 months of use an enterprise keeps in stock beyond replacement and transit (owner
@@ -103,6 +103,7 @@ pub fn schedule() -> Schedule<EconWorld> {
         def(227, "migration", |w, ctx| migration(w, ctx.tick)),
         def(229, "settlement", |w, _| settlement(w)),
         def(230, "monetary", monetary),
+        def(232, "fiscal", |w, _| fiscal(w)),
         def(210, "assert", |w, ctx| assert_invariants(w, ctx.tick)),
     ])
 }
@@ -1691,6 +1692,18 @@ pub fn distribute(w: &mut EconWorld, tick: u32) {
             }
         }
     }
+    if let Some(government) = &mut w.fiscal {
+        for (c, (&pool, &gov)) in acc.dividend.iter().zip(&acc.government).enumerate() {
+            let base = if lay.country_pops[c].is_empty() {
+                0
+            } else {
+                w.ledger.money_wide(pool).max(0)
+            };
+            let tax = government.corporate_tax(c, base);
+            let tax = i64::try_from(tax).expect("ledger overflow: corporate tax beyond i64");
+            pay(&mut w.ledger, TAX, pool, gov, tax);
+        }
+    }
     for (c, pops) in lay.country_pops.iter().enumerate() {
         for (flow, payer) in [(DIVIDEND, acc.dividend[c]), (REBATE, acc.rebate[c])] {
             // the pool by dividend share (by wealth, ADR 0104), the rebate by population
@@ -2049,6 +2062,112 @@ pub fn monetary(w: &mut EconWorld, ctx: &Ctx) {
                 })
                 .collect();
             policy.switch_regimes(&u);
+        }
+    }
+}
+
+/// System 232 (`specs/money/SPEC.md`, P5 C1; ADRs 0359 to 0363): monthly collection and
+/// spending through each country's government account. The income and payroll base is the pops'
+/// wage income (their province's wage bill by effective labour, as the E-step splits it), the
+/// VAT base their spending; corporate tax was collected from the profit pool at E4
+/// ([`distribute`]). Each of these taxes is taken from the pops of its base by
+/// [`largest_remainder`] over their minor-unit amounts; any other instrument from pops by
+/// population (#546). Spending is paid to pops by population and interest by dividend share
+/// ([`split`], as the E4 payouts). The deficit leaves the account negative. A country without
+/// pops has no base and no budget. A no-op when the fiscal system is off.
+pub fn fiscal(w: &mut EconWorld) {
+    use crate::fiscal::{CORPORATE, N_REVENUE, PAYROLL, PERSONAL_INCOME, VAT};
+    let Some(government) = &mut w.fiscal else {
+        return;
+    };
+    let (inp, lay) = (&*w.inputs, &*w.layout);
+    let (ng, n_pops) = (inp.n_goods(), inp.n_pops());
+    let mut province_bill = vec![0.0; inp.n_provinces()];
+    for (e, &p) in inp.enterprises.province.iter().enumerate() {
+        province_bill[p as usize] += w.wage[p as usize] * w.employment[e];
+    }
+    let effective: Vec<f64> = (0..n_pops)
+        .map(|k| w.params.edu_eff[usize::from(inp.pops.edu[k])] * w.employed[k])
+        .collect();
+    let mut province_effective = vec![0.0; inp.n_provinces()];
+    for (k, &x) in effective.iter().enumerate() {
+        province_effective[inp.pops.province[k] as usize] += x;
+    }
+    let wage_income: Vec<i64> = (0..n_pops)
+        .map(|k| {
+            let i = inp.pops.province[k] as usize;
+            if province_effective[i] > 0.0 {
+                to_minor(province_bill[i] * effective[k] / province_effective[i])
+            } else {
+                0
+            }
+        })
+        .collect();
+    let spending: Vec<i64> = w
+        .scratch
+        .pop_spend
+        .chunks(ng)
+        .map(|x| to_minor(x.iter().sum::<f64>()))
+        .collect();
+    let base = |amounts: &[i64], pops: &[u32]| -> i128 {
+        pops.iter().map(|&k| i128::from(amounts[k as usize])).sum()
+    };
+    let bases: Vec<[Option<i128>; N_REVENUE]> = lay
+        .country_pops
+        .iter()
+        .map(|pops| {
+            if pops.is_empty() {
+                return [Some(0); N_REVENUE];
+            }
+            let mut b = [None; N_REVENUE];
+            b[PERSONAL_INCOME] = Some(base(&wage_income, pops));
+            b[PAYROLL] = b[PERSONAL_INCOME];
+            b[VAT] = Some(base(&spending, pops));
+            b
+        })
+        .collect();
+    let budgets = government.step(&bases);
+
+    let acc = &lay.accounts;
+    let (mut weights, mut parts) = (Vec::new(), Vec::new());
+    for (c, (b, pops)) in budgets.iter().zip(&lay.country_pops).enumerate() {
+        let gov = acc.government[c];
+        for (tax, amounts) in [
+            (b.revenue[PERSONAL_INCOME], &wage_income),
+            (b.revenue[PAYROLL], &wage_income),
+            (b.revenue[VAT], &spending),
+        ] {
+            weights.clear();
+            weights.extend(pops.iter().map(|&k| amounts[k as usize]));
+            largest_remainder(tax, &weights, &mut parts);
+            for (&k, &part) in pops.iter().zip(&parts) {
+                pay(&mut w.ledger, TAX, acc.pop[k as usize], gov, part);
+            }
+        }
+        let other: i128 = (0..N_REVENUE)
+            .filter(|&r| ![PERSONAL_INCOME, PAYROLL, VAT, CORPORATE].contains(&r))
+            .map(|r| b.revenue[r])
+            .sum();
+        let population = pops.iter().map(|&k| inp.pops.population[k as usize]);
+        let wealth = pops.iter().map(|&k| {
+            let k = k as usize;
+            if inp.pops.dividend.is_empty() {
+                inp.pops.population[k]
+            } else {
+                inp.pops.dividend[k]
+            }
+        });
+        split(other, population.clone(), &mut parts);
+        for (&k, &part) in pops.iter().zip(&parts) {
+            pay(&mut w.ledger, TAX, acc.pop[k as usize], gov, part);
+        }
+        split(b.spending, population, &mut parts);
+        for (&k, &part) in pops.iter().zip(&parts) {
+            pay(&mut w.ledger, GOV_TRANSFER, gov, acc.pop[k as usize], part);
+        }
+        split(b.interest, wealth, &mut parts);
+        for (&k, &part) in pops.iter().zip(&parts) {
+            pay(&mut w.ledger, GOV_INTEREST, gov, acc.pop[k as usize], part);
         }
     }
 }
