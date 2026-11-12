@@ -712,6 +712,8 @@ pub struct EconWorld {
     /// Wages per (province, sector, skill) beside `wage` (P4 C1/C2, system 225). `None` is off
     /// and adds nothing to the snapshot; its section is tagged and last.
     pub wage_grid: Option<WageGrid>,
+    /// Central banks of system 230; `None` is off.
+    pub monetary: Option<crate::monetary::Policy>,
     /// Endemic disease and its coverage levers per province (P4 B2); needs `pop`. Prevalence adds
     /// excess deaths in the demography step. `None` is off and adds nothing to the snapshot.
     pub disease: Option<(Disease, Coverage)>,
@@ -1391,6 +1393,13 @@ impl EconWorld {
         self
     }
 
+    /// Switches monetary policy (system 230) on, one bank per country.
+    pub fn with_monetary(mut self, policy: crate::monetary::Policy) -> EconWorld {
+        assert_eq!(policy.banks.len(), self.inputs.n_countries());
+        self.monetary = Some(policy);
+        self
+    }
+
     /// [`EconWorld::new`] on a kernel built from these inputs and trade parameters, which
     /// worlds of equal trade parameters share (ADR 0024).
     pub fn with_kernel(
@@ -1470,6 +1479,7 @@ impl EconWorld {
             migration: None,
             settlement: None,
             wage_grid: None,
+            monetary: None,
             disease: None,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -2402,7 +2412,14 @@ impl Encode for EconWorld {
         if let Some(g) = &self.wage_grid {
             g.encode(e);
         }
+        if let Some(m) = &self.monetary {
+            m.encode(e);
+        }
     }
+}
+
+fn monetary_next(d: &Decoder) -> bool {
+    d.peek_count() == Ok(crate::monetary::SNAPSHOT_TAG as usize)
 }
 
 fn wage_grid_next(d: &Decoder) -> bool {
@@ -2750,7 +2767,7 @@ impl State for EconWorld {
         let wage_clip_ticks = d.u32s()?;
         let lagged = d.f64s()?;
         let smooth_state = d.f64s()?;
-        let pop = if d.at_end() || wage_grid_next(d) {
+        let pop = if d.at_end() || wage_grid_next(d) || monetary_next(d) {
             None
         } else {
             Some(Demography::decode(d)?)
@@ -2763,20 +2780,26 @@ impl State for EconWorld {
         } else {
             None
         };
-        let migration = if pop.is_some() && !d.at_end() && !wage_grid_next(d) {
+        let migration = if pop.is_some() && !d.at_end() && !wage_grid_next(d) && !monetary_next(d) {
             Some(Migration::decode(d)?)
         } else {
             None
         };
-        let settlement = if migration.is_some() && !d.at_end() && !wage_grid_next(d) {
-            Some(Settlement::decode(d)?)
+        let settlement =
+            if migration.is_some() && !d.at_end() && !wage_grid_next(d) && !monetary_next(d) {
+                Some(Settlement::decode(d)?)
+            } else {
+                None
+            };
+        let wage_grid = if wage_grid_next(d) {
+            Some(WageGrid::decode(d)?)
         } else {
             None
         };
-        let wage_grid = if d.at_end() {
+        let monetary = if d.at_end() {
             None
         } else {
-            Some(WageGrid::decode(d)?)
+            Some(crate::monetary::Policy::decode(d)?)
         };
 
         let inp = &*self.inputs;
@@ -2842,6 +2865,7 @@ impl State for EconWorld {
             migration,
             settlement,
             wage_grid,
+            monetary,
             disease,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -3476,6 +3500,52 @@ mod tests {
         let (bytes, back) = round_trip(w);
         assert_eq!(canonical(12, &back), bytes);
         assert_eq!(back.wage_grid.as_ref(), Some(g));
+    }
+
+    fn monetary_sim() -> Sim<EconWorld> {
+        use crate::monetary::{Policy, Rule};
+        let w = world();
+        let rule = Rule {
+            r_star: 0.02,
+            a_pi: 0.5,
+            a_y: 0.5,
+            pi_star: 0.02,
+            lower_bound: 0.0,
+        };
+        let nc = w.inputs().n_countries();
+        Sim::new(
+            w.with_monetary(Policy::floating(nc, rule)),
+            crate::systems::schedule(),
+            crate::systems::SEED,
+        )
+    }
+
+    /// With policy off the run is the status quo; on, the real economy is untouched, each country
+    /// gets a rate that moves off its start value, and the section survives a snapshot.
+    #[test]
+    fn monetary_off_equals_status_quo_and_on_sets_policy_rates() {
+        let mut off = Sim::new(world(), crate::systems::schedule(), crate::systems::SEED);
+        let mut on = monetary_sim();
+        let start = on.world().monetary.clone().unwrap().rates;
+        off.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        on.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+        let w = on.world();
+        assert_eq!(w.wage, off.world().wage);
+        assert_eq!(w.employment, off.world().employment);
+        let m = w.monetary.as_ref().unwrap();
+        assert_ne!(m.rates, start);
+        assert!(m.rates.iter().all(|r| r.is_finite()));
+        let (bytes, back) = round_trip(w);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.monetary.as_ref(), Some(m));
+    }
+
+    #[test]
+    fn monetary_off_adds_nothing_to_the_snapshot() {
+        let a = canonical(12, &world());
+        let mut w = world();
+        w.monetary = None;
+        assert_eq!(canonical(12, &w), a);
     }
 
     #[test]

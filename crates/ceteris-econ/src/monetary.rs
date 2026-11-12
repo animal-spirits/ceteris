@@ -3,6 +3,10 @@
 //! purchases at the bound, hard-peg defence from reserves, union and dollarized members taking the
 //! anchor's rate. The kernel is not yet in the tick.
 
+use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
+
+pub const SNAPSHOT_TAG: u32 = 0x3A6E_6D01;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rule {
     /// Neutral real rate; the 2000 value is P35's intercept, later the HLW filter state.
@@ -99,6 +103,131 @@ pub fn policy_rates(
             Regime::Follower { anchor } => own(anchor).unwrap_or(0.0),
         })
         .collect()
+}
+
+/// Per-country policy state of system 230: one bank per country and the rate it set last month.
+/// Inflation is the annualised log change of the country's consumption-weighted buyer price
+/// level; the output gap is the log of employment against its level at the first step (a
+/// labour-input proxy; the potential-output filter is not built). FX pressure on pegs is zero
+/// until the exchange-rate system exists, so no peg is defended yet.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Policy {
+    pub banks: Vec<CentralBank>,
+    /// Policy rate per country, annual, as of the last step.
+    pub rates: Vec<f64>,
+    /// Asset-purchase intensity per country at the last step.
+    pub purchases: Vec<f64>,
+    /// Price level and employment at the previous step; empty before the first.
+    pub level: Vec<f64>,
+    pub base_employment: Vec<f64>,
+}
+
+impl Policy {
+    pub fn floating(n_countries: usize, rule: Rule) -> Self {
+        let bank = CentralBank {
+            regime: Regime::Float(rule),
+            reserves: 0.0,
+            short_term_external_debt: 1.0,
+        };
+        Self {
+            banks: vec![bank; n_countries],
+            rates: vec![rule.rate(rule.pi_star, 0.0); n_countries],
+            purchases: vec![0.0; n_countries],
+            level: Vec::new(),
+            base_employment: Vec::new(),
+        }
+    }
+
+    /// One month: sets every bank's rate from `price_level` and `employment` per country.
+    pub fn step(&mut self, price_level: &[f64], employment: &[f64]) {
+        let n = self.banks.len();
+        if self.level.is_empty() {
+            self.level = price_level.to_vec();
+            self.base_employment = employment.to_vec();
+            return;
+        }
+        let pi: Vec<f64> = (0..n)
+            .map(|c| 12.0 * libm::log(price_level[c] / self.level[c]))
+            .collect();
+        let y_gap: Vec<f64> = (0..n)
+            .map(|c| libm::log(employment[c] / self.base_employment[c]))
+            .collect();
+        self.rates = policy_rates(&self.banks, &pi, &y_gap, &vec![0.0; n]);
+        self.purchases = (0..n)
+            .map(|c| match self.banks[c].regime {
+                Regime::Float(rule) => rule.purchases(pi[c], y_gap[c]),
+                _ => 0.0,
+            })
+            .collect();
+        self.level = price_level.to_vec();
+    }
+
+    pub fn encode(&self, e: &mut Encoder) {
+        e.u32(SNAPSHOT_TAG);
+        let rule = |r: &Rule| [r.r_star, r.a_pi, r.a_y, r.pi_star, r.lower_bound];
+        let mut bank = Vec::new();
+        for b in &self.banks {
+            let (kind, anchor, premium, active, fallback) = match b.regime {
+                Regime::Float(r) => (0.0, 0, 0.0, rule(&r), [0.0; 5]),
+                Regime::HardPeg {
+                    anchor,
+                    fallback,
+                    defence_premium,
+                } => (1.0, anchor, defence_premium, [0.0; 5], rule(&fallback)),
+                Regime::Follower { anchor } => (2.0, anchor, 0.0, [0.0; 5], [0.0; 5]),
+            };
+            bank.extend([kind, anchor as f64, premium]);
+            bank.extend(active);
+            bank.extend(fallback);
+            bank.extend([b.reserves, b.short_term_external_debt]);
+        }
+        e.f64s(&bank);
+        e.f64s(&self.rates);
+        e.f64s(&self.purchases);
+        e.f64s(&self.level);
+        e.f64s(&self.base_employment);
+    }
+
+    pub fn decode(d: &mut Decoder) -> Result<Self, DecodeError> {
+        if d.u32()? != SNAPSHOT_TAG {
+            return Err(DecodeError("monetary section tag".into()));
+        }
+        let bank = d.f64s()?;
+        let rule = |s: &[f64]| Rule {
+            r_star: s[0],
+            a_pi: s[1],
+            a_y: s[2],
+            pi_star: s[3],
+            lower_bound: s[4],
+        };
+        let banks = bank
+            .as_chunks::<15>()
+            .0
+            .iter()
+            .map(|b| CentralBank {
+                regime: match b[0] as u8 {
+                    0 => Regime::Float(rule(&b[3..8])),
+                    1 => Regime::HardPeg {
+                        anchor: b[1] as usize,
+                        fallback: rule(&b[8..13]),
+                        defence_premium: b[2],
+                    },
+                    _ => Regime::Follower {
+                        anchor: b[1] as usize,
+                    },
+                },
+                reserves: b[13],
+                short_term_external_debt: b[14],
+            })
+            .collect();
+        Ok(Self {
+            banks,
+            rates: d.f64s()?,
+            purchases: d.f64s()?,
+            level: d.f64s()?,
+            base_employment: d.f64s()?,
+        })
+    }
 }
 
 #[cfg(test)]
