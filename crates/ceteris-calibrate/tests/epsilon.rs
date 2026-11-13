@@ -112,6 +112,11 @@ fn fit_recovers_a_known_epsilon() {
     };
     let fit = epsilon::fit_epsilon(&w.inp, &t, Limits::default(), &mut quiet()).unwrap();
     println!("{fit:?}");
+    let json = fit.json().compact();
+    assert!(
+        json.contains("\"epsilon\"") && json.contains("\"held_out\""),
+        "{json}"
+    );
     assert!(!fit.at_zero);
     assert!((fit.trial.epsilon - e0).abs() <= 2.0 * epsilon::EPSILON_TOL);
     assert!(fit.held_out.iter().all(|c| c.within), "{:?}", fit.held_out);
