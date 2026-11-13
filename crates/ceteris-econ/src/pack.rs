@@ -517,6 +517,7 @@ impl EconInputs {
             route_taus: None,
             bulk,
             good_legs,
+            pair_distance: None,
         }
     }
 

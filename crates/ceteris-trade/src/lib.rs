@@ -14,7 +14,8 @@ pub use goods::Goods;
 pub use kernel::{Access, Kernel};
 pub use market::{Markets, Rationing};
 pub use network::{
-    BulkLegs, GoodLegs, Leg, LegSet, LegTaus, Network, Wedges, equal_gateway_mass, kappa,
+    BulkLegs, GoodLegs, Leg, LegSet, LegTaus, Network, PairDistance, Wedges, equal_gateway_mass,
+    kappa,
 };
 pub use params::{N_CLASSES, PriceAnchor, TradeParams};
 pub use pipeline::Pipeline;

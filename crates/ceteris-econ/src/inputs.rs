@@ -7,7 +7,7 @@ use std::sync::Arc;
 use ceteris_core::rows::Rows;
 use ceteris_core::snapshot::{Encoder, Hash, state_hash};
 use ceteris_trade::{
-    BulkLegs, GoodLegs, Goods, Leg, LegSet, LegTaus, Network, TradeParams, Wedges,
+    BulkLegs, GoodLegs, Goods, Leg, LegSet, LegTaus, Network, PairDistance, TradeParams, Wedges,
 };
 
 use crate::calibration::Steady;
@@ -828,6 +828,7 @@ impl EconInputs {
             route_taus,
             bulk,
             good_legs,
+            pair_distance,
         } = network;
         let Countries {
             omega,
@@ -998,7 +999,7 @@ impl EconInputs {
             e.u32s(pack);
         }
         if with_network {
-            encode_network_tail(&mut e, route_taus, bulk, good_legs);
+            encode_network_tail(&mut e, route_taus, bulk, good_legs, pair_distance);
         }
         state_hash(&e.into_bytes())
     }
@@ -1017,6 +1018,7 @@ pub fn network_digest(net: &Network) -> Hash {
         route_taus,
         bulk,
         good_legs,
+        pair_distance,
     } = net;
     let mut e = Encoder::default();
     b"ceteris-econ-network-1".iter().for_each(|&b| e.u8(b));
@@ -1026,7 +1028,7 @@ pub fn network_digest(net: &Network) -> Hash {
     for legs in [domestic, access, crossings] {
         encode_legs(&mut e, legs);
     }
-    encode_network_tail(&mut e, route_taus, bulk, good_legs);
+    encode_network_tail(&mut e, route_taus, bulk, good_legs, pair_distance);
     state_hash(&e.into_bytes())
 }
 
@@ -1035,6 +1037,7 @@ fn encode_network_tail(
     route_taus: &Option<LegTaus>,
     bulk: &Option<BulkLegs>,
     good_legs: &Option<GoodLegs>,
+    pair_distance: &Option<PairDistance>,
 ) {
     // appended only when present, so least-cost networks keep their digest
     if let Some(rt) = route_taus {
@@ -1069,6 +1072,12 @@ fn encode_network_tail(
                 encode_legs(e, legs);
             }
         }
+    }
+    // appended only when present, so networks without the dark distance cost keep their digest
+    if let Some(d) = pair_distance {
+        b"pair-distance".iter().for_each(|&b| e.u8(b));
+        e.f64(d.epsilon);
+        e.f64s(&d.ln_rel);
     }
 }
 

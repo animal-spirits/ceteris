@@ -817,7 +817,12 @@ fn good_kernel(
         let importer = usize::from(net.gateway_country[b]);
         let exporter = usize::from(net.gateway_country[a]);
         let duty = 1.0 + f64::from(wedges.rate(importer, exporter, group));
-        let loss = tau * border_tau * f64::from(wedges.ntb_factor(importer, exporter, group));
+        let dark = net
+            .pair_distance
+            .as_ref()
+            .map_or(1.0, |d| d.factor(importer, exporter, p.theta[g]));
+        let loss =
+            tau * border_tau * dark * f64::from(wedges.ntb_factor(importer, exporter, group));
         Crossing {
             col: l.to,
             k: mass[a] * mass[b] * k_of(loss * duty),
@@ -847,6 +852,7 @@ mod tests {
     use super::*;
     use crate::goods::Goods;
     use crate::goods::p2::{N as N_GOODS, TRADED};
+    use crate::network::PairDistance;
     use crate::network::{
         BulkLegs, GoodLegs, Leg, LegSet, LegTaus, Network, Wedges, equal_gateway_mass,
     };
@@ -1239,6 +1245,41 @@ mod tests {
                 let m = net.gateway_mass[l.from as usize] * net.gateway_mass[l.to as usize];
                 assert_eq!(e.inv_loss, 1.0 / loss, "good {g}");
                 assert_eq!(e.k, m * libm::pow(loss, -p.theta[g]), "good {g}");
+            }
+        }
+    }
+
+    /// ADR 0272: the dark distance cost multiplies each crossing's loss by
+    /// `exp(epsilon / theta_g ln_rel)`, so every class's trade elasticity to it is epsilon; epsilon
+    /// 0 is the network without it, bit for bit.
+    #[test]
+    fn pair_distance_scales_crossings_by_epsilon_over_theta() {
+        let p = TradeParams::default().bulk_off();
+        let base = world(&mut Rng(9));
+        let wedges = Wedges::none(2);
+        let off = Kernel::build(&base, &W, &wedges, &p);
+        let with = |epsilon: f64| Network {
+            pair_distance: Some(PairDistance {
+                epsilon,
+                ln_rel: vec![0.0, 0.7, 0.7, 0.0],
+            }),
+            ..base.clone()
+        };
+        let zero = Kernel::build(&with(0.0), &W, &wedges, &p);
+        let on = Kernel::build(&with(0.35), &W, &wedges, &p);
+        for g in 0..TRADED {
+            for l in &base.crossings {
+                let (e0, e1) = (
+                    crossing(&off.good(g).crossings, l),
+                    crossing(&on.good(g).crossings, l),
+                );
+                assert_eq!(crossing(&zero.good(g).crossings, l), e0, "good {g}");
+                let d = libm::exp(0.35 / p.theta[g] * 0.7);
+                assert!(
+                    (e1.inv_loss / (e0.inv_loss / d) - 1.0).abs() < 1e-14,
+                    "good {g}"
+                );
+                assert!(e1.k < e0.k, "good {g}");
             }
         }
     }

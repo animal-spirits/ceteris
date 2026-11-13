@@ -48,6 +48,22 @@ pub struct Network {
     pub route_taus: Option<LegTaus>,
     pub bulk: Option<BulkLegs>,
     pub good_legs: Option<GoodLegs>,
+    pub pair_distance: Option<PairDistance>,
+}
+
+/// ADR 0272 dark distance cost on the crossings: `ln D_AB,c = (epsilon / theta_c) ln_rel[A][B]`,
+/// `ln_rel = ln d_AB - ln d_0` row-major over countries (importer, exporter). Absent is epsilon 0.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PairDistance {
+    pub epsilon: f64,
+    pub ln_rel: Vec<f64>,
+}
+
+impl PairDistance {
+    pub fn factor(&self, importer: usize, exporter: usize, theta: f64) -> f64 {
+        let n = self.ln_rel.len().isqrt();
+        libm::exp(self.epsilon / theta * self.ln_rel[importer * n + exporter])
+    }
 }
 
 /// Least-iceberg legs per traded good (ADR 0279): `sets[set[g]]` holds traded good g's legs, on
