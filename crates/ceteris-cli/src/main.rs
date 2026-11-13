@@ -63,6 +63,10 @@
 //! `--inputs DIR` calibrates an export directory at its own u* and border friction, its
 //! provinces serving as their own pack provinces, and needs `--out` (not `--no-border-fit`).
 //!
+//! `calibrate epsilon --pack DIR [--storage]` fits the dark distance cost epsilon of ADR 0272
+//! (P158) by Brent's method, the border friction refitted at each trial, and prints it with the
+//! pooled and per-class distance coefficients against CEPII/BACI 2000. It writes nothing.
+//!
 //! `calibrate stability` prints the stability table of the stock-flow price rule for the
 //! fixture in FIXTURE_DIR (default `tests/golden/p2-fixture`); `--storage` prints the storage
 //! loop's table instead: per storable good the kappa1 limit of the storage loop and the psi
@@ -125,6 +129,7 @@ const USAGE: &str = "usage:
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris reference solve --inputs DIR --out DIR
   ceteris calibrate --pack DIR [--no-border-fit] [--storage] | --inputs DIR [--out DIR]
+  ceteris calibrate epsilon --pack DIR [--storage]
   ceteris calibrate stability [--storage] [FIXTURE_DIR]
   ceteris calibrate rho (--panel FILE | --baci ZIP --hs-key XLSX --tariffs CSV|--gtd-war CSV [--lines ISO3] [--write-panel FILE])
     [--base YEAR] [--shock YEAR]
@@ -976,6 +981,67 @@ fn air_share(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     Ok(ExitCode::SUCCESS)
 }
 
+/// `calibrate epsilon --pack DIR [--storage]`: the distance cost epsilon of ADR 0272 fitted on a
+/// pack, printed with the nu it comes with and the held-out class coefficients.
+fn epsilon(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let (mut pack, mut storage) = (None, false);
+    let mut args = args;
+    while let Some(a) = args.next() {
+        match a.as_str() {
+            "--storage" => storage = true,
+            "--pack" => {
+                pack = Some(PathBuf::from(
+                    args.next().ok_or("--pack needs a directory")?,
+                ))
+            }
+            other => return Err(format!("unknown argument '{other}'")),
+        }
+    }
+    let pack = pack.ok_or("calibrate epsilon needs --pack")?;
+    let tmp = tempfile::tempdir().map_err(|e| format!("temporary directory: {e}"))?;
+    ceteris_calibrate::export_pack(&pack, tmp.path(), storage)?;
+    let cache = sources::workspace_root().join(fetch::CACHE_DIR);
+    let mut progress = |line: &str| println!("{line}");
+    let r = ceteris_calibrate::epsilon_pack::fit_pack(
+        &pack,
+        tmp.path(),
+        &cache,
+        Limits::default(),
+        &mut progress,
+    );
+    let r = match r {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("no epsilon fit: {e}");
+            return Ok(ExitCode::FAILURE);
+        }
+    };
+    let (f, t) = (&r.fit, &r.fit.trial);
+    println!(
+        "epsilon {} ({} trials{}): pooled distance coefficient {} against the data's {}",
+        t.epsilon,
+        f.evaluations,
+        if f.at_zero { ", kept at 0" } else { "" },
+        t.pooled,
+        f.data_pooled
+    );
+    println!(
+        "nu by group {:?}: {:?}, share {:?}, ln d_0 by class {:?}, floored classes {:?}",
+        r.groups, t.fit.nu, t.fit.share, t.ln_d0, t.floored
+    );
+    for c in &f.held_out {
+        println!(
+            "class {}: model {:.4}, data {:.4} (s.e. {:.4}): {}",
+            c.class,
+            c.model,
+            c.data,
+            c.data_se,
+            if c.within { "within 2 s.e." } else { "outside" }
+        );
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]`: exit 1 without a
 /// calibration.
 fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
@@ -987,6 +1053,10 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     if args.peek().map(String::as_str) == Some("rho") {
         args.next();
         return rho(args);
+    }
+    if args.peek().map(String::as_str) == Some("epsilon") {
+        args.next();
+        return epsilon(args);
     }
     let (mut pack, mut inputs, mut out, mut fit_border) = (None, None, None, true);
     let mut storage = false;
