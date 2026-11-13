@@ -1745,3 +1745,18 @@ sections = "15.7, 21.1"
 rows = "0366"
 topic = "[Capital enters production as A scaled by (K/K0)^(1-s_L); investment orders use the calibrated GFCF share of final demand times value added per enterprise until the 7.4 logit exists](../rfcs/0351-capital-stock-in-production.md)"
 sections = "7.4"
+
+[[entry]]
+rows = "0367"
+topic = "[Banks F1 builds all five 9.11 archetypes per state from the start, off by default](../rfcs/0352-banks-f1-capital-gap.md)"
+sections = "9.11"
+
+[[entry]]
+rows = "0368"
+topic = "[The bank capital gap z_b is the share of loans to insolvent borrowers a bank rolls over because recognizing the loss would breach its capital minimum](../rfcs/0352-banks-f1-capital-gap.md)"
+sections = "9.11, 7.4"
+
+[[entry]]
+rows = "0369"
+topic = "[2000 bank balance sheets come from national financial accounts and BIS banking statistics only; a state without them has banks off and no zombies](../rfcs/0352-banks-f1-capital-gap.md)"
+sections = "9.11"

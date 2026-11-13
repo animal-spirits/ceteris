@@ -342,3 +342,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0349 | [Government ledger account for the fiscal system](0349-government-ledger-account.md) | accepted | ADR 0359, ADR 0360, ADR 0361, ADR 0362, ADR 0363 |
 | 0350 | [Pass bands for the free moments at the P4 and P5 gates](0350-free-moment-pass-bands.md) | accepted | ADR 0364, ADR 0365 |
 | 0351 | [Capital stock enters production; investment orders at the calibrated GFCF share](0351-capital-stock-in-production.md) | accepted | ADR 0366 |
+| 0352 | [Banks F1: five archetypes, and the capital gap that feeds the zombie band](0352-banks-f1-capital-gap.md) | accepted | ADR 0367, ADR 0368, ADR 0369 |
