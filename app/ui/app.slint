@@ -49,7 +49,13 @@ component About inherits Panel {
     VerticalLayout {
         padding: Tokens.pad * 2;
         spacing: Tokens.pad;
-        Heading { text: "Ceteris Paribus"; }
+        Image {
+            source: @image-url("../assets/identity/svg/wordmark-horizontal-day.svg");
+            height: Tokens.body-size * 1.4;
+            image-fit: contain;
+            horizontal-alignment: left;
+            accessible-label: "Ceteris Paribus";
+        }
         Text {
             text: "Deterministic, forkable world simulator from 1 January 2000.";
             color: Tokens.ink;
@@ -113,6 +119,7 @@ component Inspector inherits Panel {
 
 export component AppWindow inherits Window {
     title: "Ceteris Paribus";
+    icon: @image-url("../assets/identity/icons/icon-carved-night-256.png");
     preferred-width: 1280px;
     preferred-height: 800px;
     background: Tokens.sea;
