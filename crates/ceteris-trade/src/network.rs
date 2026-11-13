@@ -51,18 +51,21 @@ pub struct Network {
     pub pair_distance: Option<PairDistance>,
 }
 
-/// ADR 0272 dark distance cost on the crossings: `ln D_AB,c = (epsilon / theta_c) ln_rel[A][B]`,
-/// `ln_rel = ln d_AB - ln d_0` row-major over countries (importer, exporter). Absent is epsilon 0.
+/// ADR 0272 dark distance cost on the crossings: `ln D_AB,c = (epsilon / theta_g) ln_rel[c][A][B]`
+/// for a good g of theta class c, `ln_rel[c] = ln d_AB - ln d_0c` row-major over countries
+/// (importer, exporter), one vector per theta class (each class has its own `d_0`). Absent is
+/// epsilon 0.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PairDistance {
     pub epsilon: f64,
-    pub ln_rel: Vec<f64>,
+    pub ln_rel: Vec<Vec<f64>>,
 }
 
 impl PairDistance {
-    pub fn factor(&self, importer: usize, exporter: usize, theta: f64) -> f64 {
-        let n = self.ln_rel.len().isqrt();
-        libm::exp(self.epsilon / theta * self.ln_rel[importer * n + exporter])
+    pub fn factor(&self, importer: usize, exporter: usize, class: usize, theta: f64) -> f64 {
+        let rel = &self.ln_rel[class];
+        let n = rel.len().isqrt();
+        libm::exp(self.epsilon / theta * rel[importer * n + exporter])
     }
 }
 

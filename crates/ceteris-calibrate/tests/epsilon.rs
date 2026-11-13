@@ -140,3 +140,59 @@ fn data_at_epsilon_zero_keeps_zero() {
     let fit = epsilon::fit_epsilon(&w.inp, &t, Limits::default(), &mut quiet()).unwrap();
     assert!(fit.at_zero && fit.trial.epsilon == 0.0);
 }
+
+/// The economy's kernel with a `PairDistance` and the reference inputs at the same epsilon give
+/// the same crossings, the tables round-trip, and the economy reads them back from them: the
+/// calibration and the run apply one distance cost.
+#[test]
+fn run_and_calibration_apply_the_same_distance_cost() {
+    use ceteris_calibrate::write::{self, Distance};
+    use ceteris_econ::EconParams;
+    use ceteris_econ::distance::read_pair_distance;
+    use ceteris_econ::export::write_inputs;
+    use ceteris_econ::fixture::small_world;
+    use ceteris_trade::{Kernel, PairDistance, TradeParams};
+
+    let mut econ = small_world();
+    let n = econ.n_countries();
+    let ln_d = ln_distance(n);
+    let d = Distance {
+        epsilon: 0.4,
+        ln_d0: vec![6.0, 6.2, 6.4, f64::NAN],
+        ln_d: ln_d.clone(),
+    };
+    let dir = tempfile::tempdir().unwrap();
+    write::write_distance(dir.path(), &d).unwrap();
+    let read = write::read_distance(dir.path(), n).unwrap().unwrap();
+    assert_eq!(read.epsilon, 0.4);
+    assert_eq!(&read.ln_d0[..3], &d.ln_d0[..3]);
+    assert!(
+        read.ln_d
+            .iter()
+            .zip(&ln_d)
+            .all(|(a, b)| a == b || (a.is_nan() && b.is_nan()))
+    );
+
+    let export = |econ: &ceteris_econ::EconInputs| {
+        let trade = TradeParams::default();
+        let kernel = Kernel::build(&econ.network, &econ.weight, &econ.wedges, &trade);
+        let tmp = tempfile::tempdir().unwrap();
+        write_inputs(tmp.path(), econ, &kernel, &EconParams::default(), &trade).unwrap();
+        io::load(tmp.path()).unwrap()
+    };
+    let plain = export(&econ);
+    let pair: PairDistance = read_pair_distance(dir.path(), n).unwrap().unwrap();
+    econ.network.pair_distance = Some(pair);
+    let run = export(&econ);
+    let cal = epsilon::at_distance(&plain, &read).unwrap();
+    assert_ne!(run.crossing.k, plain.crossing.k);
+    for (j, (a, b)) in run.crossing.k.iter().zip(&cal.crossing.k).enumerate() {
+        assert!(
+            (a - b).abs() <= 1e-12 * a.abs().max(b.abs()),
+            "crossing {j}: run {a}, calibration {b}"
+        );
+    }
+    for (a, b) in run.crossing.inv_loss.iter().zip(&cal.crossing.inv_loss) {
+        assert!((a - b).abs() <= 1e-12 * a.abs().max(b.abs()));
+    }
+}

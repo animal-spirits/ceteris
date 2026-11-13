@@ -175,6 +175,18 @@ pub fn at_epsilon(
     Ok(out)
 }
 
+/// The inputs at the dark distance cost a calibration was solved at ([`at_epsilon`]).
+pub fn at_distance(inp: &Inputs, d: &crate::write::Distance) -> Result<Inputs, String> {
+    let n_traded = inp.traded.iter().filter(|&&t| t).count();
+    at_epsilon(
+        inp,
+        &inp.theta_class[..n_traded],
+        &d.ln_d,
+        &d.ln_d0,
+        d.epsilon,
+    )
+}
+
 /// The classes where some crossing's `(1 + nu) D` is below 1 (ADR 0272, Decision 2), for the
 /// friction `nu` per good of `at` as it was fitted.
 fn product_misses(
