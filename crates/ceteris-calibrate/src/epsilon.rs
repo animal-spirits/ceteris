@@ -8,8 +8,20 @@
 //! [`steady::data_state_spending`], where the border fit itself is evaluated, not at the
 //! default run's last ticks that H2 reads.
 
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use ceteris_econ::EconInputs;
+use ceteris_geo::graph::TransportParams;
+use ceteris_geo::pack::Pack;
+use ceteris_pack::read::natural_earth::{ADMIN0, read_codes};
+use ceteris_pack::read::tariffs::{GRAVITY, read_distances};
 use ceteris_reference::io::Inputs;
 use ceteris_reference::ppml;
+
+use crate::gravity::baci_flows;
+use crate::json::Json;
+use crate::write::Table;
 
 use crate::border::{self, Brent, Fit};
 use crate::steady::{self, CalibrationError, Limits};
@@ -416,4 +428,99 @@ pub fn fit_epsilon(
         evaluations,
         at_zero,
     })
+}
+
+/// What [`Targets`] borrows besides the inputs, read from the pack and the data cache.
+pub struct PackData {
+    pub ln_d: Vec<f64>,
+    pub weight: Vec<f64>,
+    pub gravity: Gravity,
+    pub data_flows: Vec<f64>,
+}
+
+/// The model's country-pair distance (pop-weighted distw of the pack's provinces), the data's
+/// 2000 BACI flows and their pair totals, and the CEPII 2000 distw and contiguity of the pack's
+/// countries, from the pack in `pack` and the source files in `cache`.
+pub fn pack_data(pack: &Path, cache: &Path) -> Result<PackData, String> {
+    let codes = Table::open(&pack.join("countries.arrow"))?.strings("code")?;
+    let n = codes.len();
+    let (iso, _) = read_codes(&cache.join(ADMIN0))?;
+    let iso3: Vec<String> = codes
+        .iter()
+        .map(|c| iso.get(c).cloned().unwrap_or_else(|| c.clone()))
+        .collect();
+    let data_flows = baci_flows(cache, &codes, &iso)?;
+    let n_g = data_flows.len() / (n * n);
+    let weight = (0..n * n)
+        .map(|k| data_flows[k * n_g..(k + 1) * n_g].iter().sum())
+        .collect();
+
+    let cepii: BTreeMap<(String, String), (f64, f64)> = read_distances(&cache.join(GRAVITY), 2000)?
+        .into_iter()
+        .map(|r| ((r.iso3_o, r.iso3_d), (r.distw, r.contig)))
+        .collect();
+    let (mut distw, mut contig) = (vec![f64::NAN; n * n], vec![f64::NAN; n * n]);
+    for o in 0..n {
+        for d in (0..n).filter(|&d| d != o) {
+            if let Some(&(w, c)) = cepii.get(&(iso3[o].clone(), iso3[d].clone())) {
+                (distw[o * n + d], contig[o * n + d]) = (w, c);
+            }
+        }
+    }
+
+    let graph = Pack::load(pack, &TransportParams::default()).map_err(|e| e.to_string())?;
+    let econ = EconInputs::from_pack_data(&graph, pack).map_err(|e| e.to_string())?;
+    if econ.n_countries() != n {
+        return Err(format!(
+            "{} pack countries, {} in the economy",
+            n,
+            econ.n_countries()
+        ));
+    }
+    let ln_d = econ.country_distw(&graph).iter().map(|d| d.ln()).collect();
+    Ok(PackData {
+        ln_d,
+        weight,
+        gravity: Gravity::new(n, &distw, &contig),
+        data_flows,
+    })
+}
+
+impl EpsilonFit {
+    /// The fit as printed and written: epsilon, the pooled coefficient against the data's, the
+    /// nu, the floored classes and each class's held-out check.
+    pub fn json(&self) -> Json {
+        let floats = |v: &[f64]| Json::List(v.iter().map(|&x| Json::Float(x)).collect());
+        let t = &self.trial;
+        Json::object([
+            ("epsilon", Json::Float(t.epsilon)),
+            ("at_zero", Json::Int(i64::from(self.at_zero))),
+            ("evaluations", Json::Int(self.evaluations as i64)),
+            ("model_pooled", Json::Float(t.pooled)),
+            ("data_pooled", Json::Float(self.data_pooled)),
+            ("nu", floats(&t.fit.nu)),
+            ("ln_d0", floats(&t.ln_d0)),
+            (
+                "floored",
+                Json::List(t.floored.iter().map(|&c| Json::Int(c as i64)).collect()),
+            ),
+            (
+                "held_out",
+                Json::List(
+                    self.held_out
+                        .iter()
+                        .map(|c| {
+                            Json::object([
+                                ("class", Json::Int(c.class as i64)),
+                                ("model", Json::Float(c.model)),
+                                ("data", Json::Float(c.data)),
+                                ("data_se", Json::Float(c.data_se)),
+                                ("within", Json::Int(i64::from(c.within))),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
+        ])
+    }
 }

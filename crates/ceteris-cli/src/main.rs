@@ -989,9 +989,10 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         return rho(args);
     }
     let (mut pack, mut inputs, mut out, mut fit_border) = (None, None, None, true);
-    let mut storage = false;
+    let (mut storage, mut fit_epsilon) = (false, false);
     while let Some(a) = args.next() {
         match a.as_str() {
+            "--fit-epsilon" => fit_epsilon = true,
             "--no-border-fit" => fit_border = false,
             "--storage" => storage = true,
             "--pack" => {
@@ -1042,6 +1043,11 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     };
     let mut inp = reference_io::load(&dir)?;
     drop(export);
+    if fit_epsilon {
+        let pack = pack.as_ref().filter(|_| fit_border);
+        let pack = pack.ok_or("--fit-epsilon needs --pack and the border fit")?;
+        return fit_epsilon_driver(&inp, pack, &out);
+    }
     let u_star = u_star.unwrap_or_else(|| inp.u_star.clone());
     let pack_province = pack_province.unwrap_or_else(|| (0..inp.n_provinces()).collect());
     let mut progress = |line: &str| println!("{line}");
@@ -1107,6 +1113,46 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     }
     println!("{}", summary::summary(&inp, &s).pretty());
     println!("wrote {}", out.display());
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `calibrate --pack DIR --fit-epsilon`: the dark distance cost of ADR 0272 fitted to the data's
+/// pooled distance coefficient (ADR 0272, #212). Writes `epsilon.json` into the output
+/// directory; the calibration tables are not written, because the run does not yet carry epsilon.
+fn fit_epsilon_driver(
+    inp: &reference_io::Inputs,
+    pack: &Path,
+    out: &Path,
+) -> Result<ExitCode, String> {
+    use ceteris_calibrate::epsilon::{Targets, fit_epsilon, pack_data};
+    let n_traded = inp.traded.iter().filter(|&&t| t).count();
+    let theta_class = &inp.theta_class[..n_traded];
+    let groups = border::friction_groups(theta_class);
+    let (nu_target, icio) = border::target_shares(pack, &groups)?;
+    let data = pack_data(pack, &sources::workspace_root().join(fetch::CACHE_DIR))?;
+    let mut progress = |line: &str| println!("{line}");
+    let t = Targets {
+        nu_target: &nu_target,
+        icio: &icio,
+        theta_class,
+        ln_d: &data.ln_d,
+        weight: &data.weight,
+        gravity: &data.gravity,
+        data_flows: &data.data_flows,
+    };
+    let fit = match fit_epsilon(inp, &t, Limits::default(), &mut progress) {
+        Ok(fit) => fit,
+        Err(e) => {
+            eprintln!("no epsilon fit: {e}");
+            return Ok(ExitCode::FAILURE);
+        }
+    };
+    let json = fit.json().pretty();
+    println!("{json}");
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let file = out.join("epsilon.json");
+    std::fs::write(&file, json).map_err(|e| format!("{}: {e}", file.display()))?;
+    println!("wrote {}", file.display());
     Ok(ExitCode::SUCCESS)
 }
 
