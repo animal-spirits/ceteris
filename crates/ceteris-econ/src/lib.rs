@@ -6,6 +6,7 @@ pub mod calibration;
 pub mod channels;
 pub mod demand;
 pub mod disease;
+pub mod distance;
 pub mod edit;
 pub mod energy_policy;
 pub mod ensemble;
