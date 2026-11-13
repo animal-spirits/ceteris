@@ -520,6 +520,22 @@ pub fn pack_data(pack: &Path, cache: &Path) -> Result<PackData, String> {
     })
 }
 
+/// Epsilon, `ln d_0` per class and nu per friction group of an `epsilon.json` ([`EpsilonFit::json`]).
+pub fn read_fit(file: &std::path::Path) -> Result<(f64, Vec<f64>, Vec<f64>), String> {
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let v: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", file.display()))?;
+    let list = |k: &str| -> Result<Vec<f64>, String> {
+        v[k].as_array()
+            .and_then(|a| a.iter().map(serde_json::Value::as_f64).collect())
+            .ok_or(format!("{}: no numbers under \"{k}\"", file.display()))
+    };
+    let epsilon = v["epsilon"]
+        .as_f64()
+        .ok_or(format!("{}: no epsilon", file.display()))?;
+    Ok((epsilon, list("ln_d0")?, list("nu")?))
+}
+
 impl EpsilonFit {
     /// The fit as printed and written: epsilon, the pooled coefficient against the data's, the
     /// nu, the floored classes and each class's held-out check.

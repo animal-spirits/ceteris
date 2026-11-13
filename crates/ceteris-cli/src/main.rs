@@ -991,6 +991,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let (mut pack, mut inputs, mut out, mut fit_border) = (None, None, None, true);
     let (mut storage, mut fit_epsilon, mut epsilon_on) = (false, false, true);
     let mut fit_cache = None;
+    let mut epsilon_from: Option<PathBuf> = None;
     while let Some(a) = args.next() {
         match a.as_str() {
             "--fit-epsilon" => fit_epsilon = true,
@@ -998,6 +999,11 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             "--fit-cache" => {
                 fit_cache = Some(PathBuf::from(
                     args.next().ok_or("--fit-cache needs a directory")?,
+                ))
+            }
+            "--epsilon-from" => {
+                epsilon_from = Some(PathBuf::from(
+                    args.next().ok_or("--epsilon-from needs an epsilon.json")?,
                 ))
             }
             "--no-border-fit" => fit_border = false,
@@ -1074,29 +1080,44 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             let n_traded = inp.traded.iter().filter(|&&t| t).count();
             let groups = border::friction_groups(&inp.theta_class[..n_traded]);
             let (_, icio) = border::target_shares(pack, &groups)?;
-            let Some((fit, ln_d)) =
-                run_epsilon_fit(&inp, pack, fit_cache.as_deref(), &mut progress)?
-            else {
-                return Ok(ExitCode::FAILURE);
+            // epsilon, ln d_0 and nu of a fit written earlier by --fit-epsilon, or a fit now
+            let (epsilon, ln_d0, nu, ln_d) = match &epsilon_from {
+                Some(file) => {
+                    let (epsilon, ln_d0, nu) = epsilon::read_fit(file)?;
+                    let data = ceteris_calibrate::epsilon::pack_data(
+                        pack,
+                        &sources::workspace_root().join(fetch::CACHE_DIR),
+                    )?;
+                    println!(
+                        "distance cost: epsilon {epsilon} read from {}",
+                        file.display()
+                    );
+                    (epsilon, ln_d0, nu, data.ln_d)
+                }
+                None => {
+                    let Some((fit, ln_d)) =
+                        run_epsilon_fit(&inp, pack, fit_cache.as_deref(), &mut progress)?
+                    else {
+                        return Ok(ExitCode::FAILURE);
+                    };
+                    let t = &fit.trial;
+                    println!(
+                        "distance cost: epsilon {} ({} trials), pooled coefficient {} against the data's {}, \
+                         floored classes {:?}",
+                        t.epsilon, fit.evaluations, t.pooled, fit.data_pooled, t.floored
+                    );
+                    (t.epsilon, t.ln_d0.clone(), t.fit.nu.clone(), ln_d)
+                }
             };
-            let t = &fit.trial;
-            println!(
-                "distance cost: epsilon {} ({} trials), pooled coefficient {} against the data's {}, \
-                 floored classes {:?}",
-                t.epsilon, fit.evaluations, t.pooled, fit.data_pooled, t.floored
-            );
-            println!(
-                "border friction: nu {:?}, share {:?}, clamped at nu 0 {:?}",
-                t.fit.nu, t.fit.share, t.fit.clamped
-            );
+            println!("border friction: nu {nu:?}");
             let d = calibration::Distance {
-                epsilon: t.epsilon,
-                ln_d0: t.ln_d0.clone(),
+                epsilon,
+                ln_d0,
                 ln_d,
             };
             inp = epsilon::at_distance(&inp, &d)?;
-            inp = border::at_border_nu(&inp, &t.fit.nu_of_goods(&inp.border_nu))?;
-            distance = (t.epsilon > 0.0).then_some(d);
+            inp = border::at_border_nu(&inp, &border::nu_of_goods(&groups, &nu, &inp.border_nu))?;
+            distance = (epsilon > 0.0).then_some(d);
             Some((icio, groups))
         }
         Some(pack) => {
