@@ -119,6 +119,8 @@ Housing is the one market cleared outside the demand system: each province clear
 
 Each state has up to five bank archetypes rather than named banks: a global systemic bank (holding the cross-border book), a domestic universal bank, regional savings and cooperative banks (weighted by province), a state-owned bank, and nonbank lenders. Balance sheets come from financial accounts and BIS banking statistics.
 
+The first build (P5 Branch F, F1) creates all five archetypes per state, off by default (ADR 0367). Initial balance sheets come from national financial accounts and BIS banking statistics only; a state without them has banks off and no zombie share (ADR 0369). The bank capital gap `z_b` of 7.4 is the share of loans to insolvent borrowers that a bank rolls over because recognizing the loss would breach its capital minimum (ADR 0368).
+
 - **Constraints.** Risk-weighted capital, leverage and liquidity coverage ratios. As buffers shrink, lending tightens and the bank's eligibility terms in 9.9 push it to sell risky assets.
 - **Funding.** Insured and uninsured deposits, wholesale funding, and short-term dollar funding of non-US banks through FX swaps (McGuire and von Peter 2009; Ivashina, Scharfstein and Stein 2015), the channel of the 2008 dollar shortage.
 

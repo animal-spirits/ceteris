@@ -354,4 +354,7 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0364 | [Free moments are hard gates with fixed pass bands (H2, Brexit, ACR-IO, openness, x10, US-China, PPML theta, short-run elasticity); a miss blocks the gate unless an ADR traces it to an unbuilt mechanism](../rfcs/0350-free-moment-pass-bands.md) | 15.7 |
 | 0365 | [The bands apply from the P4 gate on; the short-run elasticity band from the gate after #200 lands](../rfcs/0350-free-moment-pass-bands.md) | 15.7, 21.1 |
 | 0366 | [Capital enters production as A scaled by (K/K0)^(1-s_L); investment orders use the calibrated GFCF share of final demand times value added per enterprise until the 7.4 logit exists](../rfcs/0351-capital-stock-in-production.md) | 7.4 |
+| 0367 | [Banks F1 builds all five 9.11 archetypes per state from the start, off by default](../rfcs/0352-banks-f1-capital-gap.md) | 9.11 |
+| 0368 | [The bank capital gap z_b is the share of loans to insolvent borrowers a bank rolls over because recognizing the loss would breach its capital minimum](../rfcs/0352-banks-f1-capital-gap.md) | 9.11, 7.4 |
+| 0369 | [2000 bank balance sheets come from national financial accounts and BIS banking statistics only; a state without them has banks off and no zombies](../rfcs/0352-banks-f1-capital-gap.md) | 9.11 |
 <!-- rows:end -->
