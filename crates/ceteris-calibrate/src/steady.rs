@@ -450,7 +450,7 @@ pub fn sinkhorn_limited(
     };
     let depth: Vec<f64> = (0..n_g).map(|g| summation_depth(inp, g)).collect();
     // the map at lw, r, the largest |gap| and whether every good's gap is within its rounding
-    let step = |lw: &[f64]| -> (Vec<f64>, Vec<f64>, f64, bool) {
+    let step = |lw: &[f64]| -> (Vec<f64>, Vec<f64>, f64, bool, Vec<f64>) {
         let mut top = vec![f64::NEG_INFINITY; n_g];
         for i in (0..n).filter(|&i| origin[i]) {
             top[good[i]] = np_max(top[good[i]], lw[i]);
@@ -506,17 +506,18 @@ pub fn sinkhorn_limited(
         }
         let within =
             (0..n_g).all(|g| worst[g] <= SINKHORN_TOL + f64::EPSILON * (big[g] + depth[g] + 4.5));
-        (new, r, max_abs(&gap), within)
+        (new, r, max_abs(&gap), within, worst)
     };
 
     let (mut xs, mut gs): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (Vec::new(), Vec::new());
     let (mut best, mut since) = (f64::INFINITY, 0);
     let mut err = f64::NAN;
+    let mut last_by_good = Vec::new();
     // the plain sweep from the last finite point, where a mixed step leaves f64
     let mut plain: Option<Vec<f64>> = None;
     for sweep in 1..=max_sweeps {
-        let (fx, r, e, within) = step(&lw);
-        err = e;
+        let (fx, r, e, within, by_good) = step(&lw);
+        (err, last_by_good) = (e, by_good);
         // Stalled within the gap's own rounding (`summation_depth`): no sweep can do better.
         // 1.6e-13 on the full pack with storage on, where one gateway's sums are 858 deep.
         if err <= SINKHORN_TOL || (within && since >= ANDERSON_STALL) {
@@ -579,9 +580,15 @@ pub fn sinkhorn_limited(
             plain = None;
         }
     }
+    let at = last_by_good
+        .iter()
+        .enumerate()
+        .fold((0, 0.0), |m, (g, &w)| if w > m.1 { (g, w) } else { m });
     Err(format!(
-        "Sinkhorn did not converge in {max_sweeps} sweeps, residual {}",
-        sci(err)
+        "Sinkhorn did not converge in {max_sweeps} sweeps, residual {}, largest in good {} ({})",
+        sci(err),
+        at.0,
+        sci(at.1)
     )
     .into())
 }
@@ -745,6 +752,18 @@ fn solve_lu(a: &mut [f64], n: usize, b: &mut [f64]) -> Option<()> {
         b[k] = s / a[k * n + k];
     }
     Some(())
+}
+
+/// The cell of `new` that moves most from `old`, as `relative` measures it.
+fn worst_cell(new: &[f64], old: &[f64]) -> (f64, usize) {
+    let scale = py_max([max_abs(new), 1e-300]);
+    new.iter()
+        .zip(old)
+        .enumerate()
+        .fold((0.0, 0), |m, (i, (a, b))| {
+            let d = (a - b).abs() / scale;
+            if d > m.0 { (d, i) } else { m }
+        })
 }
 
 fn relative(new: &[f64], old: &[f64]) -> f64 {
@@ -1460,6 +1479,28 @@ pub fn calibrate_from(
                 0.0
             },
         ]);
+        let parts = [
+            ("rebate", worst_cell(&rebate_new, &rebate), 1),
+            ("price", worst_cell(&q_new.data, &q.data), n_g),
+            (
+                "pigl scale",
+                worst_cell(&weights_new.scale, &weights.scale),
+                1,
+            ),
+            (
+                "pigl omega",
+                worst_cell(&weights_new.omega.data, &weights.omega.data),
+                weights.omega.cols,
+            ),
+        ];
+        let (name, (_, cell), width) = parts
+            .iter()
+            .fold(parts[0], |m, x| if x.1.0 > m.1.0 { *x } else { m });
+        let at = if width > 1 {
+            format!("row {} good {}", cell / width, cell % width)
+        } else {
+            format!("index {cell}")
+        };
         history.push(Pass {
             pass: passes,
             change,
@@ -1474,7 +1515,8 @@ pub fn calibrate_from(
                 (lo.min(f), hi.max(f))
             });
         progress(&format!(
-            "pass {passes}: change {}, sinkhorn {} sweeps, residual {}, ras factors {lo:.3} to {hi:.3}",
+            "pass {passes}: change {}, sinkhorn {} sweeps, residual {}, ras factors {lo:.3} to {hi:.3}, \
+             moves most: {name} {at}",
             sci(change),
             scaling.sweeps,
             sci(scaling.residual)
