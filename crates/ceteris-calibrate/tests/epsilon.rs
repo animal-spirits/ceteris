@@ -118,6 +118,11 @@ fn fit_recovers_a_known_epsilon() {
         "{json}"
     );
     assert!(!fit.at_zero);
+    let file = tempfile::tempdir().unwrap().keep().join("epsilon.json");
+    std::fs::write(&file, fit.json().pretty()).unwrap();
+    let (e, d0, nu) = epsilon::read_fit(&file).unwrap();
+    assert_eq!((e, nu), (fit.trial.epsilon, fit.trial.fit.nu.clone()));
+    assert_eq!(d0.len(), fit.trial.ln_d0.len());
     assert!((fit.trial.epsilon - e0).abs() <= 2.0 * epsilon::EPSILON_TOL);
     assert!(fit.held_out.iter().all(|c| c.within), "{:?}", fit.held_out);
 }
