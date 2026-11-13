@@ -19,6 +19,7 @@ use ceteris_pack::read::tariffs::{GRAVITY, read_distances};
 use ceteris_reference::io::Inputs;
 use ceteris_reference::ppml;
 
+use crate::fit_cache::TrialCache;
 use crate::gravity::baci_flows;
 use crate::json::Json;
 use crate::write::Table;
@@ -348,6 +349,19 @@ pub fn fit_epsilon(
     limits: Limits,
     progress: &mut dyn FnMut(&str),
 ) -> Result<EpsilonFit, CalibrationError> {
+    fit_epsilon_cached(inp, t, limits, None, progress)
+}
+
+/// [`fit_epsilon`] replaying and storing its trials in `cache` ([`TrialCache`]); the result is
+/// bit-identical to the uncached fit.
+pub fn fit_epsilon_cached(
+    inp: &Inputs,
+    t: &Targets,
+    limits: Limits,
+    cache: Option<&Path>,
+    progress: &mut dyn FnMut(&str),
+) -> Result<EpsilonFit, CalibrationError> {
+    let cache = cache.map(|dir| TrialCache::new(dir, inp, t, limits));
     let n_c = inp.n_countries();
     let n_t = t.theta_class.len();
     let all: Vec<usize> = (0..n_t).collect();
@@ -360,7 +374,11 @@ pub fn fit_epsilon(
     // it) has too little distance cost: None, and f counts as the data's magnitude above.
     let mut run = |eps: f64| -> Result<Option<Trial>, CalibrationError> {
         evaluations += 1;
-        match trial(inp, t, eps, limits, progress) {
+        if let Some(hit) = cache.as_ref().and_then(|c| c.load(eps)) {
+            progress(&format!("epsilon {eps}: trial from the cache"));
+            return Ok(hit);
+        }
+        let result = match trial(inp, t, eps, limits, progress) {
             Ok(r) => {
                 progress(&format!(
                     "epsilon {eps}: pooled distance coefficient {} against the data's {data_pooled}",
@@ -375,7 +393,11 @@ pub fn fit_epsilon(
                 Ok(None)
             }
             Err(e) => Err(e),
+        }?;
+        if let Some(c) = &cache {
+            c.store(eps, &result)?;
         }
+        Ok(result)
     };
     let f_of = |r: &Option<Trial>| {
         r.as_ref()

@@ -13,6 +13,7 @@ pub mod costs;
 pub mod dta;
 pub mod elasticity;
 pub mod epsilon;
+pub mod fit_cache;
 pub mod gravity;
 pub mod json;
 pub mod pyfmt;
