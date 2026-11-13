@@ -10,11 +10,11 @@ Licence rule: nothing is bundled until its licence is recorded (ADR 0005, `crate
 
 | Asset | Where used | Source | Size / format | Status | Licence / note |
 |---|---|---|---|---|---|
-| App icon | macOS bundle, Linux desktop entry, Steam client icon | P8 #411, ADR 0216 | 1024 px master, `.icns` and hicolor PNG ladder 16-512, SVG master | mock (`app-icon/app-icon-1024.svg`); final needs artist | Own work. Needs name/mark decision (open) |
-| Monochrome icon | Linux symbolic, tray, docs | P8 | SVG 512 | mock | Own |
-| Wordmark / logotype | Splash, About, docs site, README | P8, P15 | SVG | artist | Font used must be OFL (Source Serif 4 is) |
+| App icon | macOS bundle, Linux desktop entry, Steam client icon, window icon | P8 #411, ADR 0216 | 1024 px master, `.icns` and hicolor PNG ladder 16-512, SVG master | exists (`identity/icons/`, `identity/svg/icon-*.svg`); window icon wired; `.icns` and hicolor packaging open | Own work; Cinzel outlines (OFL). Mark fixed 2026-11-13 (#567) |
+| Monochrome icon | Linux symbolic, tray, docs | P8 | SVG 512 | exists (`identity/svg/favicon-*.svg`, single ink) | Own |
+| Wordmark / logotype | Splash, About, docs site, README | P8, P15 | SVG, carved PNG | exists (`identity/svg/wordmark-*`, `identity/carved/`); About wired | Cinzel (OFL), outlined |
 | DMG background, installer art | macOS download | #228 signed build, ADR 0216 | 660x400 + @2x PNG | artist (low priority) | Own |
-| Favicon / site OG image | Docs site, "coming soon" page | UI schedule item 5, P15 | 32 px ICO, 1200x630 PNG | mock (derive from app icon) | Own |
+| Favicon / site OG image | Docs site, "coming soon" page | UI schedule item 5, P15 | 32 px ICO, 1200x630 PNG | favicon exists (`identity/icons/favicon-*`); OG image mock | Own |
 
 ## 2. First run and lifecycle screens
 
@@ -126,7 +126,7 @@ P9 store assets are outside the 1.0 exemption by Antonio's ruling (deferred).
 
 ## Decisions for Antonio
 
-1. App name/mark: the icon, wordmark and capsule all wait on a fixed mark. Mock uses a graticule globe with edit-magenta and fork-violet arcs only to occupy the slot.
+1. App name/mark: decided 2026-11-13. CETERIS PARIBVS carved in Cinzel, satin Carrara (Day) and granite (Night), C with a triangular stop as the icon (`app/assets/identity/`, #567).
 2. Who produces final art: commission an illustrator/designer for icon, wordmark, scenario covers, and about 10 UI sounds, or generate in-house where the style is flat vector. Panels and charts need no art by ADR 0137.
 3. Noto subsetting: ship a few MB of Noto for CJK/Arabic/Indic in the app, or fetch fonts on first run like the packs.
 4. Emblem coverage: ADR 0141 flags emblems as the slowest sourcing item; confirm the 1.0 target (seat countries only, or all).
