@@ -103,6 +103,10 @@ pub struct Limits {
     pub max_passes: usize,
     pub max_sweeps: usize,
     pub max_local: usize,
+    /// Under-relaxation of the outer pass: the next iterate is `z + relax (mixed - z)`.
+    pub relax: f64,
+    /// Anderson mixing of the outer passes; off is a plain relaxed iteration.
+    pub anderson: bool,
 }
 
 impl Default for Limits {
@@ -111,6 +115,8 @@ impl Default for Limits {
             max_passes: MAX_PASSES,
             max_sweeps: MAX_SWEEPS,
             max_local: MAX_LOCAL,
+            relax: 1.0,
+            anderson: true,
         }
     }
 }
@@ -1541,13 +1547,23 @@ pub fn calibrate_from(
         }
         zs.push(z);
         fs.push(fz.clone());
-        if fs.len() > 1 {
+        let next = if limits.anderson && fs.len() > 1 {
             let (dz, df) = (diffs(&zs), diffs(&fs));
             let gamma = lstsq(&df, &fz)?;
-            (q, rebate, weights) = state.unpack(&mix(&f, &dz, &df, &gamma));
+            mix(&f, &dz, &df, &gamma)
         } else {
-            (rebate, q, weights) = (rebate_new, q_new, weights_new);
-        }
+            f
+        };
+        let z = zs.last().expect("pushed above");
+        let next: Vec<f64> = if limits.relax == 1.0 {
+            next
+        } else {
+            z.iter()
+                .zip(&next)
+                .map(|(z, x)| z + limits.relax * (x - z))
+                .collect()
+        };
+        (q, rebate, weights) = state.unpack(&next);
     }
     let Some((passes, price, src, top)) = settled else {
         return Err(CalibrationError::NotSettled {

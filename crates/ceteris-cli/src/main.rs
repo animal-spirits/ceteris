@@ -992,8 +992,24 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let (mut storage, mut fit_epsilon, mut epsilon_on) = (false, false, true);
     let mut fit_cache = None;
     let mut epsilon_from: Option<PathBuf> = None;
+    let mut limits = Limits::default();
+    let mut no_distance_class: Option<usize> = None;
     while let Some(a) = args.next() {
         match a.as_str() {
+            "--pass-relax" => {
+                limits.relax = args
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--pass-relax needs a number in (0, 1]")?
+            }
+            "--no-anderson" => limits.anderson = false,
+            "--no-distance-class" => {
+                no_distance_class = Some(
+                    args.next()
+                        .and_then(|v| v.parse().ok())
+                        .ok_or("--no-distance-class needs a theta class index")?,
+                )
+            }
             "--fit-epsilon" => fit_epsilon = true,
             "--no-epsilon-fit" => epsilon_on = false,
             "--fit-cache" => {
@@ -1110,6 +1126,11 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                 }
             };
             println!("border friction: nu {nu:?}");
+            let mut ln_d0 = ln_d0;
+            if let Some(c) = no_distance_class {
+                // a non-finite ln_rel carries no distance cost (epsilon::ln_factor)
+                ln_d0[c] = f64::INFINITY;
+            }
             let d = calibration::Distance {
                 epsilon,
                 ln_d0,
@@ -1153,7 +1174,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         &u_star,
         &pack_province,
         &out,
-        Limits::default(),
+        limits,
         &mut progress,
     ) {
         Ok(s) => s,
