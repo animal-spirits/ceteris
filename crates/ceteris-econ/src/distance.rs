@@ -1,8 +1,11 @@
 //! Population-weighted country-pair distance (ADR 0272; the CEPII `distw_harmonic` formula of
 //! Head and Mayer 2002) from province centroids and populations.
 
+use std::path::Path;
+
 use crate::inputs::EconInputs;
-use ceteris_geo::pack::Pack;
+use ceteris_geo::pack::{Pack, PackError, f64s, read_table, u8s, u32s};
+use ceteris_trade::PairDistance;
 
 const EARTH_RADIUS_KM: f64 = 6371.0088;
 
@@ -66,6 +69,52 @@ impl EconInputs {
             self.n_countries(),
         )
     }
+}
+
+/// The dark distance cost of a calibration in `dir` (`ceteris_calibrate::write::write_distance`):
+/// `econ_calib_distance_class.arrow` (class, ln_d0, epsilon) and `econ_calib_distance.arrow`
+/// (country pair a, b and ln d); `None` where the calibration has none, which is epsilon 0.
+/// Pairs without a distance carry no cost.
+pub fn read_pair_distance(
+    dir: &Path,
+    n_countries: usize,
+) -> Result<Option<PairDistance>, PackError> {
+    let class_path = dir.join("econ_calib_distance_class.arrow");
+    if !class_path.exists() {
+        return Ok(None);
+    }
+    let bad = |m: String| PackError(m);
+    let classes = read_table(&class_path)?;
+    let (class, ln_d0, epsilon) = (
+        u8s(&classes, "class")?,
+        f64s(&classes, "ln_d0")?,
+        f64s(&classes, "epsilon")?,
+    );
+    let epsilon = *epsilon.first().ok_or_else(|| bad("no epsilon".into()))?;
+    let mut d0 = [0.0; ceteris_trade::params::N_CLASSES];
+    for (c, v) in class.iter().zip(&ln_d0) {
+        *d0.get_mut(usize::from(*c))
+            .ok_or_else(|| bad(format!("distance class {c}")))? = *v;
+    }
+    let pairs = read_table(&dir.join("econ_calib_distance.arrow"))?;
+    let (a, b, ln_d) = (
+        u32s(&pairs, "a")?,
+        u32s(&pairs, "b")?,
+        f64s(&pairs, "ln_d")?,
+    );
+    let mut ln_rel = vec![vec![0.0; n_countries * n_countries]; d0.len()];
+    for ((&a, &b), &l) in a.iter().zip(&b).zip(&ln_d) {
+        let (a, b) = (a as usize, b as usize);
+        if a >= n_countries || b >= n_countries {
+            return Err(bad(format!(
+                "distance pair ({a}, {b}) of {n_countries} countries"
+            )));
+        }
+        for (c, rel) in ln_rel.iter_mut().enumerate() {
+            rel[a * n_countries + b] = l - d0[c];
+        }
+    }
+    Ok(Some(PairDistance { epsilon, ln_rel }))
 }
 
 #[cfg(test)]

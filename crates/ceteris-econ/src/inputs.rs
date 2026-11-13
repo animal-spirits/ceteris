@@ -1077,7 +1077,8 @@ fn encode_network_tail(
     if let Some(d) = pair_distance {
         b"pair-distance".iter().for_each(|&b| e.u8(b));
         e.f64(d.epsilon);
-        e.f64s(&d.ln_rel);
+        e.count(d.ln_rel.len());
+        d.ln_rel.iter().for_each(|r| e.f64s(r));
     }
 }
 

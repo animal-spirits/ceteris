@@ -366,6 +366,95 @@ pub fn read_pack_provinces(export: &Path) -> Result<Vec<usize>, String> {
     Table::open(&export.join("pack_provinces.arrow"))?.usize("pack")
 }
 
+/// The dark distance cost a calibration was solved at (ADR 0272): `epsilon`, `ln d_0` per theta
+/// class and the country-pair `ln d` row-major, NaN where a pair has no distance.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Distance {
+    pub epsilon: f64,
+    pub ln_d0: Vec<f64>,
+    pub ln_d: Vec<f64>,
+}
+
+const DISTANCE_CLASS: &str = "econ_calib_distance_class.arrow";
+const DISTANCE_PAIRS: &str = "econ_calib_distance.arrow";
+
+/// Writes `econ_calib_distance_class` (class u8, ln_d0 f64, epsilon f64) and
+/// `econ_calib_distance` (a u32, b u32, ln_d f64, pairs with a distance) into `out`. A class
+/// without a linked pair has no `ln d_0` and is written as 0.
+pub fn write_distance(out: &Path, d: &Distance) -> Result<(), String> {
+    fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let n = d.ln_d.len().isqrt();
+    write_table(
+        &out.join(DISTANCE_CLASS),
+        vec![
+            named("class", u8s(0..d.ln_d0.len())),
+            named(
+                "ln_d0",
+                f64s(d.ln_d0.iter().map(|&v| if v.is_finite() { v } else { 0.0 })),
+            ),
+            named("epsilon", f64s(d.ln_d0.iter().map(|_| d.epsilon))),
+        ],
+        None,
+    )?;
+    let pairs: Vec<usize> = (0..n * n).filter(|&k| d.ln_d[k].is_finite()).collect();
+    write_table(
+        &out.join(DISTANCE_PAIRS),
+        vec![
+            named("a", u32s(pairs.iter().map(|k| k / n))),
+            named("b", u32s(pairs.iter().map(|k| k % n))),
+            named("ln_d", f64s(pairs.iter().map(|&k| d.ln_d[k]))),
+        ],
+        None,
+    )
+}
+
+/// Removes the dark distance tables of an earlier calibration from `out`.
+pub fn clear_distance(out: &Path) -> Result<(), String> {
+    for name in [DISTANCE_CLASS, DISTANCE_PAIRS] {
+        match fs::remove_file(out.join(name)) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("{}: {e}", out.join(name).display()));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// The dark distance cost of the calibration tables in `pack` for `n_countries` countries, or
+/// `None` where they have none (epsilon 0).
+pub fn read_distance(pack: &Path, n_countries: usize) -> Result<Option<Distance>, String> {
+    if !pack.join(DISTANCE_CLASS).exists() {
+        return Ok(None);
+    }
+    let classes = Table::open(&pack.join(DISTANCE_CLASS))?;
+    let epsilon = *classes
+        .f64("epsilon")?
+        .first()
+        .ok_or("econ_calib_distance_class.arrow is empty")?;
+    let ln_d0 = classes.f64("ln_d0")?;
+    let pairs = Table::open(&pack.join(DISTANCE_PAIRS))?;
+    let mut ln_d = vec![f64::NAN; n_countries * n_countries];
+    for ((a, b), l) in pairs
+        .usize("a")?
+        .into_iter()
+        .zip(pairs.usize("b")?)
+        .zip(pairs.f64("ln_d")?)
+    {
+        if a >= n_countries || b >= n_countries {
+            return Err(format!(
+                "econ_calib_distance.arrow: pair ({a}, {b}) of {n_countries} countries"
+            ));
+        }
+        ln_d[a * n_countries + b] = l;
+    }
+    Ok(Some(Distance {
+        epsilon,
+        ln_d0,
+        ln_d,
+    }))
+}
+
 /// P05 of each of `n_goods` goods in the calibration tables installed in `pack` (ADRs 0092,
 /// 0276): the border friction their steady state was solved at.
 pub fn read_border_nu(pack: &Path, n_goods: usize) -> Result<Vec<f64>, String> {
@@ -423,8 +512,13 @@ pub fn read_reference(
         return Err("the calibration tables belong to other inputs".into());
     }
     let border_nu = border_nu_of(&meta, inp.n_goods())?;
-    // the export holds the data state's border friction; the calibration was solved at its own
-    let calibrated = at_border_nu(inp, &border_nu)?;
+    // the export holds the data state's: the calibration was solved with its dark distance cost
+    // (ADR 0272) and at its own border friction, in that order
+    let with_distance = match read_distance(pack, inp.n_countries())? {
+        Some(d) => crate::epsilon::at_distance(inp, &d)?,
+        None => inp.clone(),
+    };
+    let calibrated = at_border_nu(&with_distance, &border_nu)?;
     let inp = &calibrated;
     let n_g = inp.n_goods();
     let rows = |t: &Table, key: &str| -> Result<BTreeMap<(usize, usize), usize>, String> {

@@ -817,10 +817,14 @@ fn good_kernel(
         let importer = usize::from(net.gateway_country[b]);
         let exporter = usize::from(net.gateway_country[a]);
         let duty = 1.0 + f64::from(wedges.rate(importer, exporter, group));
-        let dark = net
-            .pair_distance
-            .as_ref()
-            .map_or(1.0, |d| d.factor(importer, exporter, p.theta[g]));
+        let dark = net.pair_distance.as_ref().map_or(1.0, |d| {
+            d.factor(
+                importer,
+                exporter,
+                usize::from(p.theta_class[g]),
+                p.theta[g],
+            )
+        });
         let loss =
             tau * border_tau * dark * f64::from(wedges.ntb_factor(importer, exporter, group));
         Crossing {
@@ -1261,7 +1265,9 @@ mod tests {
         let with = |epsilon: f64| Network {
             pair_distance: Some(PairDistance {
                 epsilon,
-                ln_rel: vec![0.0, 0.7, 0.7, 0.0],
+                ln_rel: (0..4)
+                    .map(|c| vec![0.0, 0.7 + 0.1 * c as f64, 0.7 + 0.1 * c as f64, 0.0])
+                    .collect(),
             }),
             ..base.clone()
         };
@@ -1274,7 +1280,8 @@ mod tests {
                     crossing(&on.good(g).crossings, l),
                 );
                 assert_eq!(crossing(&zero.good(g).crossings, l), e0, "good {g}");
-                let d = libm::exp(0.35 / p.theta[g] * 0.7);
+                let c = usize::from(p.theta_class[g]);
+                let d = libm::exp(0.35 / p.theta[g] * (0.7 + 0.1 * c as f64));
                 assert!(
                     (e1.inv_loss / (e0.inv_loss / d) - 1.0).abs() < 1e-14,
                     "good {g}"

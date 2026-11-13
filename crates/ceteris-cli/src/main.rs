@@ -93,7 +93,7 @@ use std::sync::Arc;
 use ceteris_calibrate::steady::Limits;
 use ceteris_calibrate::summary;
 use ceteris_calibrate::write as calibration;
-use ceteris_calibrate::{benchmark, border, gravity};
+use ceteris_calibrate::{benchmark, border, epsilon, gravity};
 use ceteris_core::invariant::Violation;
 use ceteris_core::rng::Seed;
 use ceteris_core::sim::Sim;
@@ -989,10 +989,11 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         return rho(args);
     }
     let (mut pack, mut inputs, mut out, mut fit_border) = (None, None, None, true);
-    let (mut storage, mut fit_epsilon) = (false, false);
+    let (mut storage, mut fit_epsilon, mut epsilon_on) = (false, false, true);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--fit-epsilon" => fit_epsilon = true,
+            "--no-epsilon-fit" => epsilon_on = false,
             "--no-border-fit" => fit_border = false,
             "--storage" => storage = true,
             "--pack" => {
@@ -1053,6 +1054,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let mut progress = |line: &str| println!("{line}");
     // A pack's border friction is fitted to ICIO's cross-border shares (ADR 0092) before the
     // steady state; the fixture keeps its own.
+    let mut distance = None;
     let icio = match &pack {
         Some(_) if !fit_border => {
             println!(
@@ -1060,6 +1062,34 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                 inp.border_nu
             );
             None
+        }
+        Some(pack) if epsilon_on => {
+            // ADR 0272: the dark distance cost and the border friction are fitted together
+            let n_traded = inp.traded.iter().filter(|&&t| t).count();
+            let groups = border::friction_groups(&inp.theta_class[..n_traded]);
+            let (_, icio) = border::target_shares(pack, &groups)?;
+            let Some((fit, ln_d)) = run_epsilon_fit(&inp, pack, &mut progress)? else {
+                return Ok(ExitCode::FAILURE);
+            };
+            let t = &fit.trial;
+            println!(
+                "distance cost: epsilon {} ({} trials), pooled coefficient {} against the data's {}, \
+                 floored classes {:?}",
+                t.epsilon, fit.evaluations, t.pooled, fit.data_pooled, t.floored
+            );
+            println!(
+                "border friction: nu {:?}, share {:?}, clamped at nu 0 {:?}",
+                t.fit.nu, t.fit.share, t.fit.clamped
+            );
+            let d = calibration::Distance {
+                epsilon: t.epsilon,
+                ln_d0: t.ln_d0.clone(),
+                ln_d,
+            };
+            inp = epsilon::at_distance(&inp, &d)?;
+            inp = border::at_border_nu(&inp, &t.fit.nu_of_goods(&inp.border_nu))?;
+            distance = (t.epsilon > 0.0).then_some(d);
+            Some((icio, groups))
         }
         Some(pack) => {
             let n_traded = inp.traded.iter().filter(|&&t| t).count();
@@ -1103,6 +1133,10 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             return Ok(ExitCode::FAILURE);
         }
     };
+    match &distance {
+        Some(d) => calibration::write_distance(&out, d)?,
+        None => calibration::clear_distance(&out)?,
+    }
     if let Some((icio, groups)) = icio {
         let mut spend = s.spend_hh.clone();
         for (a, b) in spend.data.iter_mut().zip(&s.spend_int.data) {
@@ -1116,21 +1150,19 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// `calibrate --pack DIR --fit-epsilon`: the dark distance cost of ADR 0272 fitted to the data's
-/// pooled distance coefficient (ADR 0272, #212). Writes `epsilon.json` into the output
-/// directory; the calibration tables are not written, because the run does not yet carry epsilon.
-fn fit_epsilon_driver(
+/// The dark distance cost of ADR 0272 fitted to the data's pooled distance coefficient, the
+/// border friction refitted at each trial: the fit and the country-pair `ln d` it used.
+fn run_epsilon_fit(
     inp: &reference_io::Inputs,
     pack: &Path,
-    out: &Path,
-) -> Result<ExitCode, String> {
+    progress: &mut dyn FnMut(&str),
+) -> Result<Option<(ceteris_calibrate::epsilon::EpsilonFit, Vec<f64>)>, String> {
     use ceteris_calibrate::epsilon::{Targets, fit_epsilon, pack_data};
     let n_traded = inp.traded.iter().filter(|&&t| t).count();
     let theta_class = &inp.theta_class[..n_traded];
     let groups = border::friction_groups(theta_class);
     let (nu_target, icio) = border::target_shares(pack, &groups)?;
     let data = pack_data(pack, &sources::workspace_root().join(fetch::CACHE_DIR))?;
-    let mut progress = |line: &str| println!("{line}");
     let t = Targets {
         nu_target: &nu_target,
         icio: &icio,
@@ -1140,12 +1172,25 @@ fn fit_epsilon_driver(
         gravity: &data.gravity,
         data_flows: &data.data_flows,
     };
-    let fit = match fit_epsilon(inp, &t, Limits::default(), &mut progress) {
-        Ok(fit) => fit,
+    match fit_epsilon(inp, &t, Limits::default(), progress) {
+        Ok(fit) => Ok(Some((fit, data.ln_d))),
         Err(e) => {
             eprintln!("no epsilon fit: {e}");
-            return Ok(ExitCode::FAILURE);
+            Ok(None)
         }
+    }
+}
+
+/// `calibrate --pack DIR --fit-epsilon`: only the epsilon fit, written as `epsilon.json` into the
+/// output directory, no calibration tables.
+fn fit_epsilon_driver(
+    inp: &reference_io::Inputs,
+    pack: &Path,
+    out: &Path,
+) -> Result<ExitCode, String> {
+    let mut progress = |line: &str| println!("{line}");
+    let Some((fit, _)) = run_epsilon_fit(inp, pack, &mut progress)? else {
+        return Ok(ExitCode::FAILURE);
     };
     let json = fit.json().pretty();
     println!("{json}");

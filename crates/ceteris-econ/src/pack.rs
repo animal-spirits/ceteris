@@ -191,6 +191,8 @@ impl EconInputs {
         let mut inputs = EconInputs::from_pack_data(pack, dir)?;
         if EconInputs::has_calibration(dir) {
             inputs.calibrate(dir)?;
+            inputs.network.pair_distance =
+                crate::distance::read_pair_distance(dir, inputs.n_countries())?;
         }
         Ok(inputs)
     }

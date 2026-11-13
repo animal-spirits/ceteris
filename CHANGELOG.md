@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### BEHAVIOUR: log-distance crossing friction (ADR 0272, #212, #559)
+
+- `ceteris calibrate --pack` fits the dark distance cost epsilon (P158) jointly with the border
+  friction nu by default (`--no-epsilon-fit` keeps the old calibration; `--fit-epsilon` fits and
+  writes `epsilon.json` only), solves the steady state at it and writes `econ_calib_distance` and
+  `econ_calib_distance_class`. `EconInputs::from_pack` reads them into `Network::pair_distance`;
+  `write::read_reference` applies the same cost, in the order distance then nu.
+- `PairDistance::ln_rel` is one vector per theta class (each class has its own `d_0`, a class whose
+  `(1 + nu) D >= 1` fails taking its smallest linked distance); the digest encodes it.
+- Real-pack fit on main 50c2b49: epsilon 0.3723, the pooled distance coefficient -0.4721 at
+  epsilon 0 to -0.7513 against the data's -0.7512; only class 1 of the four held-out class
+  coefficients is within 2 s.e.
+- Fixture goldens do not move: tables without the distance files run as before. Pack goldens move
+  with the first recalibrated tables (owner-side).
+
 ### Capital pipelines in the tick (ADR 0204, #534)
 
 - `EconWorld::with_capital`, off by default: system 234 steps one `investment::Pipeline` per
