@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Cloud calibration runner
+
+- `ceteris calibrate --pack DIR --fit-cache DIR` stores each epsilon-fit trial on disk (f64 as hex
+  bits) and replays it on a rerun; results are bit-identical to an uncached run. `scripts/cloud/`
+  holds the setup and detached-run scripts, `docs/cloud-runner.md` the runbook.
+
 ### BEHAVIOUR: log-distance crossing friction (ADR 0272, #212, #559)
 
 - `ceteris calibrate --pack` fits the dark distance cost epsilon (P158) jointly with the border

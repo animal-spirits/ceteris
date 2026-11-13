@@ -196,3 +196,52 @@ fn run_and_calibration_apply_the_same_distance_cost() {
         assert!((a - b).abs() <= 1e-12 * a.abs().max(b.abs()));
     }
 }
+
+/// A cached fit is bit-identical to an uncached one, a second run replays every trial from the
+/// cache, and a changed target misses it.
+#[test]
+fn cached_fit_is_bit_identical() {
+    let w = world();
+    let (nu_target, data_flows) = known(&w, 0.4, &[0.15, 0.6, 0.35, 0.0, 0.0]);
+    let weight = trade_weight(&w.inp);
+    let targets = |nu: &[f64]| -> Vec<f64> { nu.to_vec() };
+    let run = |nu: &[f64], cache: Option<&std::path::Path>| {
+        let nu = targets(nu);
+        let t = Targets {
+            nu_target: &nu,
+            icio: &w.icio,
+            theta_class: &w.class,
+            ln_d: &w.ln_d,
+            weight: &weight,
+            gravity: &w.gravity,
+            data_flows: &data_flows,
+        };
+        let mut lines = vec![];
+        let fit = epsilon::fit_epsilon_cached(&w.inp, &t, Limits::default(), cache, &mut |l| {
+            lines.push(l.to_owned())
+        })
+        .unwrap();
+        (
+            format!("{:?}", fit.json().compact()),
+            fit.trial.epsilon,
+            lines,
+        )
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let (plain, e_plain, _) = run(&nu_target, None);
+    let (first, e_first, _) = run(&nu_target, Some(dir.path()));
+    let (second, e_second, lines) = run(&nu_target, Some(dir.path()));
+    assert_eq!(plain, first);
+    assert_eq!(plain, second);
+    assert_eq!(e_plain.to_bits(), e_first.to_bits());
+    assert_eq!(e_plain.to_bits(), e_second.to_bits());
+    assert!(
+        lines.iter().all(|l| l.ends_with("from the cache")),
+        "{lines:?}"
+    );
+    // a different target is a different key
+    let mut other = nu_target.clone();
+    other[0] *= 0.9;
+    let (_, _, lines) = run(&other, Some(dir.path()));
+    assert!(lines.iter().any(|l| !l.ends_with("from the cache")));
+}
