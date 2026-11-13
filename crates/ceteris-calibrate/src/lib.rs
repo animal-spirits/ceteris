@@ -12,6 +12,7 @@ pub mod border;
 pub mod costs;
 pub mod dta;
 pub mod elasticity;
+pub mod epsilon;
 pub mod gravity;
 pub mod json;
 pub mod pyfmt;

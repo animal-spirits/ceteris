@@ -131,8 +131,15 @@ pub fn at_border_nu(inp: &Inputs, nu: &[f64]) -> Result<Inputs, String> {
         cro.inv_loss[j] /= ratio;
     }
     out.border_nu = nu.to_vec();
+    reprice(&mut out)?;
+    Ok(out)
+}
+
+/// Base buyer prices (sourcing at prices 1) and selection constants Gamma (ADR 0200) of the
+/// inputs' own crossings.
+pub(crate) fn reprice(out: &mut Inputs) -> Result<(), String> {
     let ones = Mat::filled(out.n_provinces(), out.n_goods(), 1.0);
-    let src = Model::physical(&out)?.sourcing(&ones);
+    let src = Model::physical(out)?.sourcing(&ones);
     let mut gamma = Mat::filled(out.n_provinces(), out.n_goods(), 1.0);
     for p in 0..out.n_provinces() {
         for g in (0..out.n_goods()).filter(|&g| out.traded[g]) {
@@ -144,7 +151,7 @@ pub fn at_border_nu(inp: &Inputs, nu: &[f64]) -> Result<Inputs, String> {
         }
     }
     out.gamma = Some(gamma);
-    Ok(out)
+    Ok(())
 }
 
 /// The group of every good of `n_goods`, if any.
@@ -268,6 +275,21 @@ fn shares_at(
     limits: Limits,
 ) -> Result<(Vec<f64>, Mat), Failure> {
     let other = |e: String| Failure::Other(e.into());
+    let (at, price, log_weight) = solve_at(inp, nu, spend, supply, start, limits)?;
+    let share = cross_border_shares(&at, &price, spend, icio, groups).map_err(other)?;
+    Ok((share, log_weight))
+}
+
+/// The inputs at border frictions `nu` (per good), and stage 2's posted prices and log weights.
+fn solve_at(
+    inp: &Inputs,
+    nu: &[f64],
+    spend: &Mat,
+    supply: &Mat,
+    start: Option<&Mat>,
+    limits: Limits,
+) -> Result<(Inputs, Mat, Mat), Failure> {
+    let other = |e: String| Failure::Other(e.into());
     let at = at_border_nu(inp, nu).map_err(other)?;
     let m = Model::new(&at).map_err(other)?;
     let scaling = steady::sinkhorn_limited(&m, spend, supply, start, limits.max_sweeps)
@@ -289,8 +311,23 @@ fn shares_at(
             1.0
         }
     });
-    let share = cross_border_shares(&at, &price, spend, icio, groups).map_err(other)?;
-    Ok((share, scaling.log_weight))
+    Ok((at, price, scaling.log_weight))
+}
+
+/// Country-pair value by good, `[(exporter * C + importer) * G + g]`, at border frictions `nu`
+/// (per good) and stage 2 at the stage 1 spending of the data state of `inp`; domestic pairs
+/// are not in it.
+pub fn data_state_pair_values(
+    inp: &Inputs,
+    nu: &[f64],
+    spend: &Mat,
+    supply: &Mat,
+    limits: Limits,
+) -> Result<Vec<f64>, CalibrationError> {
+    let (at, price, _) = solve_at(inp, nu, spend, supply, None, limits)?;
+    let m = Model::new(&at)?;
+    let src = m.sourcing(&price);
+    Ok(m.flows(&price, spend, &src).pair_value)
 }
 
 /// The cross-border share of every group at border frictions `nu` (per good), over the countries
@@ -310,7 +347,7 @@ pub fn data_state_shares(
 /// names the point to evaluate, [`Brent::update`] takes f there, so several brackets can share
 /// one evaluation.
 #[derive(Clone, Debug)]
-struct Brent {
+pub(crate) struct Brent {
     a: f64,
     b: f64,
     c: f64,
@@ -323,7 +360,7 @@ struct Brent {
 
 impl Brent {
     /// A bracket [a, b] with f(a) and f(b) of opposite signs (or one of them zero).
-    fn new(a: f64, fa: f64, b: f64, fb: f64) -> Brent {
+    pub(crate) fn new(a: f64, fa: f64, b: f64, fb: f64) -> Brent {
         Brent {
             a,
             b,
@@ -338,7 +375,7 @@ impl Brent {
 
     /// The point to evaluate next, or None once the root is within `tol` (half-width about
     /// `tol` / 2 plus rounding).
-    fn next(&mut self, tol: f64) -> Option<f64> {
+    pub(crate) fn next(&mut self, tol: f64) -> Option<f64> {
         if self.fb * self.fc > 0.0 {
             (self.c, self.fc) = (self.a, self.fa);
             self.d = self.b - self.a;
@@ -389,11 +426,11 @@ impl Brent {
         Some(self.b)
     }
 
-    fn update(&mut self, fb: f64) {
+    pub(crate) fn update(&mut self, fb: f64) {
         self.fb = fb;
     }
 
-    fn root(&self) -> f64 {
+    pub(crate) fn root(&self) -> f64 {
         self.b
     }
 }
