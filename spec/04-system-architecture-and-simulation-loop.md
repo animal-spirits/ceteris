@@ -14,7 +14,7 @@ The map client sends edits straight into the systems pipeline and reads results 
 4. **Ledger and event log**: every monetary and goods flow as a balanced transaction; every discrete decision (law change, war declaration, firm entry) as an event.
 5. **Snapshot and branch store**: periodic full snapshots plus logs; any tick of any branch is reconstructible.
 6. **Query API**: Arrow-based reads for the map client and external analysis tools.
-7. **Clients**: web map, CLI batch runner; analysis reads the Arrow and Parquet outputs.
+7. **Clients**: web map, CLI batch runner; analysis reads the Arrow IPC outputs.
 
 ### 4.2 Entity model
 
