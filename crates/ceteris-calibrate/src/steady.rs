@@ -74,6 +74,10 @@ pub const SINKHORN_TOL: f64 = 1e-13;
 /// Jacobian, `sinkhorn_is_unique_up_to_scale`). The cap was set when an earlier pack's mode
 /// (province 3906, 0.99995 a sweep) needed 34,614 sweeps in pass 7.
 pub const MAX_SWEEPS: usize = 100_000;
+/// The scaling stops at this fraction of the last pass's change, within [`SINKHORN_TOL`] and
+/// [`INNER_TOL_MAX`].
+pub const INNER_PER_OUTER: f64 = 1e-2;
+pub const INNER_TOL_MAX: f64 = 1e-6;
 pub const ANDERSON_MEMORY: usize = 8;
 /// Sweeps without a new smallest residual before the mixing restarts.
 pub const ANDERSON_STALL: usize = 20;
@@ -405,6 +409,18 @@ pub fn sinkhorn_limited(
     start: Option<&Mat>,
     max_sweeps: usize,
 ) -> Result<Scaling, CalibrationError> {
+    sinkhorn_to(m, spend, supply, start, max_sweeps, SINKHORN_TOL)
+}
+
+/// [`sinkhorn_limited`] stopping at `tol` (at least [`SINKHORN_TOL`]).
+pub fn sinkhorn_to(
+    m: &Model,
+    spend: &Mat,
+    supply: &Mat,
+    start: Option<&Mat>,
+    max_sweeps: usize,
+    tol: f64,
+) -> Result<Scaling, CalibrationError> {
     let inp = m.inp;
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
     let n = n_p * n_g;
@@ -520,7 +536,7 @@ pub fn sinkhorn_limited(
         (err, last_by_good) = (e, by_good);
         // Stalled within the gap's own rounding (`summation_depth`): no sweep can do better.
         // 1.6e-13 on the full pack with storage on, where one gateway's sums are 858 deep.
-        if err <= SINKHORN_TOL || (within && since >= ANDERSON_STALL) {
+        if err <= tol || (within && since >= ANDERSON_STALL) {
             let r = (0..n_g)
                 .map(|g| if inp.traded[g] { r[g] } else { 1.0 })
                 .collect();
@@ -1358,7 +1374,13 @@ pub fn calibrate_from(
             }
         });
 
-        let scaling = sinkhorn_limited(&m, &spend, &sales_data, lw.as_ref(), limits.max_sweeps)?;
+        // the scaling need only be as exact as the pass it feeds is settled
+        let tol = if change.is_finite() {
+            (INNER_PER_OUTER * change).clamp(SINKHORN_TOL, INNER_TOL_MAX)
+        } else {
+            SINKHORN_TOL
+        };
+        let scaling = sinkhorn_to(&m, &spend, &sales_data, lw.as_ref(), limits.max_sweeps, tol)?;
         let log_weight = scaling.log_weight.clone();
         let mut top = vec![f64::NEG_INFINITY; n_g];
         for p in 0..n_p {
