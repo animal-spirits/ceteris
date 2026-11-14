@@ -90,9 +90,8 @@ CETERIS
 |  |- #228 user-side pack fetch, signed macOS build, cross-arch hashes
 |  |- #229 minimal pedia; #230 flip to open, fork-rename policy
 |  |- #231 NC-data audit for paid Steam build
-|  |- Decisions awaiting Antonio: #261 trademark, #262 when to sell,
-|  |    #263 Steam price, #264 NC data in paid build, #265 downloader form,
-|  |    #266 music, #267 employer filing
+|  |- Decided 6 Nov, open as records: #261-#267 (1.0 free on Steam, paid 2.0 at
+|  |    14.99 USD, per 14 Nov card; Antonio actions: lawyer for #261, filing #267)
 |  |- Licensing: AGPL simulator + BUSL-style game, CLA (RFC 0343/0344, PR 514 519)  done in spec
 |  |- Infra gaps (reports/infrastructure-gaps): signing/notarisation, Mac single
 |  |    point of failure, pack hosting, crash reports, URL drift job, secrets, B2 backups
@@ -126,7 +125,7 @@ CETERIS
 2. Frozen until a flagship scenario passes RFC 0350 bands: #534, #535, #536 (blocked by #173), banks F1, #543, #546.
 3. Queued phases: P3 (gate #171), P4, P5a, then P5b, P8, P9 once the freeze lifts or their prerequisites land.
 4. Queued polish and data: #408, #409, #411; #499-#502; #474.
-5. Release: #228-#231 plus seven Antonio decisions (#261-#267); infra gaps; repo stays private pending purge.
+5. Release: #228-#231 plus Antonio actions on #261 and #267 (decisions #261-#267 already made); infra gaps; repo stays private pending purge.
 6. UI: W1-W4 inside #204; accessibility, lessons, report export and UI polish deferred.
 7. Deferred: #232-#235, backlog #257-#260, #208, 2.0 game mechanics.
 
@@ -153,7 +152,7 @@ flowchart TD
   A4 --> L4[P3 #171 #197-#207 ... P4 #209-#212 P5a #213-#216 P5b #217-#219 P8 #220-#222 P9 #223-#227]
   A5 --> L5[#408 #409 #411]
   A6 --> L6[#499-#502]
-  A8 --> L8[#228-#231 decisions #261-#267]
+  A8 --> L8[#228-#231 records #261-#267]
   A11 --> L11[#232-#235 #257-#260]
   A1 -. unfreezes .-> A3
 ```
