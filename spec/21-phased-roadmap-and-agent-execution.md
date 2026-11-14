@@ -44,6 +44,8 @@ Each phase starts only when the previous gate passes; the highlighted workbench 
 11. **P10 AI layers and Steward mode** (2.0-alpha for economic levers, full Steward and Tier 1b in 2.x; ADR 0239). Learned state policies and playable single-state control; LLM leaders are deferred beyond v1.
     - Accept: Tier 1b compared with Tier 1a on historical base rates; Steward mode exposes the full state action space.
 
+CI runs the benchmark on a small calibrated pack, a committed subset of the full pack (ADR 0370) that CI calibrates (ADR 0371). It is report-only for 4 weeks of merged PRs, then gates the moments that validated against the full pack in every setting (ADR 0372); it uses no EXIOBASE or ETH/EPR data (ADR 0374). The full pack decides every phase gate.
+
 ### 21.2 Agent execution protocol
 
 The plan is written to be executed by coding agents in focused steps. Rules for every task:

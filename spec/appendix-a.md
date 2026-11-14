@@ -357,4 +357,9 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0367 | [Banks F1 builds all five 9.11 archetypes per state from the start, off by default](../rfcs/0352-banks-f1-capital-gap.md) | 9.11 |
 | 0368 | [The bank capital gap z_b is the share of loans to insolvent borrowers a bank rolls over because recognizing the loss would breach its capital minimum](../rfcs/0352-banks-f1-capital-gap.md) | 9.11, 7.4 |
 | 0369 | [2000 bank balance sheets come from national financial accounts and BIS banking statistics only; a state without them has banks off and no zombies](../rfcs/0352-banks-f1-capital-gap.md) | 9.11 |
+| 0370 | [The CI small pack is a committed, calibrated-by-CI subset of the full pack (fixed country list, rest of world on the ICIO grid, all 10 goods), at most 25 MB per regeneration, regenerated only by a reviewed PR](../rfcs/0353-ci-pack-and-fit-cache.md) | 5.1, 21.1 |
+| 0371 | [CI calibrates the small pack with `calibrate --pack` and runs the benchmark on it, path-filtered, Linux only, 10 minute budget](../rfcs/0353-ci-pack-and-fit-cache.md) | 21.1 |
+| 0372 | [The small-pack benchmark is report-only for 4 weeks of merged PRs, then gates the moments that validated against the RFC 0350 bands (pass, fail and ranking agree with the full pack in every validation setting); the full pack stays the phase-gate authority](../rfcs/0353-ci-pack-and-fit-cache.md) | 21.1 |
+| 0373 | [A warm-started fit seeded from the last accepted fit serves the development loop only; its output is non-authoritative and never written to a golden or `epsilon.json`](../rfcs/0353-ci-pack-and-fit-cache.md) | 19 |
+| 0374 | [The small pack ships only redistributable primary sources; EXIOBASE and the ETH/EPR family are excluded](../rfcs/0353-ci-pack-and-fit-cache.md) | 16, 21.1 |
 <!-- rows:end -->
