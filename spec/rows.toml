@@ -1785,3 +1785,13 @@ sections = "19"
 rows = "0374"
 topic = "[The small pack ships only redistributable primary sources; EXIOBASE and the ETH/EPR family are excluded](../rfcs/0353-ci-pack-and-fit-cache.md)"
 sections = "16, 21.1"
+
+[[entry]]
+rows = "0375"
+topic = "[A theta class whose border friction clamps at zero under ADR 0272's distance cost takes its own scale s_c on epsilon, so its cross-border share target stays feasible; other classes keep s_c = 1 (amends ADR 0272 Decision 2)](../rfcs/0354-class-epsilon-scale.md)"
+sections = "5.4, 8.3, 17.1"
+
+[[entry]]
+rows = "0376"
+topic = "[s_c is fitted jointly with epsilon and nu_c: for a floored class nu_c is 0 and s_c is the root in (0, 1] of the class's ICIO share residual, found inside each epsilon trial](../rfcs/0354-class-epsilon-scale.md)"
+sections = "17.1"

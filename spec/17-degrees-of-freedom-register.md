@@ -97,6 +97,7 @@ Added for the modern scenario:
 | P176 | Market-exclusion reputation period, rising with the haircut (ADR 0043; provisionally P80) | Sovereign debt | Calibrated in P5 Branch G | Default durations | Calibrated |
 | P177 | Money-anchor gain kappa_m of the price level (ADR 0338, redefined from ADR 0090's kappa_n; provisionally P143) | Markets | Start 0.2 (spike 0.1 to 0.2) | 5% nominal shock back within 1% in under 30 ticks | Free |
 | P178 | Good-level price gain kappa_b, across goods (ADR 0338) | Markets | 0.3, derived in the Stability region (trade SPEC; limit 0.63, worst-case spectral radius 0.824); to be measured before the build | V1 from the data state | Free |
+| P179 | Class epsilon scale s_c, per theta class, on the distance cost of ADR 0272 (ln D = (s_c epsilon / theta_c)(ln d - ln d_0,c)) | Trade | 1 for every class; below 1 only for a class whose border friction nu_c clamps at 0, where it is the root in (0, 1] of the class's ICIO share residual, fitted inside each epsilon trial (class 3 on the pack) | Fitted with epsilon and nu_c to ICIO's cross-border shares (ADR 0272 targets, unchanged); the class's held-out distance coefficient is reported and exempt from the theta-invariance gate | Calibrated (P4) |
 
 Held or proposed, not built in P2: P143 kappa\_n (ADR 0090, proposed; its split price rule is parked on `p2-adr0090` and `pre-p3/b6-wip`, and deferred to P5 by owner ruling, 2026-10-30, ADR 0090 "Deferred to P5") and P147 M\_F (ADR 0112, second decision; reserved and held, `p2-r3-producer-stock`).
 

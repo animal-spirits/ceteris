@@ -344,3 +344,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0351 | [Capital stock enters production; investment orders at the calibrated GFCF share](0351-capital-stock-in-production.md) | accepted | ADR 0366 |
 | 0352 | [Banks F1: five archetypes, and the capital gap that feeds the zombie band](0352-banks-f1-capital-gap.md) | accepted | ADR 0367, ADR 0368, ADR 0369 |
 | 0353 | [A small calibrated pack in CI and a per-class fit cache](0353-ci-pack-and-fit-cache.md) | accepted | ADR 0370, ADR 0371, ADR 0372, ADR 0373, ADR 0374 |
+| 0354 | [Per-class epsilon scale for classes whose border friction clamps at zero](0354-class-epsilon-scale.md) | accepted | ADR 0375, ADR 0376 |
