@@ -1,6 +1,6 @@
 # RFC 0353. A small calibrated pack in CI and a per-class fit cache
 
-Status: proposed
+Status: accepted
 Date: 2026-11-14
 Design sections: 5.1, 21.1; ADRs 0005, 0050, 0200, 0207, 0257, 0272
 Release: 1.0 (P4 and P5 gates)
@@ -71,6 +71,9 @@ Options:
 Recommendation: A while one regeneration stays under 25 MB, because it needs nothing the project
 has not got and a fork PR can run it; move to B if the size cap or the purge cost bites.
 
+Decision: A, Antonio, 2026-11-14 (question card; "Pick these options").
+Row: ADR 0370
+
 ### D2. Does CI calibrate the small pack, or read stored tables?
 
 Options:
@@ -84,6 +87,9 @@ Options:
 Recommendation: A, because calibration is where the regressions arrive; the job is path-filtered
 to `crates/ceteris-{calibrate,trade,econ,pack}` and `spec/` parameter files, Linux only, with a
 budget of 10 minutes per run (to be measured in the spike, ADR 0257 style go/no-go).
+
+Decision: A, Antonio, 2026-11-14 (question card; "Pick these options").
+Row: ADR 0371
 
 ### D3. How is the small pack shown to predict the full pack, and what may CI gate on?
 
@@ -112,6 +118,9 @@ Options for what CI does with the result:
 Recommendation: B, because a gate that has never been seen red or green on real PRs risks blocking
 merges on noise while the hosted minutes are scarce.
 
+Decision: B, Antonio, 2026-11-14 (question card; "Pick these options").
+Row: ADR 0372
+
 ### D4. Per-class or quick fit for the development loop
 
 Options:
@@ -134,6 +143,9 @@ Recommendation: C, because it speeds the loop without any result that feeds a ga
 and B's coupling error would have to be judged against RFC 0350 bands that the current trade-core
 work (#559 to #561) is still moving.
 
+Decision: C, Antonio, 2026-11-14 (question card; "Pick these options").
+Row: ADR 0373
+
 ### D5. Data and licence conditions of a committed or stored small pack
 
 Options:
@@ -149,6 +161,9 @@ Options:
 Recommendation: A, because a share-alike file in the repository would constrain the simulator
 licence (#514, RFC 0344) for no benchmark moment. The repository is private today, but ADR 0005
 treats every committed byte as shippable.
+
+Decision: A, Antonio, 2026-11-14 (question card; "Pick these options").
+Row: ADR 0374
 
 ## Cost
 
@@ -168,5 +183,8 @@ No code, no `.github/` change and no number is taken before acceptance.
 
 ## Spec changes
 
-On acceptance: 21.1 gains the CI small-pack gate and its validated moments; 5.1 gains the subset
-rule; ADR 0257 is cited, not changed. Rows are taken in the accepting PR.
+- 21.1: the CI small-pack benchmark, report-only for 4 weeks, then a gate on validated moments (ADR 0370 to 0372, 0374).
+- 5.1: the small-pack subset rule (ADR 0370).
+- 19: warm-start fit for the dev loop, non-authoritative (ADR 0373).
+
+ADR 0257 is cited, not changed.

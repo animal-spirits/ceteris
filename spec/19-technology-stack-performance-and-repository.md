@@ -67,6 +67,8 @@ ceteris/
   tests/golden/           golden runs with state hashes
 ```
 
+A warm-started fit, seeded from the last accepted fit, may serve the development loop; its output is non-authoritative and never written to a golden or `epsilon.json` (ADR 0373).
+
 ### 19.4 Performance directives
 
 These are binding rules for the coding agent: the speed comes from layout and algorithm choices, never from relaxing determinism.
