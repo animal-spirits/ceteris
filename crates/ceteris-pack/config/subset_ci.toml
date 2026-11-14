@@ -1,0 +1,83 @@
+# Small pack for CI (RFC 0353, ADRs 0370, 0374): `ceteris pack subset`.
+# Kept countries keep provinces and gateways; all others become one rest-of-world economy
+# aggregated by the rules below. A column without a rule is an error: add it here.
+# Rules: key, sum, mean (GDP-weighted, NaN skipped), any, first, const:<value> (for the
+# aggregated row; a kept country keeps its own value). `prefix*` matches a column family.
+# The country list is fixed before the validation campaign (RFC 0353 D3); shock files name
+# countries by full-pack index and need translating to this pack's order.
+
+countries = [
+    "AUT", "BEL", "BGR", "HRV", "CYP", "CZE", "DNK", "EST", "FIN", "FRA", "DEU", "GRC", "HUN",
+    "IRL", "ITA", "LVA", "LTU", "LUX", "MLT", "NLD", "POL", "PRT", "ROU", "SVK", "SVN", "ESP",
+    "SWE", "GBR", "USA", "CHN", "JPN",
+]
+row = "ROW"
+cap_mb = 25
+# Excluded by construction (ADR 0374): share-alike and validation-only sources.
+exclude_sources = ["epr*", "geoepr*", "exiobase*"]
+
+[rules.econ_countries]
+code = "const:ROW"
+name = "const:Rest of world"
+donor = "const:"
+va_basis = "first"
+income_source = "first"
+io_basis = "first"
+region = "const:ROW"
+gdp = "sum"
+ca_2000 = "sum"
+"va_imputed" = "any"
+"gdp_imputed" = "any"
+"*_imputed" = "any"
+"*_source" = "first"
+"*_pooled" = "any"
+"*_clipped" = "any"
+"*_capped" = "any"
+ca_missing = "any"
+labour_share_pooled = "any"
+labour_share_clipped = "any"
+foreign_source = "first"
+foreign_capped = "any"
+"fd_*" = "mean"
+"gov_*" = "mean"
+"inv_*" = "mean"
+"wealth_*" = "mean"
+"labour_share_*" = "mean"
+"foreign_*" = "mean"
+"owner_*" = "mean"
+"transfer*" = "mean"
+coal_share = "mean"
+participation = "mean"
+unemployment = "mean"
+u_star = "mean"
+working_age_share = "mean"
+labour_share = "mean"
+gini = "mean"
+edu_low = "mean"
+edu_secondary = "mean"
+edu_tertiary = "mean"
+price_level = "mean"
+g_a = "mean"
+f_gap = "mean"
+__country = "key"
+
+[rules.econ_io]
+country = "key"
+input = "key"
+good = "key"
+a = "mean"
+
+[rules.econ_tariffs]
+importer = "key"
+exporter = "key"
+group = "key"
+rate = "mean"
+agreement = "any"
+imputed = "any"
+
+[rules.econ_home_shares]
+country = "key"
+good = "key"
+home_share = "mean"
+absorption = "sum"
+icio = "any"

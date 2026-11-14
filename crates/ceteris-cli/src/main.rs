@@ -7,6 +7,7 @@
 //! ceteris pack fetch [--record]
 //! ceteris pack record-counties
 //! ceteris pack build [--out DIR]
+//! ceteris pack subset --pack DIR [--config FILE] (--out DIR | --schema)
 //! ceteris pack build --econ-only [--pack DIR] [--out DIR]
 //! ceteris reference solve --inputs DIR --out DIR
 //! ceteris calibrate --pack DIR [--no-border-fit] [--storage] [--fit-cache DIR] | --inputs DIR [--out DIR]
@@ -122,6 +123,7 @@ const USAGE: &str = "usage:
   ceteris pack fetch [--record]
   ceteris pack record-counties
   ceteris pack build [--out DIR]
+  ceteris pack subset --pack DIR [--config FILE] (--out DIR | --schema)
   ceteris pack build --econ-only [--pack DIR] [--out DIR]
   ceteris reference solve --inputs DIR --out DIR
   ceteris calibrate --pack DIR [--no-border-fit] [--storage] [--fit-cache DIR] | --inputs DIR [--out DIR]
@@ -640,6 +642,54 @@ fn record_counties(mut args: impl Iterator<Item = String>) -> Result<ExitCode, S
     Ok(ExitCode::SUCCESS)
 }
 
+/// `pack subset --pack DIR [--config FILE] --out DIR`: the small CI pack of RFC 0353 from an
+/// uncalibrated pack. `--schema` instead prints every table and column of DIR and exits 1 when
+/// the config has no aggregation rule for one.
+fn subset(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
+    let (mut pack, mut config, mut out, mut schema) = (None, None, None, false);
+    while let Some(a) = args.next() {
+        let mut dir = |what: &str| {
+            args.next()
+                .map(PathBuf::from)
+                .ok_or(format!("{what} needs a value"))
+        };
+        match a.as_str() {
+            "--pack" => pack = Some(dir("--pack")?),
+            "--config" => config = Some(dir("--config")?),
+            "--out" => out = Some(dir("--out")?),
+            "--schema" => schema = true,
+            other => return Err(format!("unknown argument '{other}'")),
+        }
+    }
+    let pack = pack.ok_or("pack subset needs --pack")?;
+    let config = config.unwrap_or_else(|| {
+        sources::workspace_root().join("crates/ceteris-pack/config/subset_ci.toml")
+    });
+    let text =
+        std::fs::read_to_string(&config).map_err(|e| format!("{}: {e}", config.display()))?;
+    let config = ceteris_pack::subset::Config::parse(&text)?;
+    if schema {
+        let (lines, missing) = ceteris_pack::subset::schema(&pack, &config)?;
+        lines.iter().for_each(|l| println!("{l}"));
+        missing.iter().for_each(|m| eprintln!("no rule: {m}"));
+        return Ok(if missing.is_empty() {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        });
+    }
+    let out = out.ok_or("pack subset needs --out or --schema")?;
+    let report = ceteris_pack::subset::subset(&pack, &config, &out)?;
+    println!(
+        "{} provinces, {} countries, {} tables, {} bytes",
+        report.provinces,
+        report.countries,
+        report.tables.len(),
+        report.bytes
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `pack build [--out DIR]`: the whole pack from the fetch cache into DIR (default
 /// `data/packs/<year>`), on the owner-side `geos` feature; prints the build stats.
 ///
@@ -713,9 +763,10 @@ fn pack(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         Some("fetch") => return fetch_sources(args),
         Some("record-counties") => return record_counties(args),
         Some("build") => return build(args),
+        Some("subset") => return subset(args),
         _ => {
             return Err(
-                "expected a pack command, compare, check-sources, fetch, record-counties or build"
+                "expected a pack command, compare, check-sources, fetch, record-counties, build or subset"
                     .into(),
             );
         }
