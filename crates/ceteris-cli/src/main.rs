@@ -1139,9 +1139,9 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             let groups = border::friction_groups(&inp.theta_class[..n_traded]);
             let (_, icio) = border::target_shares(pack, &groups)?;
             // epsilon, ln d_0 and nu of a fit written earlier by --fit-epsilon, or a fit now
-            let (epsilon, ln_d0, nu, ln_d) = match &epsilon_from {
+            let (epsilon, ln_d0, scale, nu, ln_d) = match &epsilon_from {
                 Some(file) => {
-                    let (epsilon, ln_d0, nu) = epsilon::read_fit(file)?;
+                    let (epsilon, ln_d0, scale, nu) = epsilon::read_fit(file)?;
                     let data = ceteris_calibrate::epsilon::pack_data(
                         pack,
                         &sources::workspace_root().join(fetch::CACHE_DIR),
@@ -1150,7 +1150,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                         "distance cost: epsilon {epsilon} read from {}",
                         file.display()
                     );
-                    (epsilon, ln_d0, nu, data.ln_d)
+                    (epsilon, ln_d0, scale, nu, data.ln_d)
                 }
                 None => {
                     let Some((fit, ln_d)) =
@@ -1161,16 +1161,23 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                     let t = &fit.trial;
                     println!(
                         "distance cost: epsilon {} ({} trials), pooled coefficient {} against the data's {}, \
-                         floored classes {:?}",
-                        t.epsilon, fit.evaluations, t.pooled, fit.data_pooled, t.floored
+                         floored classes {:?}, epsilon scale {:?}",
+                        t.epsilon, fit.evaluations, t.pooled, fit.data_pooled, t.floored, t.scale
                     );
-                    (t.epsilon, t.ln_d0.clone(), t.fit.nu.clone(), ln_d)
+                    (
+                        t.epsilon,
+                        t.ln_d0.clone(),
+                        t.scale.clone(),
+                        t.fit.nu.clone(),
+                        ln_d,
+                    )
                 }
             };
             println!("border friction: nu {nu:?}");
             let d = calibration::Distance {
                 epsilon,
                 ln_d0,
+                scale,
                 ln_d,
             };
             inp = epsilon::at_distance(&inp, &d)?;

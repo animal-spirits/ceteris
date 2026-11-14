@@ -62,14 +62,22 @@ fn world() -> World {
 
 /// Targets as the model makes them at a known epsilon and nu: the nu targets and the data flows.
 fn known(w: &World, epsilon: f64, nu_group: &[f64]) -> (Vec<f64>, Vec<f64>) {
-    let (mean, _) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &trade_weight(&w.inp));
-    let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &mean, epsilon).unwrap();
+    known_scaled(w, epsilon, &[1.0; border::N_CLASSES], nu_group)
+}
+
+fn known_scaled(w: &World, epsilon: f64, scale: &[f64], nu_group: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    let (mut mean, min) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &trade_weight(&w.inp));
+    // a scaled class is a floored one: d_0 at its smallest linked distance
+    for c in (0..scale.len()).filter(|&c| scale[c] < 1.0) {
+        mean[c] = min[c];
+    }
+    let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &mean, scale, epsilon).unwrap();
     let nu = border::nu_of_goods(&w.groups, nu_group, &at.border_nu);
     let target =
         border::data_state_shares(&at, &nu, &w.groups, &w.icio, Limits::default()).unwrap();
     let (spend, supply) = steady::data_state_spending(&at, Limits::default()).unwrap();
     let pairs = border::data_state_pair_values(
-        &epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &mean, epsilon).unwrap(),
+        &epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &mean, scale, epsilon).unwrap(),
         &nu,
         &spend,
         &supply,
@@ -89,7 +97,7 @@ fn trade_weight(inp: &Inputs) -> Vec<f64> {
 #[test]
 fn epsilon_zero_is_the_inputs() {
     let w = world();
-    let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &[0.0; 4], 0.0).unwrap();
+    let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &[0.0; 4], &[1.0; 4], 0.0).unwrap();
     assert_eq!(at.crossing.k, w.inp.crossing.k);
 }
 
@@ -120,9 +128,10 @@ fn fit_recovers_a_known_epsilon() {
     assert!(!fit.at_zero);
     let file = tempfile::tempdir().unwrap().keep().join("epsilon.json");
     std::fs::write(&file, fit.json().pretty()).unwrap();
-    let (e, d0, nu) = epsilon::read_fit(&file).unwrap();
+    let (e, d0, scale, nu) = epsilon::read_fit(&file).unwrap();
     assert_eq!((e, nu), (fit.trial.epsilon, fit.trial.fit.nu.clone()));
     assert_eq!(d0.len(), fit.trial.ln_d0.len());
+    assert_eq!(scale, fit.trial.scale);
     assert!((fit.trial.epsilon - e0).abs() <= 2.0 * epsilon::EPSILON_TOL);
     assert!(fit.held_out.iter().all(|c| c.within), "{:?}", fit.held_out);
 }
@@ -164,6 +173,7 @@ fn run_and_calibration_apply_the_same_distance_cost() {
     let d = Distance {
         epsilon: 0.4,
         ln_d0: vec![6.0, 6.2, 6.4, f64::NAN],
+        scale: vec![1.0, 0.7, 1.0, 1.0],
         ln_d: ln_d.clone(),
     };
     let dir = tempfile::tempdir().unwrap();
@@ -171,6 +181,7 @@ fn run_and_calibration_apply_the_same_distance_cost() {
     let read = write::read_distance(dir.path(), n).unwrap().unwrap();
     assert_eq!(read.epsilon, 0.4);
     assert_eq!(&read.ln_d0[..3], &d.ln_d0[..3]);
+    assert_eq!(read.scale, d.scale);
     assert!(
         read.ln_d
             .iter()
@@ -249,4 +260,38 @@ fn cached_fit_is_bit_identical() {
     other[0] *= 0.9;
     let (_, _, lines) = run(&other, Some(dir.path()));
     assert!(lines.iter().any(|l| !l.ends_with("from the cache")));
+}
+
+/// A class whose target share lies above what its distance cost allows (nu clamps at 0) takes
+/// s_c < 1 and meets the target with nu = 0; the other classes keep s_c = 1 (ADR 0375, 0376).
+#[test]
+fn clamped_class_takes_an_epsilon_scale() {
+    let w = world();
+    let (e0, c, s0) = (0.4, 1, 0.5);
+    let mut scale = [1.0; border::N_CLASSES];
+    scale[c] = s0;
+    let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
+    let (nu_target, data_flows) = known_scaled(&w, e0, &scale, &nu_group);
+    let t = Targets {
+        nu_target: &nu_target,
+        icio: &w.icio,
+        theta_class: &w.class,
+        ln_d: &w.ln_d,
+        weight: &trade_weight(&w.inp),
+        gravity: &w.gravity,
+        data_flows: &data_flows,
+    };
+    let tr = epsilon::fit_at_epsilon(&w.inp, &t, e0, Limits::default(), &mut quiet()).unwrap();
+    assert!(tr.scale[c] < 1.0, "{:?}", tr.scale);
+    assert!(tr.fit.nu[c] < 1e-6, "{:?}", tr.fit.nu);
+    assert!(
+        (tr.fit.share[c] - nu_target[c]).abs() <= 1e-4,
+        "share {} target {}",
+        tr.fit.share[c],
+        nu_target[c]
+    );
+    assert!((tr.scale[c] - s0).abs() <= 1e-3, "{:?}", tr.scale);
+    for k in (0..border::N_CLASSES).filter(|&k| k != c) {
+        assert_eq!(tr.scale[k], 1.0);
+    }
 }

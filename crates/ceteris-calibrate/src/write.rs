@@ -367,18 +367,20 @@ pub fn read_pack_provinces(export: &Path) -> Result<Vec<usize>, String> {
 }
 
 /// The dark distance cost a calibration was solved at (ADR 0272): `epsilon`, `ln d_0` per theta
-/// class and the country-pair `ln d` row-major, NaN where a pair has no distance.
+/// class, the epsilon scale s_c per class (ADR 0375) and the country-pair `ln d` row-major, NaN
+/// where a pair has no distance.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Distance {
     pub epsilon: f64,
     pub ln_d0: Vec<f64>,
+    pub scale: Vec<f64>,
     pub ln_d: Vec<f64>,
 }
 
 const DISTANCE_CLASS: &str = "econ_calib_distance_class.arrow";
 const DISTANCE_PAIRS: &str = "econ_calib_distance.arrow";
 
-/// Writes `econ_calib_distance_class` (class u8, ln_d0 f64, epsilon f64) and
+/// Writes `econ_calib_distance_class` (class u8, ln_d0 f64, epsilon f64, scale f64) and
 /// `econ_calib_distance` (a u32, b u32, ln_d f64, pairs with a distance) into `out`. A class
 /// without a linked pair has no `ln d_0` and is written as 0.
 pub fn write_distance(out: &Path, d: &Distance) -> Result<(), String> {
@@ -393,6 +395,7 @@ pub fn write_distance(out: &Path, d: &Distance) -> Result<(), String> {
                 f64s(d.ln_d0.iter().map(|&v| if v.is_finite() { v } else { 0.0 })),
             ),
             named("epsilon", f64s(d.ln_d0.iter().map(|_| d.epsilon))),
+            named("scale", f64s(d.scale.iter().copied())),
         ],
         None,
     )?;
@@ -433,6 +436,7 @@ pub fn read_distance(pack: &Path, n_countries: usize) -> Result<Option<Distance>
         .first()
         .ok_or("econ_calib_distance_class.arrow is empty")?;
     let ln_d0 = classes.f64("ln_d0")?;
+    let scale = classes.f64("scale")?;
     let pairs = Table::open(&pack.join(DISTANCE_PAIRS))?;
     let mut ln_d = vec![f64::NAN; n_countries * n_countries];
     for ((a, b), l) in pairs
@@ -451,6 +455,7 @@ pub fn read_distance(pack: &Path, n_countries: usize) -> Result<Option<Distance>
     Ok(Some(Distance {
         epsilon,
         ln_d0,
+        scale,
         ln_d,
     }))
 }
