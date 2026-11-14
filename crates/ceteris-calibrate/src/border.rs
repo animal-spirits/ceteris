@@ -187,6 +187,19 @@ pub fn cross_border_shares(
     icio: &[bool],
     groups: &[Vec<usize>],
 ) -> Result<Vec<f64>, String> {
+    let (abroad, total) = cross_border_parts(inp, price, spend, icio, groups)?;
+    Ok(ratio(&abroad, &total))
+}
+
+/// The value bought from abroad and the total value of each group, as [`cross_border_shares`]
+/// divides them.
+pub fn cross_border_parts(
+    inp: &Inputs,
+    price: &Mat,
+    spend: &Mat,
+    icio: &[bool],
+    groups: &[Vec<usize>],
+) -> Result<(Vec<f64>, Vec<f64>), String> {
     let m = Model::new(inp)?;
     let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
     if icio.len() != n_c {
@@ -215,7 +228,7 @@ pub fn cross_border_shares(
             }
         }
     }
-    Ok(ratio(&abroad, &total))
+    Ok((abroad, total))
 }
 
 /// ICIO 2000 cross-border share of each group of `groups` (`econ_home_shares.arrow` of `pack`):
@@ -328,6 +341,20 @@ pub fn data_state_pair_values(
     let m = Model::new(&at)?;
     let src = m.sourcing(&price);
     Ok(m.flows(&price, spend, &src).pair_value)
+}
+
+/// [`cross_border_parts`] at border frictions `nu` (per good), at the stage 1 spending of the data
+/// state of `inp`, as [`data_state_shares`] evaluates it.
+pub fn data_state_parts(
+    inp: &Inputs,
+    nu: &[f64],
+    groups: &[Vec<usize>],
+    icio: &[bool],
+    limits: Limits,
+) -> Result<(Vec<f64>, Vec<f64>), CalibrationError> {
+    let (spend, supply) = steady::data_state_spending(inp, limits)?;
+    let (at, price, _) = solve_at(inp, nu, &spend, &supply, None, limits)?;
+    Ok(cross_border_parts(&at, &price, &spend, icio, groups)?)
 }
 
 /// The cross-border share of every group at border frictions `nu` (per good), over the countries

@@ -35,6 +35,10 @@ pub const EPSILON_TOL: f64 = 1e-3;
 /// Brent's bracket on a class's epsilon scale ends this narrow, within this many rounds.
 const SCALE_TOL: f64 = 1e-6;
 const SCALE_ROUNDS: usize = 100;
+/// A residual at scale 1 this small counts as the target met there.
+const SCALE_FLAT: f64 = 1e-9;
+/// A group of a scaled class whose nu is at most this counts as pinned at 0.
+const PIN_NU: f64 = 1e-6;
 /// Refits of nu and s_c against each other before the trial gives up.
 const SCALE_PASSES: usize = 10;
 /// A crossing product (1 + nu) D below 1 by more than this is a miss (ADR 0272, Decision 2).
@@ -288,9 +292,10 @@ fn sums(values: &[f64], n_pairs: usize, stride: usize, goods: &[usize]) -> Vec<f
         .collect()
 }
 
-/// s in [0, 1] such that group `k` of class `c`, held at nu 0 with the other groups at `nu`, has
-/// its target cross-border share at epsilon scale s, by Brent's method (ADR 0376). The share
-/// rises as s falls; the target is above it at s = 1 (the clamp).
+/// s in [0, 1] such that the groups `ks` of class `c`, held at nu 0 with the other groups at `nu`,
+/// buy their target cross-border share pooled (ADR 0376), by Brent's method. The residual is the
+/// value bought from abroad less the target share of the total, over the groups' total; the share
+/// rises as s falls and the target is above it at s = 1 (the clamp).
 #[allow(clippy::too_many_arguments)]
 fn solve_scale(
     inp: &Inputs,
@@ -299,8 +304,9 @@ fn solve_scale(
     scale: &[f64],
     epsilon: f64,
     c: usize,
-    k: usize,
+    ks: &[usize],
     nu: &[f64],
+    settled: bool,
     limits: Limits,
 ) -> Result<f64, CalibrationError> {
     let groups = border::friction_groups(t.theta_class);
@@ -308,23 +314,32 @@ fn solve_scale(
         let mut sc = scale.to_vec();
         sc[c] = s;
         let at = at_epsilon(inp, t.theta_class, t.ln_d, ln_d0, &sc, epsilon)?;
-        let share = border::data_state_shares(&at, nu, &groups, t.icio, limits)?;
-        Ok(share[k] - t.nu_target[k])
+        let (abroad, total) = border::data_state_parts(&at, nu, &groups, t.icio, limits)?;
+        let (miss, all) = ks.iter().fold((0.0, 0.0), |(m, a), &k| {
+            (m + abroad[k] - t.nu_target[k] * total[k], a + total[k])
+        });
+        Ok(miss / all)
     };
     let (f_lo, f_hi) = (f(0.0)?, f(1.0)?);
-    // Short of the target even without distance cost: s = 0, and the next refit of nu says if the
-    // target is reachable.
-    if f_lo < 0.0 {
+    // Short of the target even without distance cost. The first time it can be the nu of the other
+    // groups, not yet refitted: s = 0, and the next refit says. Once refitted it is infeasible.
+    if f_lo < -SCALE_FLAT {
+        if settled {
+            return Err(format!(
+                "class {c}: target cross-border share outside the model's even at scale 0 (residual {f_lo})"
+            )
+            .into());
+        }
         return Ok(0.0);
     }
-    if f_hi > 0.0 {
+    if f_hi > SCALE_FLAT {
         return Err(format!(
-            "class {c}: target cross-border share {} outside the model's {} (scale 0) to {} (scale 1)",
-            t.nu_target[k],
-            f_lo + t.nu_target[k],
-            f_hi + t.nu_target[k]
+            "class {c}: pooled cross-border share above its target at scale 1 (residuals {f_lo} at scale 0, {f_hi} at scale 1)"
         )
         .into());
+    }
+    if f_hi >= 0.0 {
+        return Ok(1.0);
     }
     let mut brent = Brent::new(0.0, f_lo, 1.0, f_hi);
     for _ in 0..SCALE_ROUNDS {
@@ -367,28 +382,31 @@ fn trial(
         let nu = fit.nu_of_goods(&at.border_nu);
         let bad = product_misses(inp, t.theta_class, t.ln_d, &ln_d0, &scale, epsilon, &nu);
         if bad.is_empty() {
-            // A class clamped at nu 0 takes its own s_c (ADR 0376); per-good groups keep the
-            // clamp. s_c is re-solved at the refitted nu of the other groups until it settles.
-            let active: Vec<usize> = (0..groups.len())
-                .filter(|&k| !fit.target[k].is_nan())
-                .filter(|&k| {
-                    let c = t.theta_class[groups[k][0]];
-                    c != border::PER_GOOD_CLASS && (scaled[c] || fit.clamped[k])
-                })
-                .collect();
+            // A class with groups pinned at nu 0 takes its own s_c (ADR 0376), solved on the
+            // pinned groups pooled, so a per-good class has one s_c too. s_c is re-solved at the
+            // refitted nu of the other groups until it settles.
             let mut moved = false;
-            for k in active {
-                let c = t.theta_class[groups[k][0]];
+            // epsilon 0 has no distance cost to scale
+            for c in (0..border::N_CLASSES).filter(|_| epsilon > 0.0) {
+                let pinned: Vec<usize> = (0..groups.len())
+                    .filter(|&k| t.theta_class[groups[k][0]] == c && !fit.target[k].is_nan())
+                    .filter(|&k| fit.clamped[k] || (scaled[c] && fit.nu[k] <= PIN_NU))
+                    .collect();
+                if pinned.is_empty() {
+                    continue;
+                }
                 let mut nu_k = nu.clone();
-                for &g in &groups[k] {
+                for &g in pinned.iter().flat_map(|&k| &groups[k]) {
                     nu_k[g] = 0.0;
                 }
-                let s = solve_scale(inp, t, &ln_d0, &scale, epsilon, c, k, &nu_k, limits)?;
+                let s = solve_scale(
+                    inp, t, &ln_d0, &scale, epsilon, c, &pinned, &nu_k, scaled[c], limits,
+                )?;
                 moved |= !scaled[c] || (s - scale[c]).abs() > 10.0 * SCALE_TOL;
                 scale[c] = s;
                 scaled[c] = true;
                 progress(&format!(
-                    "epsilon {epsilon}: class {c} at nu 0, epsilon scale {s}"
+                    "epsilon {epsilon}: class {c} groups {pinned:?} at nu 0, epsilon scale {s}"
                 ));
             }
             if moved {
