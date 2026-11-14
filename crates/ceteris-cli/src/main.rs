@@ -1446,6 +1446,95 @@ fn fetch_verb(args: Vec<String>) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// `bisect FILE --good A --bad B --ticks N --fixture|--pack DIR [--seed S] [--tol T]`: finds the
+/// first of B's own edits after which a declared outcome of member S (the scenario's first seed
+/// by default) differs from A's by more than the relative tolerance T (default 1e-9). A must be
+/// B's parent: the branch with none of its own edits is then A itself.
+fn bisect_verb(args: Vec<String>) -> Result<ExitCode, String> {
+    use ceteris_econ::ensemble::{outcomes, run_member};
+    use ceteris_run::ensemble::register_priors;
+
+    let file = args.first().ok_or("expected a scenario FILE")?;
+    let flag = |name: &str| -> Option<&str> {
+        let at = args.iter().position(|a| a == name)?;
+        args.get(at + 1).map(String::as_str)
+    };
+    let need = |name: &str| flag(name).ok_or(format!("missing {name}"));
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    let scenario = ceteris_run::Scenario::parse(&text).map_err(|e| e.to_string())?;
+    let (good, bad) = (need("--good")?, need("--bad")?);
+    if scenario
+        .branch(bad)
+        .map_err(|e| e.to_string())?
+        .parent
+        .as_deref()
+        != Some(good)
+    {
+        return Err(format!("--good must be the parent of {bad}"));
+    }
+    let ticks: u32 = need("--ticks")?
+        .parse()
+        .map_err(|_| "--ticks wants a count".to_string())?;
+    let seed: u64 = match flag("--seed") {
+        Some(s) => s.parse().map_err(|_| "--seed wants a number".to_string())?,
+        None => *scenario.seeds.first().ok_or("the scenario has no seeds")?,
+    };
+    let tol: f64 = match flag("--tol") {
+        Some(t) => t.parse().map_err(|_| "--tol wants a number".to_string())?,
+        None => 1e-9,
+    };
+    let source = match (flag("--pack"), args.iter().any(|a| a == "--fixture")) {
+        (Some(dir), false) => Source::Pack(PathBuf::from(dir)),
+        (None, true) => Source::Fixture,
+        _ => return Err("choose an input with --fixture or --pack DIR".into()),
+    };
+    let inputs = source.load(true)?;
+    let base = (EconParams::default(), inputs.trade_params());
+    let inputs = Arc::new(inputs);
+    let priors = register_priors();
+    let run = |s: &ceteris_run::Scenario, branch: &str| -> Result<Vec<f64>, String> {
+        let log = s.edits_of(branch).map_err(|e| e.to_string())?;
+        let m = run_member(&inputs, &base, &priors, &log, seed, ticks, |w| {
+            outcomes(w)
+                .into_iter()
+                .map(|(_, v)| v)
+                .collect::<Vec<f64>>()
+        })
+        .map_err(|e| format!("{e:?}"))?;
+        Ok(m.outcome)
+    };
+    let reference = run(&scenario, good)?;
+    let mut failure = None;
+    let found = ceteris_run::vcs::bisect(&scenario, bad, seed, |cut, id| match run(cut, id) {
+        Ok(v) => v
+            .iter()
+            .zip(&reference)
+            .any(|(a, b)| (a - b).abs() > tol * b.abs().max(f64::MIN_POSITIVE)),
+        Err(e) => {
+            failure = Some(e);
+            false
+        }
+    })
+    .map_err(|e| e.to_string())?;
+    if let Some(e) = failure {
+        return Err(e);
+    }
+    match found.culprit {
+        Some(i) => {
+            let e = &scenario.branch(bad).map_err(|e| e.to_string())?.edits[i];
+            println!(
+                "edit {i}: {} {:?} {} = {} ({} probes)",
+                e.tick, e.kind, e.target, e.value, found.probes
+            );
+        }
+        None => println!(
+            "no edit of {bad} moves an outcome beyond {tol:e} ({} probes)",
+            found.probes
+        ),
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `ensemble` and `effects`: run a branch (and its baseline) over the scenario's seeds, with
 /// the register priors drawn per member, and write the `outcomes` and `effects` tables.
 fn ensemble_verb(verb: &str, args: Vec<String>) -> Result<ExitCode, String> {
@@ -1810,6 +1899,12 @@ fn main() -> ExitCode {
     }
     if command == "setup" {
         return setup_verb(argv.collect()).unwrap_or_else(|e| {
+            eprintln!("ceteris: {e}");
+            ExitCode::FAILURE
+        });
+    }
+    if command == "bisect" {
+        return bisect_verb(argv.collect()).unwrap_or_else(|e| {
             eprintln!("ceteris: {e}");
             ExitCode::FAILURE
         });
