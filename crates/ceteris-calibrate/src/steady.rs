@@ -101,12 +101,29 @@ pub const MAX_LOCAL: usize = 1_000;
 /// writer and reader cannot drift apart.
 pub const FORMAT: &str = ceteris_econ::calibration::FORMAT;
 
+/// How the scaling's sweeps are mixed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Accel {
+    /// One Anderson history over every good's weights.
+    #[default]
+    Joint,
+    /// One history, least squares and restart rule per good: the goods' scalings do not couple,
+    /// and a joint history of [`ANDERSON_MEMORY`] columns spans too few of the slow modes of many
+    /// near-closed goods.
+    PerGood,
+}
+
 /// Iteration caps of the passes, the scaling and the income fixed point.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
     pub max_passes: usize,
     pub max_sweeps: usize,
     pub max_local: usize,
+    pub accel: Accel,
+    /// Restart the outer Anderson history when a pass's change exceeds this multiple of the
+    /// smallest change so far: the mixing has overshot and its secants are stale (a cycle at
+    /// class 3 with epsilon on). `None` never restarts.
+    pub outer_restart: Option<f64>,
 }
 
 impl Default for Limits {
@@ -115,6 +132,8 @@ impl Default for Limits {
             max_passes: MAX_PASSES,
             max_sweeps: MAX_SWEEPS,
             max_local: MAX_LOCAL,
+            accel: Accel::default(),
+            outer_restart: None,
         }
     }
 }
@@ -365,6 +384,9 @@ fn divide_where(num: f64, den: f64, on: bool, otherwise: f64) -> f64 {
     if on { num / den } else { otherwise }
 }
 
+/// An Anderson history: iterates and their residuals.
+type History = (Vec<Vec<f64>>, Vec<Vec<f64>>);
+
 /// Successive differences of the history of Anderson mixing, as columns.
 fn diffs(history: &[Vec<f64>]) -> Vec<Vec<f64>> {
     history
@@ -420,6 +442,19 @@ pub fn sinkhorn_to(
     start: Option<&Mat>,
     max_sweeps: usize,
     tol: f64,
+) -> Result<Scaling, CalibrationError> {
+    sinkhorn_with(m, spend, supply, start, max_sweeps, tol, Accel::Joint)
+}
+
+/// [`sinkhorn_to`] with the mixing `accel`.
+pub fn sinkhorn_with(
+    m: &Model,
+    spend: &Mat,
+    supply: &Mat,
+    start: Option<&Mat>,
+    max_sweeps: usize,
+    tol: f64,
+    accel: Accel,
 ) -> Result<Scaling, CalibrationError> {
     let inp = m.inp;
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
@@ -527,6 +562,13 @@ pub fn sinkhorn_to(
 
     let (mut xs, mut gs): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (Vec::new(), Vec::new());
     let (mut best, mut since) = (f64::INFINITY, 0);
+    // per-good mixing: the origin cells of each good, and each good's own history and restart rule
+    let cells: Vec<Vec<usize>> = (0..n_g)
+        .map(|g| (0..n).filter(|&i| origin[i] && good[i] == g).collect())
+        .collect();
+    let mut hist: Vec<History> = vec![(Vec::new(), Vec::new()); n_g];
+    let mut gbest = vec![f64::INFINITY; n_g];
+    let mut gsince = vec![0usize; n_g];
     let mut err = f64::NAN;
     let mut last_by_good = Vec::new();
     // the plain sweep from the last finite point, where a mixed step leaves f64
@@ -564,7 +606,48 @@ pub fn sinkhorn_to(
             xs.clear();
             gs.clear();
             (best, since) = (f64::INFINITY, 0);
+            hist.iter_mut().for_each(|h| {
+                h.0.clear();
+                h.1.clear();
+            });
+            (gbest, gsince) = (vec![f64::INFINITY; n_g], vec![0; n_g]);
             lw = p;
+            continue;
+        }
+        if accel == Accel::PerGood {
+            let mut mixed = fx.clone();
+            for g in (0..n_g).filter(|&g| !cells[g].is_empty()) {
+                if last_by_good[g] < gbest[g] {
+                    (gbest[g], gsince[g]) = (last_by_good[g], 0);
+                } else {
+                    gsince[g] += 1;
+                }
+                let (hx, hg) = &mut hist[g];
+                if gsince[g] > ANDERSON_STALL {
+                    hx.clear();
+                    hg.clear();
+                    (gbest[g], gsince[g]) = (f64::INFINITY, 0);
+                }
+                let x: Vec<f64> = cells[g].iter().map(|&i| lw[i]).collect();
+                let gg: Vec<f64> = cells[g].iter().map(|&i| fx[i] - lw[i]).collect();
+                if hx.len() > ANDERSON_MEMORY {
+                    hx.remove(0);
+                    hg.remove(0);
+                }
+                hx.push(x.clone());
+                hg.push(gg.clone());
+                if hg.len() > 1 {
+                    let (dx, dg) = (diffs(hx), diffs(hg));
+                    let gamma = lstsq(&dg, &gg)?;
+                    let stepped: Vec<f64> = x.iter().zip(&gg).map(|(x, g)| x + g).collect();
+                    let out = mix(&stepped, &dx, &dg, &gamma);
+                    for (k, &i) in cells[g].iter().enumerate() {
+                        mixed[i] = out[k];
+                    }
+                }
+            }
+            plain = Some(fx);
+            lw = mixed;
             continue;
         }
         if err < best {
@@ -1356,6 +1439,7 @@ pub fn calibrate_from(
     let mut lw: Option<Mat> = None;
     let mut history: Vec<Pass> = Vec::new();
     let (mut zs, mut fs): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (Vec::new(), Vec::new());
+    let mut best_change = f64::INFINITY;
     let ones = Mat::filled(n_p, n_g, 1.0);
     let mut settled = None;
     let mut change = f64::NAN;
@@ -1380,7 +1464,15 @@ pub fn calibrate_from(
         } else {
             SINKHORN_TOL
         };
-        let scaling = sinkhorn_to(&m, &spend, &sales_data, lw.as_ref(), limits.max_sweeps, tol)?;
+        let scaling = sinkhorn_with(
+            &m,
+            &spend,
+            &sales_data,
+            lw.as_ref(),
+            limits.max_sweeps,
+            tol,
+            limits.accel,
+        )?;
         let log_weight = scaling.log_weight.clone();
         let mut top = vec![f64::NEG_INFINITY; n_g];
         for p in 0..n_p {
@@ -1557,6 +1649,14 @@ pub fn calibrate_from(
         let z = state.pack(&q, &rebate, &weights);
         let f = state.pack(&q_new, &rebate_new, &weights_new);
         let fz: Vec<f64> = f.iter().zip(&z).map(|(f, z)| f - z).collect();
+        if limits
+            .outer_restart
+            .is_some_and(|k| change > k * best_change)
+        {
+            zs.clear();
+            fs.clear();
+        }
+        best_change = best_change.min(change);
         if zs.len() > ANDERSON_MEMORY {
             zs.remove(0);
             fs.remove(0);

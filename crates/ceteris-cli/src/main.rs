@@ -91,7 +91,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use ceteris_calibrate::steady::Limits;
+use ceteris_calibrate::steady::{Accel, Limits};
 use ceteris_calibrate::summary;
 use ceteris_calibrate::write as calibration;
 use ceteris_calibrate::{benchmark, border, epsilon, gravity};
@@ -1043,8 +1043,15 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let (mut storage, mut fit_epsilon, mut epsilon_on) = (false, false, true);
     let mut fit_cache = None;
     let mut epsilon_from: Option<PathBuf> = None;
+    let mut limits = Limits::default();
     while let Some(a) = args.next() {
         match a.as_str() {
+            "--per-good-sinkhorn" => limits.accel = Accel::PerGood,
+            "--outer-restart" => {
+                let k = args.next().ok_or("--outer-restart needs a factor")?;
+                limits.outer_restart =
+                    Some(k.parse().map_err(|_| "--outer-restart needs a number")?);
+            }
             "--fit-epsilon" => fit_epsilon = true,
             "--no-epsilon-fit" => epsilon_on = false,
             "--fit-cache" => {
@@ -1147,7 +1154,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                 }
                 None => {
                     let Some((fit, ln_d)) =
-                        run_epsilon_fit(&inp, pack, fit_cache.as_deref(), &mut progress)?
+                        run_epsilon_fit(&inp, pack, fit_cache.as_deref(), limits, &mut progress)?
                     else {
                         return Ok(ExitCode::FAILURE);
                     };
@@ -1176,20 +1183,14 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             let groups = border::friction_groups(&inp.theta_class[..n_traded]);
             let (target, icio) = border::target_shares(pack, &groups)?;
             println!("border friction: ICIO cross-border share by group {groups:?}: {target:?}");
-            let fit = match border::fit_border_nu(
-                &inp,
-                &groups,
-                &target,
-                &icio,
-                Limits::default(),
-                &mut progress,
-            ) {
-                Ok(fit) => fit,
-                Err(e) => {
-                    eprintln!("no calibration: {e}");
-                    return Ok(ExitCode::FAILURE);
-                }
-            };
+            let fit =
+                match border::fit_border_nu(&inp, &groups, &target, &icio, limits, &mut progress) {
+                    Ok(fit) => fit,
+                    Err(e) => {
+                        eprintln!("no calibration: {e}");
+                        return Ok(ExitCode::FAILURE);
+                    }
+                };
             println!(
                 "border friction: nu {:?}, share {:?}, clamped at nu 0 {:?}, {} evaluations",
                 fit.nu, fit.share, fit.clamped, fit.evaluations
@@ -1199,14 +1200,8 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
         }
         None => None,
     };
-    let s = match ceteris_calibrate::run(
-        &inp,
-        &u_star,
-        &pack_province,
-        &out,
-        Limits::default(),
-        &mut progress,
-    ) {
+    let s = match ceteris_calibrate::run(&inp, &u_star, &pack_province, &out, limits, &mut progress)
+    {
         Ok(s) => s,
         Err(e) => {
             eprintln!("no calibration: {e}");
@@ -1236,6 +1231,7 @@ fn run_epsilon_fit(
     inp: &reference_io::Inputs,
     pack: &Path,
     cache: Option<&Path>,
+    limits: Limits,
     progress: &mut dyn FnMut(&str),
 ) -> Result<Option<(ceteris_calibrate::epsilon::EpsilonFit, Vec<f64>)>, String> {
     use ceteris_calibrate::epsilon::{Targets, fit_epsilon_cached, pack_data};
@@ -1253,7 +1249,7 @@ fn run_epsilon_fit(
         gravity: &data.gravity,
         data_flows: &data.data_flows,
     };
-    match fit_epsilon_cached(inp, &t, Limits::default(), cache, progress) {
+    match fit_epsilon_cached(inp, &t, limits, cache, progress) {
         Ok(fit) => Ok(Some((fit, data.ln_d))),
         Err(e) => {
             eprintln!("no epsilon fit: {e}");
@@ -1271,7 +1267,8 @@ fn fit_epsilon_driver(
     cache: Option<&Path>,
 ) -> Result<ExitCode, String> {
     let mut progress = |line: &str| println!("{line}");
-    let Some((fit, _)) = run_epsilon_fit(inp, pack, cache, &mut progress)? else {
+    let Some((fit, _)) = run_epsilon_fit(inp, pack, cache, Limits::default(), &mut progress)?
+    else {
         return Ok(ExitCode::FAILURE);
     };
     let json = fit.json().pretty();
