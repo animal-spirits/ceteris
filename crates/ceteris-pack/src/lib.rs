@@ -13,5 +13,6 @@ pub mod raster;
 pub mod read;
 pub mod setup;
 pub mod sources;
+pub mod subset;
 pub mod table;
 pub mod web;
