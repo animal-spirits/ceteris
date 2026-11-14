@@ -12,8 +12,8 @@ A Rust core gives deterministic, parallel speed; Rust crates also own the data p
 | App shell | One native Rust process: winit window, Slint panels, the economy on a sim thread publishing views through a run-ahead ring (ADRs 0088, 0208) | One native macOS app, no server |
 | Map UI | wgpu globe drawn into a texture shown in Slint: fills coloured from a per-feature texture, borders from an id target, labels as Slint text (ADRs 0010, 0088, 0244); globe only, with Equal Earth for flat exports (ADR 0250) 120 fps on the owner's Mac (frame p50 8.33 ms); a full province recolour uploads in 0.06 ms |
 | Pipeline, reference model, calibration | Rust crates `ceteris-pack`, `ceteris-reference`, `ceteris-calibrate`, driven by the `ceteris` CLI; GEOS only on the owner-side map build (ADR 0113) | One toolchain; the restricted part of the pack builds on the user's machine with no Python runtime |
-| Analysis | Outside the repo: Polars, DuckDB or any language reading the Arrow and Parquet outputs | No bindings to maintain; runs are driven by scenario files |
-| Run store | Parquet partitioned by experiment / branch / seed / table; DuckDB queries | Cheap ensemble analysis on one disk |
+| Analysis | Outside the repo: Polars, DuckDB or any language reading the Arrow IPC outputs | No bindings to maintain; runs are driven by scenario files |
+| Run store | Arrow IPC files partitioned by experiment / branch / seed / table; DuckDB queries | Cheap ensemble analysis on one disk |
 | Snapshots | zstd-compressed Arrow, content-addressed | Branch sharing |
 | Licence | Open source: AGPL-3.0-or-later for code, commercial licences from the owner (ADR 0346); 2.0 game in a separate repo, source-available under a BUSL-style licence (ADR 0347, ADR 0349); outside contributions under a CLA (ADR 0348); data under its source licences, downloaded by each user (ODbL and other share-alike tables shipped separately) | Non-commercial sources usable; restricted sources fetched, never bundled |
 
@@ -138,7 +138,7 @@ These are binding rules for the coding agent: the speed comes from layout and al
 - Data packs are immutable Arrow files memory-mapped by every process, so ensembles share one physical copy through the page cache.
 - Lanes share packs, kernels and route-choice factors; trade products widen from (provinces x goods) to (provinces x goods x lanes).
 - Copy-on-write snapshots in about 64k-row content-hashed chunks with low-level zstd.
-- Emulate principal components of output series; reuse Saltelli sample matrices; random Fourier features keep emulators linear in run count; analysis tools read runs only through Arrow and Parquet outputs, never per-entity calls.
+- Emulate principal components of output series; reuse Saltelli sample matrices; random Fourier features keep emulators linear in run count; analysis tools read runs only through Arrow IPC outputs, never per-entity calls.
 
 **GPU (fallback only)**
 
