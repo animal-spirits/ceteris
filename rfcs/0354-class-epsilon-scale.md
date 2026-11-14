@@ -1,6 +1,6 @@
 # RFC 0354. Per-class epsilon scale for classes whose border friction clamps at zero
 
-Status: draft
+Status: accepted
 Date: 2026-11-14
 Design sections: 5.4, 15.3, 17.1; ADRs 0092, 0264, 0272
 Release: 1.0 (P4)
@@ -34,7 +34,7 @@ Options:
 Recommendation: A.
 
 Decision: A, Antonio, 2026-11-14 (question card, class 3 calibration thread).
-Row: <ADR NNNN, filled in once accepted>
+Row: ADR 0375
 
 ### D2. How is s_c fitted?
 
@@ -46,12 +46,12 @@ Options:
 
 Recommendation: A, because it uses only the targets ADR 0272 already fixes and the same solver.
 
-Decision: pending Antonio.
-Row: <ADR NNNN, filled in once accepted>
+Decision: A, Antonio, 2026-11-14 (question card, class 3 calibration thread).
+Row: ADR 0376
 
 ## Spec changes
 
-Written when accepted, in the PR that takes the numbers:
+Written in this PR (ADR 0375, ADR 0376):
 
 - 5.4 and 17.1: ln D for a crossing of class c becomes (s_c epsilon / theta_c)(ln d - ln d_0,c);
   new calibrated register entry s_c (one per class, 1 unless floored).

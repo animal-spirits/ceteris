@@ -362,4 +362,6 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0372 | [The small-pack benchmark is report-only for 4 weeks of merged PRs, then gates the moments that validated against the RFC 0350 bands (pass, fail and ranking agree with the full pack in every validation setting); the full pack stays the phase-gate authority](../rfcs/0353-ci-pack-and-fit-cache.md) | 21.1 |
 | 0373 | [A warm-started fit seeded from the last accepted fit serves the development loop only; its output is non-authoritative and never written to a golden or `epsilon.json`](../rfcs/0353-ci-pack-and-fit-cache.md) | 19 |
 | 0374 | [The small pack ships only redistributable primary sources; EXIOBASE and the ETH/EPR family are excluded](../rfcs/0353-ci-pack-and-fit-cache.md) | 16, 21.1 |
+| 0375 | [A theta class whose border friction clamps at zero under ADR 0272's distance cost takes its own scale s_c on epsilon, so its cross-border share target stays feasible; other classes keep s_c = 1 (amends ADR 0272 Decision 2)](../rfcs/0354-class-epsilon-scale.md) | 5.4, 8.3, 17.1 |
+| 0376 | [s_c is fitted jointly with epsilon and nu_c: for a floored class nu_c is 0 and s_c is the root in (0, 1] of the class's ICIO share residual, found inside each epsilon trial](../rfcs/0354-class-epsilon-scale.md) | 17.1 |
 <!-- rows:end -->
