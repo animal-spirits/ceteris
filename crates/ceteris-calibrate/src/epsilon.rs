@@ -31,6 +31,12 @@ use crate::steady::{self, CalibrationError, Limits};
 pub const EPSILON_MAX: f64 = 2.0;
 /// Brent ends when the bracket is this narrow in epsilon.
 pub const EPSILON_TOL: f64 = 1e-3;
+
+/// Brent's bracket on a class's epsilon scale ends this narrow, within this many rounds.
+const SCALE_TOL: f64 = 1e-6;
+const SCALE_ROUNDS: usize = 100;
+/// Refits of nu and s_c against each other before the trial gives up.
+const SCALE_PASSES: usize = 10;
 /// A crossing product (1 + nu) D below 1 by more than this is a miss (ADR 0272, Decision 2).
 const PRODUCT_TOL: f64 = 1e-12;
 
@@ -143,7 +149,8 @@ fn ln_factor(inp: &Inputs, epsilon: f64, ln_rel: f64, g: usize) -> f64 {
 }
 
 /// The inputs with every crossing multiplied by the dark distance cost `D` at `epsilon`:
-/// `ln_d0` per theta class, `ln_d` the country-pair distance row-major. K scales by `D^-theta`,
+/// `ln_d0` and the epsilon scale `scale` (s_c, ADR 0375) per theta class, `ln_d` the country-pair
+/// distance row-major; a crossing of class c sees epsilon `scale[c] * epsilon`. K scales by `D^-theta`,
 /// the share arriving by `1 / D`, and the base prices and selection constants are recomputed. The
 /// inputs must not carry a distance cost already.
 pub fn at_epsilon(
@@ -151,6 +158,7 @@ pub fn at_epsilon(
     theta_class: &[usize],
     ln_d: &[f64],
     ln_d0: &[f64],
+    scale: &[f64],
     epsilon: f64,
 ) -> Result<Inputs, String> {
     let mut out = inp.clone();
@@ -168,7 +176,8 @@ pub fn at_epsilon(
             inp.gateway_country[cro.row[j]],
             inp.gateway_country[cro.col[j]],
         );
-        let ln_dd = ln_factor(inp, epsilon, ln_d[a * n_c + b] - ln_d0[theta_class[g]], g);
+        let c = theta_class[g];
+        let ln_dd = ln_factor(inp, scale[c] * epsilon, ln_d[a * n_c + b] - ln_d0[c], g);
         cro.k[j] *= libm::exp(-inp.theta[g] * ln_dd);
         cro.inv_loss[j] *= libm::exp(-ln_dd);
     }
@@ -184,6 +193,7 @@ pub fn at_distance(inp: &Inputs, d: &crate::write::Distance) -> Result<Inputs, S
         &inp.theta_class[..n_traded],
         &d.ln_d,
         &d.ln_d0,
+        &d.scale,
         d.epsilon,
     )
 }
@@ -195,6 +205,7 @@ fn product_misses(
     theta_class: &[usize],
     ln_d: &[f64],
     ln_d0: &[f64],
+    scale: &[f64],
     epsilon: f64,
     nu: &[f64],
 ) -> Vec<usize> {
@@ -207,7 +218,7 @@ fn product_misses(
         }
         let (a, b) = pair_of(inp, j);
         let c = theta_class[g];
-        let ln_dd = ln_factor(inp, epsilon, ln_d[a * n_c + b] - ln_d0[c], g);
+        let ln_dd = ln_factor(inp, scale[c] * epsilon, ln_d[a * n_c + b] - ln_d0[c], g);
         if ln_dd + libm::log1p(nu[g]) < -PRODUCT_TOL {
             bad[c] = true;
         }
@@ -235,6 +246,8 @@ pub struct Trial {
     pub ln_d0: Vec<f64>,
     /// Classes whose `d_0` went to the smallest linked distance for `(1 + nu) D >= 1`.
     pub floored: Vec<usize>,
+    /// The epsilon scale s_c per theta class (ADR 0375): 1 unless the class's nu clamped at 0.
+    pub scale: Vec<f64>,
     pub pooled: f64,
     pub classes: Vec<f64>,
 }
@@ -275,6 +288,65 @@ fn sums(values: &[f64], n_pairs: usize, stride: usize, goods: &[usize]) -> Vec<f
         .collect()
 }
 
+/// s in [0, 1] such that group `k` of class `c`, held at nu 0 with the other groups at `nu`, has
+/// its target cross-border share at epsilon scale s, by Brent's method (ADR 0376). The share
+/// rises as s falls; the target is above it at s = 1 (the clamp).
+#[allow(clippy::too_many_arguments)]
+fn solve_scale(
+    inp: &Inputs,
+    t: &Targets,
+    ln_d0: &[f64],
+    scale: &[f64],
+    epsilon: f64,
+    c: usize,
+    k: usize,
+    nu: &[f64],
+    limits: Limits,
+) -> Result<f64, CalibrationError> {
+    let groups = border::friction_groups(t.theta_class);
+    let f = |s: f64| -> Result<f64, CalibrationError> {
+        let mut sc = scale.to_vec();
+        sc[c] = s;
+        let at = at_epsilon(inp, t.theta_class, t.ln_d, ln_d0, &sc, epsilon)?;
+        let share = border::data_state_shares(&at, nu, &groups, t.icio, limits)?;
+        Ok(share[k] - t.nu_target[k])
+    };
+    let (f_lo, f_hi) = (f(0.0)?, f(1.0)?);
+    // Short of the target even without distance cost: s = 0, and the next refit of nu says if the
+    // target is reachable.
+    if f_lo < 0.0 {
+        return Ok(0.0);
+    }
+    if f_hi > 0.0 {
+        return Err(format!(
+            "class {c}: target cross-border share {} outside the model's {} (scale 0) to {} (scale 1)",
+            t.nu_target[k],
+            f_lo + t.nu_target[k],
+            f_hi + t.nu_target[k]
+        )
+        .into());
+    }
+    let mut brent = Brent::new(0.0, f_lo, 1.0, f_hi);
+    for _ in 0..SCALE_ROUNDS {
+        let Some(s) = brent.next(SCALE_TOL) else {
+            break;
+        };
+        brent.update(f(s)?);
+    }
+    Ok(brent.root())
+}
+
+/// The fit at one `epsilon`: nu per group, `d_0` and the epsilon scale per class.
+pub fn fit_at_epsilon(
+    inp: &Inputs,
+    t: &Targets,
+    epsilon: f64,
+    limits: Limits,
+    progress: &mut dyn FnMut(&str),
+) -> Result<Trial, CalibrationError> {
+    trial(inp, t, epsilon, limits, progress)
+}
+
 fn trial(
     inp: &Inputs,
     t: &Targets,
@@ -286,12 +358,46 @@ fn trial(
     let (mean, min) = class_offsets(inp, t.theta_class, t.ln_d, t.weight);
     let mut ln_d0 = mean;
     let mut floored: Vec<usize> = vec![];
+    let mut scale = vec![1.0; border::N_CLASSES];
+    let mut scaled = [false; border::N_CLASSES];
+    let mut passes = 0;
     loop {
-        let at = at_epsilon(inp, t.theta_class, t.ln_d, &ln_d0, epsilon)?;
+        let at = at_epsilon(inp, t.theta_class, t.ln_d, &ln_d0, &scale, epsilon)?;
         let fit = border::fit_border_nu(&at, &groups, t.nu_target, t.icio, limits, progress)?;
         let nu = fit.nu_of_goods(&at.border_nu);
-        let bad = product_misses(inp, t.theta_class, t.ln_d, &ln_d0, epsilon, &nu);
+        let bad = product_misses(inp, t.theta_class, t.ln_d, &ln_d0, &scale, epsilon, &nu);
         if bad.is_empty() {
+            // A class clamped at nu 0 takes its own s_c (ADR 0376); per-good groups keep the
+            // clamp. s_c is re-solved at the refitted nu of the other groups until it settles.
+            let active: Vec<usize> = (0..groups.len())
+                .filter(|&k| !fit.target[k].is_nan())
+                .filter(|&k| {
+                    let c = t.theta_class[groups[k][0]];
+                    c != border::PER_GOOD_CLASS && (scaled[c] || fit.clamped[k])
+                })
+                .collect();
+            let mut moved = false;
+            for k in active {
+                let c = t.theta_class[groups[k][0]];
+                let mut nu_k = nu.clone();
+                for &g in &groups[k] {
+                    nu_k[g] = 0.0;
+                }
+                let s = solve_scale(inp, t, &ln_d0, &scale, epsilon, c, k, &nu_k, limits)?;
+                moved |= !scaled[c] || (s - scale[c]).abs() > 10.0 * SCALE_TOL;
+                scale[c] = s;
+                scaled[c] = true;
+                progress(&format!(
+                    "epsilon {epsilon}: class {c} at nu 0, epsilon scale {s}"
+                ));
+            }
+            if moved {
+                passes += 1;
+                if passes > SCALE_PASSES {
+                    return Err(format!("epsilon scales {scale:?} did not settle").into());
+                }
+                continue;
+            }
             let (spend, supply) = steady::data_state_spending(&at, limits)?;
             let pairs = border::data_state_pair_values(&at, &nu, &spend, &supply, limits)?;
             let (n_c, n_g) = (at.n_countries(), at.n_goods());
@@ -320,6 +426,7 @@ fn trial(
                 fit,
                 ln_d0,
                 floored,
+                scale,
                 pooled,
                 classes,
             });
@@ -520,8 +627,11 @@ pub fn pack_data(pack: &Path, cache: &Path) -> Result<PackData, String> {
     })
 }
 
-/// Epsilon, `ln d_0` per class and nu per friction group of an `epsilon.json` ([`EpsilonFit::json`]).
-pub fn read_fit(file: &std::path::Path) -> Result<(f64, Vec<f64>, Vec<f64>), String> {
+/// Epsilon, `ln d_0` per class, the scale s_c per class and nu per friction group of an
+/// `epsilon.json` ([`EpsilonFit::json`]); a file without `scale` (written before ADR 0375) has
+/// s_c = 1.
+#[allow(clippy::type_complexity)]
+pub fn read_fit(file: &std::path::Path) -> Result<(f64, Vec<f64>, Vec<f64>, Vec<f64>), String> {
     let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let v: serde_json::Value =
         serde_json::from_str(&text).map_err(|e| format!("{}: {e}", file.display()))?;
@@ -533,7 +643,13 @@ pub fn read_fit(file: &std::path::Path) -> Result<(f64, Vec<f64>, Vec<f64>), Str
     let epsilon = v["epsilon"]
         .as_f64()
         .ok_or(format!("{}: no epsilon", file.display()))?;
-    Ok((epsilon, list("ln_d0")?, list("nu")?))
+    let ln_d0 = list("ln_d0")?;
+    let scale = if v.get("scale").is_some() {
+        list("scale")?
+    } else {
+        vec![1.0; ln_d0.len()]
+    };
+    Ok((epsilon, ln_d0, scale, list("nu")?))
 }
 
 impl EpsilonFit {
@@ -550,6 +666,7 @@ impl EpsilonFit {
             ("data_pooled", Json::Float(self.data_pooled)),
             ("nu", floats(&t.fit.nu)),
             ("ln_d0", floats(&t.ln_d0)),
+            ("scale", floats(&t.scale)),
             (
                 "floored",
                 Json::List(t.floored.iter().map(|&c| Json::Int(c as i64)).collect()),

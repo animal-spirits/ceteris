@@ -72,7 +72,7 @@ impl EconInputs {
 }
 
 /// The dark distance cost of a calibration in `dir` (`ceteris_calibrate::write::write_distance`):
-/// `econ_calib_distance_class.arrow` (class, ln_d0, epsilon) and `econ_calib_distance.arrow`
+/// `econ_calib_distance_class.arrow` (class, ln_d0, epsilon, scale s_c) and `econ_calib_distance.arrow`
 /// (country pair a, b and ln d); `None` where the calibration has none, which is epsilon 0.
 /// Pairs without a distance carry no cost.
 pub fn read_pair_distance(
@@ -85,16 +85,20 @@ pub fn read_pair_distance(
     }
     let bad = |m: String| PackError(m);
     let classes = read_table(&class_path)?;
-    let (class, ln_d0, epsilon) = (
+    let (class, ln_d0, epsilon, scale) = (
         u8s(&classes, "class")?,
         f64s(&classes, "ln_d0")?,
         f64s(&classes, "epsilon")?,
+        f64s(&classes, "scale")?,
     );
     let epsilon = *epsilon.first().ok_or_else(|| bad("no epsilon".into()))?;
     let mut d0 = [0.0; ceteris_trade::params::N_CLASSES];
-    for (c, v) in class.iter().zip(&ln_d0) {
-        *d0.get_mut(usize::from(*c))
+    let mut s = [1.0; ceteris_trade::params::N_CLASSES];
+    for ((c, v), sc) in class.iter().zip(&ln_d0).zip(&scale) {
+        let c = usize::from(*c);
+        *d0.get_mut(c)
             .ok_or_else(|| bad(format!("distance class {c}")))? = *v;
+        s[c] = *sc;
     }
     let pairs = read_table(&dir.join("econ_calib_distance.arrow"))?;
     let (a, b, ln_d) = (
@@ -111,7 +115,7 @@ pub fn read_pair_distance(
             )));
         }
         for (c, rel) in ln_rel.iter_mut().enumerate() {
-            rel[a * n_countries + b] = l - d0[c];
+            rel[a * n_countries + b] = s[c] * (l - d0[c]);
         }
     }
     Ok(Some(PairDistance { epsilon, ln_rel }))
