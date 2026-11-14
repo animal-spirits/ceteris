@@ -235,6 +235,82 @@ fn blame_ranks_the_edits_of_a_branch() {
 }
 
 #[test]
+fn bisect_names_the_edit_that_moves_an_outcome() {
+    // edit 0 lands after the run ends, so only edit 1 can move an outcome
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("s.toml");
+    let f = file.to_str().unwrap();
+    for args in [
+        vec![
+            "new",
+            f,
+            "--pack-hash",
+            "abc",
+            "--engine",
+            "test+1",
+            "--seeds",
+            "1",
+        ],
+        vec!["fork", f, "--from", "main", "--at", "2", "--id", "b"],
+        vec![
+            "edit",
+            f,
+            "--branch",
+            "b",
+            "--at",
+            "50",
+            "--kind",
+            "param",
+            "--target",
+            "econ.kappa_w",
+            "--value",
+            "0.2501",
+        ],
+        vec![
+            "edit",
+            f,
+            "--branch",
+            "b",
+            "--at",
+            "3",
+            "--kind",
+            "policy",
+            "--target",
+            "tariff.0.1.0",
+            "--value",
+            "0.4",
+        ],
+    ] {
+        assert!(ceteris(&args).0, "{args:?}");
+    }
+    let bisect = |good: &str, tol: &str| {
+        ceteris(&[
+            "bisect",
+            f,
+            "--good",
+            good,
+            "--bad",
+            "b",
+            "--ticks",
+            "8",
+            "--fixture",
+            "--tol",
+            tol,
+        ])
+    };
+    let (ok, out) = bisect("main", "0");
+    assert!(ok);
+    assert!(
+        out.starts_with("edit 1: 3 Policy tariff.0.1.0 = 0.4"),
+        "{out}"
+    );
+    let (ok, out) = bisect("main", "1e6");
+    assert!(ok);
+    assert!(out.starts_with("no edit of b"), "{out}");
+    assert!(!bisect("b", "0").0, "good must be the parent");
+}
+
+#[test]
 fn explain_reference_reports_the_long_run_gap() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("s.toml");

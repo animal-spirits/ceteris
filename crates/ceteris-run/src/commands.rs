@@ -81,9 +81,9 @@ pub const REGISTRY: &[Command] = &[
     ),
     cmd(
         "bisect",
-        "bisect FILE --good A --bad B",
-        "find the first edit that changes an outcome",
-        false,
+        "bisect FILE --good A --bad B --ticks N --fixture|--pack DIR [--seed S] [--tol T]",
+        "find the first edit of a branch that changes an outcome",
+        true,
     ),
     cmd(
         "rebase",
