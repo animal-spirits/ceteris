@@ -326,3 +326,27 @@ fn per_good_class_takes_one_epsilon_scale() {
         assert_eq!(tr.scale[k], 1.0);
     }
 }
+
+/// A fit at a given epsilon is one trial at exactly that epsilon.
+#[test]
+fn fit_at_a_given_epsilon_is_one_trial() {
+    let w = world();
+    let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
+    let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
+    let t = Targets {
+        nu_target: &nu_target,
+        icio: &w.icio,
+        theta_class: &w.class,
+        ln_d: &w.ln_d,
+        weight: &trade_weight(&w.inp),
+        gravity: &w.gravity,
+        data_flows: &data_flows,
+    };
+    let fit =
+        epsilon::fit_epsilon_at(&w.inp, &t, 0.37, Limits::default(), None, &mut quiet()).unwrap();
+    assert_eq!(
+        (fit.trial.epsilon, fit.evaluations, fit.at_zero),
+        (0.37, 1, false)
+    );
+    assert!(fit.json().compact().contains("\"scale\""));
+}

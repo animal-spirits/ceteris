@@ -486,6 +486,31 @@ pub fn fit_epsilon_cached(
     cache: Option<&Path>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<EpsilonFit, CalibrationError> {
+    fit_epsilon_inner(inp, t, limits, cache, None, progress)
+}
+
+/// One trial at the given `epsilon`, no search: nu, `d_0` and s_c fitted there, the pooled and
+/// held-out coefficients reported as [`fit_epsilon`] does. For checking a known epsilon in
+/// minutes rather than hours.
+pub fn fit_epsilon_at(
+    inp: &Inputs,
+    t: &Targets,
+    epsilon: f64,
+    limits: Limits,
+    cache: Option<&Path>,
+    progress: &mut dyn FnMut(&str),
+) -> Result<EpsilonFit, CalibrationError> {
+    fit_epsilon_inner(inp, t, limits, cache, Some(epsilon), progress)
+}
+
+fn fit_epsilon_inner(
+    inp: &Inputs,
+    t: &Targets,
+    limits: Limits,
+    cache: Option<&Path>,
+    fixed: Option<f64>,
+    progress: &mut dyn FnMut(&str),
+) -> Result<EpsilonFit, CalibrationError> {
     let cache = cache.map(|dir| TrialCache::new(dir, inp, t, limits));
     let n_c = inp.n_countries();
     let n_t = t.theta_class.len();
@@ -528,9 +553,15 @@ pub fn fit_epsilon_cached(
         r.as_ref()
             .map_or(data_pooled.abs(), |r| r.pooled - data_pooled)
     };
-    let zero = run(0.0)?;
+    let zero = if fixed.is_some() { None } else { run(0.0)? };
     let f_lo = f_of(&zero);
-    let (best, at_zero) = if f_lo <= 0.0 {
+    let (best, at_zero) = if let Some(eps) = fixed {
+        let r = run(eps)?;
+        (
+            r.ok_or_else(|| format!("no nu reaches the target shares at epsilon {eps}"))?,
+            false,
+        )
+    } else if f_lo <= 0.0 {
         (zero.expect("a trial at f <= 0"), true)
     } else {
         let top = run(EPSILON_MAX)?;
