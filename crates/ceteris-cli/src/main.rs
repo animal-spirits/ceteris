@@ -1043,6 +1043,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let (mut storage, mut fit_epsilon, mut epsilon_on) = (false, false, true);
     let mut fit_cache = None;
     let mut epsilon_from: Option<PathBuf> = None;
+    let mut fit_at: Option<f64> = None;
     let mut limits = Limits::default();
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -1053,6 +1054,14 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                     Some(k.parse().map_err(|_| "--outer-restart needs a number")?);
             }
             "--fit-epsilon" => fit_epsilon = true,
+            "--fit-at-epsilon" => {
+                fit_epsilon = true;
+                fit_at = Some(
+                    args.next()
+                        .and_then(|v| v.parse().ok())
+                        .ok_or("--fit-at-epsilon needs a number")?,
+                );
+            }
             "--no-epsilon-fit" => epsilon_on = false,
             "--fit-cache" => {
                 fit_cache = Some(PathBuf::from(
@@ -1117,7 +1126,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     if fit_epsilon {
         let pack = pack.as_ref().filter(|_| fit_border);
         let pack = pack.ok_or("--fit-epsilon needs --pack and the border fit")?;
-        return fit_epsilon_driver(&inp, pack, &out, fit_cache.as_deref());
+        return fit_epsilon_driver(&inp, pack, &out, fit_cache.as_deref(), fit_at);
     }
     let u_star = u_star.unwrap_or_else(|| inp.u_star.clone());
     let pack_province = pack_province.unwrap_or_else(|| (0..inp.n_provinces()).collect());
@@ -1153,8 +1162,14 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                     (epsilon, ln_d0, scale, nu, data.ln_d)
                 }
                 None => {
-                    let Some((fit, ln_d)) =
-                        run_epsilon_fit(&inp, pack, fit_cache.as_deref(), limits, &mut progress)?
+                    let Some((fit, ln_d)) = run_epsilon_fit(
+                        &inp,
+                        pack,
+                        fit_cache.as_deref(),
+                        None,
+                        limits,
+                        &mut progress,
+                    )?
                     else {
                         return Ok(ExitCode::FAILURE);
                     };
@@ -1238,10 +1253,11 @@ fn run_epsilon_fit(
     inp: &reference_io::Inputs,
     pack: &Path,
     cache: Option<&Path>,
+    fixed: Option<f64>,
     limits: Limits,
     progress: &mut dyn FnMut(&str),
 ) -> Result<Option<(ceteris_calibrate::epsilon::EpsilonFit, Vec<f64>)>, String> {
-    use ceteris_calibrate::epsilon::{Targets, fit_epsilon_cached, pack_data};
+    use ceteris_calibrate::epsilon::{Targets, fit_epsilon_at, fit_epsilon_cached, pack_data};
     let n_traded = inp.traded.iter().filter(|&&t| t).count();
     let theta_class = &inp.theta_class[..n_traded];
     let groups = border::friction_groups(theta_class);
@@ -1256,7 +1272,11 @@ fn run_epsilon_fit(
         gravity: &data.gravity,
         data_flows: &data.data_flows,
     };
-    match fit_epsilon_cached(inp, &t, limits, cache, progress) {
+    let fit = match fixed {
+        Some(e) => fit_epsilon_at(inp, &t, e, limits, cache, progress),
+        None => fit_epsilon_cached(inp, &t, limits, cache, progress),
+    };
+    match fit {
         Ok(fit) => Ok(Some((fit, data.ln_d))),
         Err(e) => {
             eprintln!("no epsilon fit: {e}");
@@ -1272,9 +1292,11 @@ fn fit_epsilon_driver(
     pack: &Path,
     out: &Path,
     cache: Option<&Path>,
+    fixed: Option<f64>,
 ) -> Result<ExitCode, String> {
     let mut progress = |line: &str| println!("{line}");
-    let Some((fit, _)) = run_epsilon_fit(inp, pack, cache, Limits::default(), &mut progress)?
+    let Some((fit, _)) =
+        run_epsilon_fit(inp, pack, cache, fixed, Limits::default(), &mut progress)?
     else {
         return Ok(ExitCode::FAILURE);
     };
