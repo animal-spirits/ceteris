@@ -134,7 +134,7 @@ fn calibrate_stability_prints_the_fixture_table() {
         "\
 | 0 Agriculture | 7.68 | 3 | 0.222 / 0.191 | 0.152 / 0.141 | 0.179 / 0.172 |
 | 1 Crude oil, gas and refined fuels | 16.91 | 1 | 0.110 / 0.102 | 0.040 / 0.037 | 0.016 / 0.058 |
-| 2 Coal and other mining | 10.00 | 2 | 0.177 / 0.156 | 0.104 / 0.096 | 0.040 / 0.123 |
+| 2 Coal and other mining | 9.27 | 2 | 0.189 / 0.165 | 0.114 / 0.105 | 0.040 / 0.132 |
 | 3 Food | 2.91 | 2 | 0.473 / 0.349 | 0.360 / 0.321 | 0.040 / 0.353 |
 | 4 Light manufacturing | 7.68 | 2 | 0.222 / 0.191 | 0.142 / 0.130 | 0.040 / 0.158 |
 | 5 Chemicals and metals | 2.91 | 2 | 0.458 / 0.307 | 0.109 / 0.302 | 0.031 / 0.337 |

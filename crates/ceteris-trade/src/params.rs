@@ -8,7 +8,7 @@ pub const N_CLASSES: usize = 5;
 /// cross-border use at nu 0 meets its ICIO 2000 target; a 3-point estimate (theta 16.91, 13.53 and
 /// 8.0 gave shares 0.2057, 0.2209 and 0.2780 against 0.2583), within two s.e. of the Mining
 /// estimate 13.53 (3.67). A Mac fit refines it.
-pub const GOOD2_THETA: f64 = 10.0;
+pub const GOOD2_THETA: f64 = 9.27;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TradeParams {
@@ -403,6 +403,23 @@ mod tests {
             TradeParams::default().bulk_rate(),
             Some(([false, false, false, true, true], 0.017, 0.40))
         );
+    }
+
+    /// RFC 0355: coal and other mining (good 2) is theta class 3 on its own at GOOD2_THETA, ordered
+    /// between class 2 and fuels (good 1, class 4 at 16.91); both ship at the bulk rate, and the
+    /// class values are nondecreasing in the class index.
+    #[test]
+    fn good_2_has_its_own_theta_class() {
+        let p = TradeParams::default();
+        assert_eq!((p.theta_class[2], p.theta[2]), (3, GOOD2_THETA));
+        assert_eq!((p.theta_class[1], p.theta[1]), (4, 16.91));
+        let members = |c: u8| (0..7).filter(|&g| p.theta_class[g] == c).count();
+        assert_eq!((members(3), members(4)), (1, 1));
+        let by_class: Vec<f64> = (0..N_CLASSES as u8)
+            .map(|c| p.theta[(0..7).find(|&g| p.theta_class[g] == c).unwrap()])
+            .collect();
+        assert!(by_class.is_sorted(), "{by_class:?}");
+        assert!(p.bulk_sea[3] == p.bulk_sea[4] && p.bulk_port[3] == p.bulk_port[4]);
     }
 
     /// ADR 0263: below J_ref = 2 m / kappa1 the gain is kappa1 bit for bit; above it the loop
