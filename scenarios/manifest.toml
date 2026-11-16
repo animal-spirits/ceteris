@@ -22,3 +22,14 @@ edit = "Branch hard and branch soft each set the UK-EU tariffs and NTB icebergs 
 horizon_ticks = 60
 finding = "UK-EU bilateral trade falls more under hard than under soft at tick 60 in every one of the 8 seeds, and the hard-soft difference in UK real income is negative with the median seed outside the CRN band."
 check = "ceteris effects over the 8 seeds: UK-EU import value and UK real income at tick 60, branch hard versus branch soft."
+
+[[scenario]]
+id = "border-x10"
+file = "border-x10.toml"
+status = "draft"
+question = "What happens to world trade and to its rerouting when every traded good's border friction is ten times the pack's fitted value for five years?"
+edit = "trade.border_nu.{0..6} multiplied by 10 from tick 13 (op = mul, so the scenario names no pack-fitted value; RFC 0358)"
+horizon_ticks = 60
+finding = "World cross-border import value at tick 60 falls by more than 25% against main in every one of the 8 seeds, with the median-seed effect outside the CRN band, and the world's within-country share of final spending rises."
+check = "ceteris effects over the 8 seeds: world cross-border import value and within-country spending share at tick 60, branch deglobalisation versus main. The 25% threshold is set before any run and is not changed after one."
+
