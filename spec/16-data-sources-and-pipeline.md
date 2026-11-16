@@ -1,6 +1,6 @@
 ## 16. Data Sources and Pipeline
 
-The 2000 pack is built from pinned sources; each is listed with its licence, evidence and release policy in the source manifest (crates/ceteris-pack/config/sources.toml, 98 sources). Non-commercial sources may be used because each user downloads them; sources that bar redistribution are fetched, never bundled. ADR 0005 lists the substitutions made in the P0 audit.
+The 2000 pack is built from pinned sources; each is listed with its licence, evidence and release policy in the source manifest (crates/ceteris-pack/config/sources.toml, 98 sources). Non-commercial sources may be used because each user downloads them; sources that bar redistribution are fetched, never bundled. ADR 0005 lists the substitutions made in the P0 audit. The default first-run install is a prebuilt pack of redistributable sources, hash-pinned in the release; fetching the remaining sources upgrades it to the fuller pack (ADR 0379).
 
 | Dataset | Content | Role | Licence | Bundle or fetch |
 | --- | --- | --- | --- | --- |
