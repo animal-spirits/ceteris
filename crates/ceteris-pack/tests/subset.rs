@@ -397,3 +397,16 @@ fn rest_of_world_is_one_pseudo_province_with_a_port() {
     assert_eq!(col_f(&g, "mass")[1], 1.0);
     assert_eq!(col_f(&t("econ_pops.arrow"), "population")[2], 9.0);
 }
+
+#[test]
+fn row_members_lists_the_absorbed_countries_with_their_gdp() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_, out, _) = run(dir.path(), CONFIG);
+    let m = read(&out.join("row_members.arrow")).unwrap();
+    let i = m.names.iter().position(|n| n == "code").unwrap();
+    match &m.cols[i] {
+        ceteris_pack::subset::Col::S(v) => assert_eq!(v, &["C", "D"]),
+        _ => panic!("code"),
+    }
+    assert_eq!(col_f(&m, "gdp"), vec![30.0, 10.0]);
+}

@@ -610,6 +610,17 @@ pub fn schema(pack: &Path, config: &Config) -> Result<(Vec<String>, Vec<String>)
     Ok((lines, missing))
 }
 
+impl Table {
+    /// This table with the named columns added.
+    fn with(mut self, cols: &[(&str, Col)]) -> Table {
+        for (n, c) in cols {
+            self.names.push((*n).to_owned());
+            self.cols.push(c.clone());
+        }
+        self
+    }
+}
+
 /// A one-row table of `names` and `cols`.
 fn one_row(names: &[&str], cols: Vec<Col>) -> Table {
     Table {
@@ -962,6 +973,20 @@ pub fn subset(pack: &Path, config: &Config, out: &Path) -> Result<Report, String
             &t("econ_home_shares.arrow")?,
             &["country"],
         )?,
+    ));
+
+    // the countries the rest of world absorbed and their GDP, the weights of its distances and
+    // flows in `epsilon::pack_data` (RFC 0357, ADR 0378)
+    let members: Vec<usize> = (0..codes.len()).filter(|&i| map[i] == row_index).collect();
+    tables.push((
+        "row_members.arrow",
+        one_row(&[], vec![]).with(&[
+            (
+                "code",
+                Col::S(members.iter().map(|&i| codes[i].clone()).collect()),
+            ),
+            ("gdp", Col::F(members.iter().map(|&i| gdp[i]).collect())),
+        ]),
     ));
 
     // gateways of kept countries only; the rest of world's is added below
