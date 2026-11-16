@@ -368,4 +368,6 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0378 | [The small pack carries a row_members table of rest of world's absorbed countries and their GDP, which weights ROW's distances and flows in the epsilon fit](../rfcs/0357-small-pack-row-members.md) | 5.1 |
 | 0379 | [First run installs a prebuilt pack of redistributable sources by default; fetching the remaining sources upgrades it to the fuller pack](../rfcs/0333-prebuilt-redistributable-pack-at-first-run.md) | 16, 19 |
 | 0380 | [The 1.0 Steam app ships on macOS and Linux (x86_64 and aarch64); Windows runs only the cross-platform golden test](../rfcs/0334-linux-app-for-the-steam-release.md) | 19.1 |
+| 0381 | [A scenario edit carries an optional op, set (the default) or mul; with mul the value is a factor on the target's value at the edit's tick, and op enters the run hash only when it is mul](../rfcs/0358-relative-edits.md) | 14.2 |
+| 0382 | [Multiply edits are accepted for parameters (econ.*, trade.*, trade.border_nu.<good>) and non-tariff barriers (ntb.*); tariff, state and switch edits reject them](../rfcs/0358-relative-edits.md) | 14.2 |
 <!-- rows:end -->

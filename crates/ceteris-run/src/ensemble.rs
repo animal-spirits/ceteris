@@ -9,7 +9,7 @@ use ceteris_core::entity::{EntityId, Kind};
 use ceteris_core::rng::Seed;
 use ceteris_core::schedule::SystemId;
 
-use crate::scenario::{Edit, EditKind, EditSource};
+use crate::scenario::{Edit, EditKind, EditOp, EditSource};
 
 const PARAM_DRAW: SystemId = SystemId(0xFFF3);
 
@@ -77,6 +77,7 @@ pub fn member_edits(seed: Seed, priors: &[ParamPrior]) -> Vec<Edit> {
                 kind: EditKind::Param,
                 target: p.target.clone(),
                 value: p.prior.quantile(u),
+                op: EditOp::Set,
                 query: None,
             }
         })

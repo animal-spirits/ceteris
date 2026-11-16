@@ -6,7 +6,7 @@
 
 use std::fmt;
 
-use ceteris_run::{Edit, EditKind, Query, QueryError};
+use ceteris_run::{Edit, EditKind, EditOp, Query, QueryError};
 
 use ceteris_trade::{TradeParams, Wedges};
 
@@ -19,10 +19,17 @@ pub enum EditError {
     NoTarget(EditKind),
     UnknownTarget(String),
     OutOfRange(String),
-    SwitchAfterStart { tick: u32 },
-    WrongTick { edit: u32, tick: u32 },
+    SwitchAfterStart {
+        tick: u32,
+    },
+    WrongTick {
+        edit: u32,
+        tick: u32,
+    },
     Query(QueryError),
     QueryNeedsState,
+    /// `op = mul` is accepted for parameters and non-tariff barriers only (RFC 0358).
+    MulNotSupported(String),
 }
 
 impl fmt::Display for EditError {
@@ -39,6 +46,7 @@ impl fmt::Display for EditError {
             }
             Self::Query(e) => e.fmt(f),
             Self::QueryNeedsState => write!(f, "edit: only state edits select by query"),
+            Self::MulNotSupported(t) => write!(f, "edit: `{t}` does not take a multiply edit"),
         }
     }
 }
@@ -58,6 +66,14 @@ pub fn apply_due(w: &mut EconWorld, edits: &[Edit], tick: u32) -> Result<usize, 
 /// Applies one edit at its own tick boundary.
 pub fn apply_edit(w: &mut EconWorld, e: &Edit) -> Result<(), EditError> {
     let target = e.target.as_str();
+    let takes_mul = match e.kind {
+        EditKind::Param => true,
+        EditKind::Policy => target.starts_with("ntb."),
+        _ => false,
+    };
+    if e.op == EditOp::Mul && (e.query.is_some() || !takes_mul) {
+        return Err(EditError::MulNotSupported(e.target.clone()));
+    }
     if let Some(query) = &e.query {
         return match e.kind {
             EditKind::State => set_by_query(w, query, target, e.value),
@@ -65,8 +81,8 @@ pub fn apply_edit(w: &mut EconWorld, e: &Edit) -> Result<(), EditError> {
         };
     }
     match e.kind {
-        EditKind::Param => set_param(w, target, e.value),
-        EditKind::Policy if target.starts_with("ntb.") => set_ntb(w, target, e.value),
+        EditKind::Param => set_param(w, target, e.op, e.value),
+        EditKind::Policy if target.starts_with("ntb.") => set_ntb(w, target, e.op, e.value),
         EditKind::Policy => set_tariff(w, target, e.value),
         EditKind::State => set_state(w, target, e.value),
         EditKind::Switch if e.tick > 0 => Err(EditError::SwitchAfterStart { tick: e.tick }),
@@ -85,10 +101,18 @@ pub fn apply_edit(w: &mut EconWorld, e: &Edit) -> Result<(), EditError> {
     }
 }
 
-fn set_param(w: &mut EconWorld, target: &str, v: f64) -> Result<(), EditError> {
+/// The value an edit leaves: `v`, or the current value times `v`.
+fn combine(op: EditOp, current: f64, v: f64) -> f64 {
+    match op {
+        EditOp::Set => v,
+        EditOp::Mul => current * v,
+    }
+}
+
+fn set_param(w: &mut EconWorld, target: &str, op: EditOp, v: f64) -> Result<(), EditError> {
     let mut p = w.params().clone();
     let mut t = w.trade().clone();
-    set_param_in(&mut p, &mut t, target, v)?;
+    set_param_in(&mut p, &mut t, target, op, v)?;
     if p != *w.params() {
         w.set_params(p);
     }
@@ -102,12 +126,13 @@ fn set_param_in(
     p: &mut EconParams,
     t: &mut TradeParams,
     target: &str,
+    op: EditOp,
     v: f64,
 ) -> Result<(), EditError> {
     let unknown = || EditError::UnknownTarget(target.to_string());
     match target.split_once('.').ok_or_else(unknown)? {
         ("econ", name) => {
-            *match name {
+            let slot = match name {
                 "sigma_demand" => &mut p.sigma_demand,
                 "sigma_fl" => &mut p.sigma_fl,
                 "kappa_w" => &mut p.kappa_w,
@@ -116,23 +141,26 @@ fn set_param_in(
                 "write_off_months" => &mut p.write_off_months,
                 "drift_half_life" => &mut p.drift_half_life,
                 _ => return Err(unknown()),
-            } = v;
+            };
+            *slot = combine(op, *slot, v);
         }
         ("trade", name) if name.starts_with("border_nu.") => {
             let [g] = indices::<1>(name, "border_nu")?;
             let nu = t.border_nu.get_mut(g).ok_or_else(unknown)?;
-            if !(v.is_finite() && v >= 0.0) {
+            let new = combine(op, *nu, v);
+            if !(new.is_finite() && new >= 0.0) {
                 return Err(EditError::OutOfRange(target.to_string()));
             }
-            *nu = v;
+            *nu = new;
         }
         ("trade", name) => {
-            *match name {
+            let slot = match name {
                 "theta_scale" => &mut t.theta_scale,
                 "kappa1" => &mut t.kappa1,
                 "gain_share" => &mut t.gain_share,
                 _ => return Err(unknown()),
-            } = v;
+            };
+            *slot = combine(op, *slot, v);
         }
         _ => return Err(unknown()),
     }
@@ -148,7 +176,7 @@ pub fn member_params(
     let (mut p, mut t) = base.clone();
     for e in edits {
         match e.kind {
-            EditKind::Param => set_param_in(&mut p, &mut t, &e.target, e.value)?,
+            EditKind::Param => set_param_in(&mut p, &mut t, &e.target, e.op, e.value)?,
             kind => return Err(EditError::NoTarget(kind)),
         }
     }
@@ -164,23 +192,28 @@ fn set_tariff(w: &mut EconWorld, target: &str, v: f64) -> Result<(), EditError> 
 }
 
 /// `ntb.<importer>.<exporter>.<group>`, an iceberg factor of at least 1 (ADR 0337).
-fn set_ntb(w: &mut EconWorld, target: &str, v: f64) -> Result<(), EditError> {
+fn set_ntb(w: &mut EconWorld, target: &str, op: EditOp, v: f64) -> Result<(), EditError> {
     let mut wedges = w.inputs().wedges.clone();
-    set_ntb_in(&mut wedges, target, v)?;
+    set_ntb_in(&mut wedges, target, op, v)?;
     w.set_wedges(wedges);
     Ok(())
 }
 
-fn set_ntb_in(wedges: &mut Wedges, target: &str, v: f64) -> Result<(), EditError> {
+fn set_ntb_in(wedges: &mut Wedges, target: &str, op: EditOp, v: f64) -> Result<(), EditError> {
     let idx = indices::<3>(target, "ntb")?;
     let n = wedges.n_countries();
-    if idx[0] >= n || idx[1] >= n || idx[2] >= 2 || !(v.is_finite() && v >= 1.0) {
+    if idx[0] >= n || idx[1] >= n || idx[2] >= 2 {
         return Err(EditError::OutOfRange(target.to_string()));
     }
     if wedges.ntb.is_empty() {
         wedges.ntb = vec![1.0; wedges.tariff.len()];
     }
-    wedges.ntb[(idx[0] * n + idx[1]) * 2 + idx[2]] = v as f32;
+    let slot = &mut wedges.ntb[(idx[0] * n + idx[1]) * 2 + idx[2]];
+    let new = combine(op, f64::from(*slot), v);
+    if !(new.is_finite() && new >= 1.0) {
+        return Err(EditError::OutOfRange(target.to_string()));
+    }
+    *slot = new as f32;
     Ok(())
 }
 
@@ -201,9 +234,12 @@ pub fn tariff_inputs(inputs: &EconInputs, log: &[Edit]) -> Result<EconInputs, Ed
     let mut out = inputs.clone();
     for e in log.iter().filter(|e| e.kind == EditKind::Policy) {
         if e.target.starts_with("tariff.") {
+            if e.op == EditOp::Mul {
+                return Err(EditError::MulNotSupported(e.target.clone()));
+            }
             set_tariff_in(&mut out.wedges, &e.target, e.value)?;
         } else if e.target.starts_with("ntb.") {
-            set_ntb_in(&mut out.wedges, &e.target, e.value)?;
+            set_ntb_in(&mut out.wedges, &e.target, e.op, e.value)?;
         }
     }
     Ok(out)
@@ -296,6 +332,7 @@ mod tests {
             kind,
             target: target.to_string(),
             value,
+            op: EditOp::Set,
             query: None,
         }
     }
@@ -540,6 +577,85 @@ mod tests {
         assert_eq!(restored.digest(), edited.digest());
     }
 
+    fn mul(kind: EditKind, target: &str, factor: f64) -> Edit {
+        Edit {
+            op: EditOp::Mul,
+            ..edit(0, EditSource::User, kind, target, factor)
+        }
+    }
+
+    /// RFC 0358: a multiply edit leaves the product the set edit of that product leaves.
+    #[test]
+    fn mul_edit_equals_the_set_edit_of_the_product() {
+        let nu = world().trade().border_nu[2];
+        let mut by_mul = world();
+        apply_edit(
+            &mut by_mul,
+            &mul(EditKind::Param, "trade.border_nu.2", 10.0),
+        )
+        .unwrap();
+        let mut by_set = world();
+        let set = edit(
+            0,
+            EditSource::User,
+            EditKind::Param,
+            "trade.border_nu.2",
+            nu * 10.0,
+        );
+        apply_edit(&mut by_set, &set).unwrap();
+        assert_eq!(by_mul.trade().border_nu[2], nu * 10.0);
+        assert_eq!(by_mul.digest(), by_set.digest());
+
+        let mut w = world();
+        let kappa = w.params().kappa_w;
+        apply_edit(&mut w, &mul(EditKind::Param, "econ.kappa_w", 0.5)).unwrap();
+        assert_eq!(w.params().kappa_w, kappa * 0.5);
+
+        let mut w = world();
+        apply_edit(&mut w, &mul(EditKind::Policy, "ntb.0.1.1", 1.25)).unwrap();
+        apply_edit(&mut w, &mul(EditKind::Policy, "ntb.0.1.1", 1.2)).unwrap();
+        assert_eq!(
+            w.inputs().wedges.ntb_factor(0, 1, 1),
+            (1.25f64 * 1.2) as f32
+        );
+    }
+
+    #[test]
+    fn mul_edit_is_rejected_off_its_targets_and_out_of_range() {
+        let rejected = [
+            mul(EditKind::Policy, "tariff.0.1.0", 2.0),
+            mul(EditKind::State, "wage.0", 2.0),
+            mul(EditKind::Switch, "frictionless", 1.0),
+        ];
+        for e in rejected {
+            let r = apply_edit(&mut world(), &e);
+            assert!(matches!(r, Err(EditError::MulNotSupported(_))), "{e:?}");
+        }
+        let q = Edit {
+            query: Some("country = 0".into()),
+            ..mul(EditKind::State, "wage", 2.0)
+        };
+        assert!(matches!(
+            apply_edit(&mut world(), &q),
+            Err(EditError::MulNotSupported(_))
+        ));
+        let below_one = mul(EditKind::Policy, "ntb.0.1.1", 0.5);
+        assert!(matches!(
+            apply_edit(&mut world(), &below_one),
+            Err(EditError::OutOfRange(_))
+        ));
+        let negative = mul(EditKind::Param, "trade.border_nu.2", -1.0);
+        assert!(matches!(
+            apply_edit(&mut world(), &negative),
+            Err(EditError::OutOfRange(_))
+        ));
+        let log = [mul(EditKind::Policy, "tariff.0.1.0", 2.0)];
+        assert!(matches!(
+            tariff_inputs(world().inputs(), &log),
+            Err(EditError::MulNotSupported(_))
+        ));
+    }
+
     #[test]
     fn ntb_edit_sets_the_wedge_survives_snapshot_and_rejects_bad_values() {
         use ceteris_core::snapshot::{canonical, decode_canonical_with};
@@ -592,6 +708,7 @@ mod tests {
 
     fn query_edit(tick: u32, query: &str, value: f64) -> Edit {
         Edit {
+            op: EditOp::Set,
             query: Some(query.to_string()),
             ..edit(tick, EditSource::User, EditKind::State, "wage", value)
         }

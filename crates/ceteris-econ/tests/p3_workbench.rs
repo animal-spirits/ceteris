@@ -11,7 +11,7 @@ use ceteris_econ::EconParams;
 use ceteris_econ::ensemble::run;
 use ceteris_econ::fixture::small_world;
 use ceteris_run::ensemble::register_priors;
-use ceteris_run::{Edit, EditKind, EditSource, Scenario};
+use ceteris_run::{Edit, EditKind, EditOp, EditSource, Scenario};
 use ceteris_trade::TradeParams;
 
 const GOLDEN: &str = concat!(
@@ -29,6 +29,7 @@ fn edit(tick: u32, kind: EditKind, target: &str, value: f64, query: Option<&str>
         kind,
         target: target.into(),
         value,
+        op: EditOp::Set,
         query: query.map(str::to_string),
     }
 }
