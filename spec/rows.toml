@@ -1805,3 +1805,13 @@ sections = "5.1"
 rows = "0378"
 topic = "[The small pack carries a row_members table of rest of world's absorbed countries and their GDP, which weights ROW's distances and flows in the epsilon fit](../rfcs/0357-small-pack-row-members.md)"
 sections = "5.1"
+
+[[entry]]
+rows = "0379"
+topic = "[First run installs a prebuilt pack of redistributable sources by default; fetching the remaining sources upgrades it to the fuller pack](../rfcs/0333-prebuilt-redistributable-pack-at-first-run.md)"
+sections = "16, 19"
+
+[[entry]]
+rows = "0380"
+topic = "[The 1.0 Steam app ships on macOS and Linux (x86_64 and aarch64); Windows runs only the cross-platform golden test](../rfcs/0334-linux-app-for-the-steam-release.md)"
+sections = "19.1"

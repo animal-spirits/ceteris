@@ -325,6 +325,8 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0318 | [Accept ADR 0212 and the built parts of ADRs 0211 and 0128 as built](0318-accept-history-retention-and-run-files-as-built.md) | accepted | none new |
 | 0319 | [Good-major pipeline slots and parallel tick checks for the 45-goods budget](0319-good-major-pipeline-and-parallel-tick-checks.md) | accepted | ADR 0332, ADR 0333, ADR 0334 |
 | 0332 | [Status of ADR 0108 (estimation windows and long-run lanes)](0332-status-of-adr-0108-estimation-windows.md) | accepted | none new |
+| 0333 | [Prebuilt redistributable pack at first run (amends ADR 0215)](0333-prebuilt-redistributable-pack-at-first-run.md) | accepted | ADR 0379 |
+| 0334 | [Linux app for the 1.0 Steam release (amends ADR 0216)](0334-linux-app-for-the-steam-release.md) | accepted | ADR 0380 |
 | 0335 | [Accept the P4 population ADRs and fix the P4 gate tolerances](0335-accept-p4-population-adrs-and-gate-tolerances.md) | accepted | ADR 0335 |
 | 0336 | [Border and non-tariff edit targets for the showcase scenarios](0336-border-and-ntb-edit-targets.md) | accepted | ADR 0336, ADR 0337 |
 | 0337 | [Accept the P5 money and fiscal ADRs](0337-accept-p5-money-and-fiscal-adrs.md) | accepted | none yet |

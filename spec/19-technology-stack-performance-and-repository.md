@@ -9,7 +9,7 @@ A Rust core gives deterministic, parallel speed; Rust crates also own the data p
 | Simulation core | Rust, plain structure-of-arrays, rayon for parallelism | Determinism control, speed, memory safety for a long-lived codebase |
 | Graphs | petgraph plus a sparse least-cost-path cache | Transport costs recomputed only when edges change |
 | GPU fallback | wgpu compute on Metal | Only if the trade solver misses its CPU budget |
-| App shell | One native Rust process: winit window, Slint panels, the economy on a sim thread publishing views through a run-ahead ring (ADRs 0088, 0208) | One native macOS app, no server |
+| App shell | One native Rust process: winit window, Slint panels, the economy on a sim thread publishing views through a run-ahead ring (ADRs 0088, 0208) | One native app on macOS and Linux (x86_64 and aarch64), no server; Windows runs only the cross-platform golden test (ADR 0380) |
 | Map UI | wgpu globe drawn into a texture shown in Slint: fills coloured from a per-feature texture, borders from an id target, labels as Slint text (ADRs 0010, 0088, 0244); globe only, with Equal Earth for flat exports (ADR 0250) 120 fps on the owner's Mac (frame p50 8.33 ms); a full province recolour uploads in 0.06 ms |
 | Pipeline, reference model, calibration | Rust crates `ceteris-pack`, `ceteris-reference`, `ceteris-calibrate`, driven by the `ceteris` CLI; GEOS only on the owner-side map build (ADR 0113) | One toolchain; the restricted part of the pack builds on the user's machine with no Python runtime |
 | Analysis | Outside the repo: Polars, DuckDB or any language reading the Arrow IPC outputs | No bindings to maintain; runs are driven by scenario files |
