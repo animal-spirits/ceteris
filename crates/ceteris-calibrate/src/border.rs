@@ -480,6 +480,28 @@ pub fn fit_border_nu(
     limits: Limits,
     progress: &mut dyn FnMut(&str),
 ) -> Result<Fit, CalibrationError> {
+    fit_border_nu_seeded(inp, groups, target, icio, limits, None, progress)
+}
+
+/// Relative half-width of the first warm bracket around a seed nu, and its floor.
+const WARM_REL: f64 = 0.02;
+const WARM_MIN: f64 = 1e-3;
+/// Widenings of a warm bracket (each times 4) before a group falls back to the cold bracket.
+const WARM_WIDEN: usize = 4;
+
+/// [`fit_border_nu`] with a seed nu per group for the development loop (RFC 0353 D4 C, ADR 0373):
+/// each group's Brent bracket starts tight around its seed and widens on failure, falling back to
+/// the cold bracket [0, NU_MAX]. Same objective and tolerance, but the root is only within
+/// [`NU_TOL`] of the cold fit's: non-authoritative, never for a golden or `epsilon.json`.
+pub fn fit_border_nu_seeded(
+    inp: &Inputs,
+    groups: &[Vec<usize>],
+    target: &[f64],
+    icio: &[bool],
+    limits: Limits,
+    seed: Option<&[f64]>,
+    progress: &mut dyn FnMut(&str),
+) -> Result<Fit, CalibrationError> {
     let n = groups.len();
     if target.len() != n || inp.border_nu.len() != inp.n_goods() {
         return Err(format!(
@@ -559,7 +581,54 @@ pub fn fit_border_nu(
         ));
     }
     fitted.retain(|&k| !clamped[k]);
-    for &k in &fitted {
+    // Warm brackets: both ends of every seeded group evaluated together, widened together.
+    let mut warm = vec![false; n];
+    if let Some(seed) = seed.filter(|sd| sd.len() == n) {
+        let mut half: Vec<f64> = (0..n).map(|k| (WARM_REL * seed[k]).max(WARM_MIN)).collect();
+        let mut ends: Vec<Option<(f64, f64, f64, f64)>> = vec![None; n];
+        let mut open: Vec<usize> = fitted.clone();
+        for _ in 0..=WARM_WIDEN {
+            if open.is_empty() {
+                break;
+            }
+            let (mut lo, mut hi_v) = (vec![0.0; n], vec![0.0; n]);
+            for &k in &fitted {
+                let (a, b) = match ends[k] {
+                    Some((a, _, b, _)) => (a, b),
+                    None => (
+                        (seed[k] - half[k]).max(0.0),
+                        (seed[k] + half[k]).min(NU_MAX),
+                    ),
+                };
+                (lo[k], hi_v[k]) = (a, b);
+            }
+            let (Ok(s_lo), Ok(s_hi)) = (shares(&lo), shares(&hi_v)) else {
+                break;
+            };
+            let mut next_open = Vec::new();
+            for &k in &open {
+                let (f_lo, f_hi) = (s_lo[k] - target[k], s_hi[k] - target[k]);
+                if f_lo >= 0.0 && f_hi <= 0.0 {
+                    ends[k] = Some((lo[k], f_lo, hi_v[k], f_hi));
+                    warm[k] = true;
+                } else {
+                    half[k] *= 4.0;
+                    ends[k] = None;
+                    next_open.push(k);
+                }
+            }
+            open = next_open;
+        }
+        for &k in &fitted {
+            if let (true, Some((a, fa, b, fb))) = (warm[k], ends[k]) {
+                brent[k] = Some(Brent::new(a, fa, b, fb));
+            }
+        }
+        progress(&format!(
+            "border friction: warm brackets for groups {warm:?}"
+        ));
+    }
+    for &k in fitted.iter().filter(|&&k| !warm[k]) {
         let mut halvings = 0;
         let f_hi = loop {
             let mut nu = vec![0.0; n];
