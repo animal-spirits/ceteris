@@ -5,7 +5,11 @@ from a full uncalibrated pack. Config: `crates/ceteris-pack/config/subset_ci.tom
 rest-of-world code, 25 MB cap, excluded sources, per-column aggregation rules).
 
 - Kept countries keep provinces, cells, counties, graph nodes and edges, gateways, econ rows.
-- Every other country becomes one rest-of-world economy: no provinces, no gateways, columns
+- Every other country becomes one rest-of-world economy (ROW) with one pseudo-province after the
+  kept ones (RFC 0356, ADR 0377): the dropped provinces' rows combined by the `provinces`,
+  `econ_provinces` and `econ_pops` rules, placed at their value-added weighted centroid, with one
+  port gateway (mass 1) joined by a port-access edge and a sea edge to the sea node nearest the
+  centroid. Columns
   combined by the rules (`sum`, GDP-weighted `mean`, `any`, `first`, `const:`). `owner_k` columns
   are reindexed; dropped owners sum into the rest-of-world owner.
 - A column without a rule, a calibrated pack, or output over the cap is an error.
