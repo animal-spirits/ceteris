@@ -4,7 +4,7 @@ use crate::goods::{Goods, p2};
 
 /// Theta classes of P01 (ADR 0023, Amendment 2026-10-29).
 pub const N_CLASSES: usize = 5;
-/// P01 theta of good 2 (coal and other mining), class 3, between machinery-class 7.68 and fuels' 16.91 (class 4; RFC 0377 draft): fitted so its share of
+/// P01 theta of good 2 (coal and other mining), class 3, between machinery-class 7.68 and fuels' 16.91 (class 4; RFC 0355 draft): fitted so its share of
 /// cross-border use at nu 0 meets its ICIO 2000 target; a 3-point estimate (theta 16.91, 13.53 and
 /// 8.0 gave shares 0.2057, 0.2209 and 0.2780 against 0.2583), within two s.e. of the Mining
 /// estimate 13.53 (3.67). A Mac fit refines it.
