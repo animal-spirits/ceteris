@@ -776,6 +776,10 @@ fn graded(icio: &[bool], w: &[f64], a: &[f64]) -> Vec<(f64, f64)> {
 /// Countries of the wrong sign, the model / ACR ratio at quantiles p10, p50 and p90, and the
 /// correlation of `pairs`.
 fn acr_stats(pairs: &[(f64, f64)]) -> (usize, [f64; 3], f64) {
+    if pairs.is_empty() {
+        // no gradable country (every ICIO welfare or ACR is NaN): nothing to rank
+        return (0, [f64::NAN; 3], f64::NAN);
+    }
     let wrong = pairs.iter().filter(|(w, a)| w * a <= 0.0).count();
     let mut ratio: Vec<f64> = pairs.iter().map(|(w, a)| w / a).collect();
     ratio.sort_by(f64::total_cmp);
@@ -791,6 +795,13 @@ fn acr_stats(pairs: &[(f64, f64)]) -> (usize, [f64; 3], f64) {
         pairs.iter().map(|(_, a)| (a - ma).powi(2)).sum(),
     );
     (wrong, [at(0.1), at(0.5), at(0.9)], cov / (vw * va).sqrt())
+}
+
+#[test]
+fn acr_stats_of_no_graded_country_are_nan_not_a_panic() {
+    let (wrong, quantiles, corr) = acr_stats(&[]);
+    assert_eq!(wrong, 0);
+    assert!(quantiles.iter().all(|q| q.is_nan()) && corr.is_nan());
 }
 
 /// The model's theta per good, the theta classes of the traded goods grouped, and the ICIO
