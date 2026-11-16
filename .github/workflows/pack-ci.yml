@@ -43,6 +43,11 @@ jobs:
           path: fit-cache
           key: pack-ci-fit-${{ steps.key.outputs.tree }}
           restore-keys: pack-ci-fit-
+      - name: Licence check of the pack's sources (report-only, ADR 0374)
+        continue-on-error: true
+        run: |
+          cargo run -q --release --bin ceteris -- pack check-sources --profile research --pack tests/fixtures/pack-ci
+          cargo run -q --release --bin ceteris -- pack check-sources --profile release --pack tests/fixtures/pack-ci
       - name: Calibrate and benchmark the small pack (report-only)
         continue-on-error: true
         run: scripts/pack-ci.sh "$GITHUB_WORKSPACE/pack-ci-logs" "$GITHUB_WORKSPACE/fit-cache"
