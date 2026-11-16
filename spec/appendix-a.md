@@ -365,4 +365,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0375 | [A theta class whose border friction clamps at zero under ADR 0272's distance cost takes its own scale s_c on epsilon, so its cross-border share target stays feasible; other classes keep s_c = 1 (amends ADR 0272 Decision 2)](../rfcs/0354-class-epsilon-scale.md) | 5.4, 8.3, 17.1 |
 | 0376 | [s_c is fitted jointly with epsilon and nu_c: for a floored class nu_c is 0 and s_c is the root in (0, 1] of the class's ICIO share residual, found inside each epsilon trial](../rfcs/0354-class-epsilon-scale.md) | 17.1 |
 | 0377 | [The small pack's rest of world is one pseudo-province carrying its summed value added and population, with GDP-weighted distance and flows, so the pack calibrates through the full-pack path](../rfcs/0356-small-pack-row-province.md) | 5.1 |
+| 0378 | [The small pack carries a row_members table of rest of world's absorbed countries and their GDP, which weights ROW's distances and flows in the epsilon fit](../rfcs/0357-small-pack-row-members.md) | 5.1 |
 <!-- rows:end -->

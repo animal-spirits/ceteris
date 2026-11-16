@@ -1800,3 +1800,8 @@ sections = "17.1"
 rows = "0377"
 topic = "[The small pack's rest of world is one pseudo-province carrying its summed value added and population, with GDP-weighted distance and flows, so the pack calibrates through the full-pack path](../rfcs/0356-small-pack-row-province.md)"
 sections = "5.1"
+
+[[entry]]
+rows = "0378"
+topic = "[The small pack carries a row_members table of rest of world's absorbed countries and their GDP, which weights ROW's distances and flows in the epsilon fit](../rfcs/0357-small-pack-row-members.md)"
+sections = "5.1"
