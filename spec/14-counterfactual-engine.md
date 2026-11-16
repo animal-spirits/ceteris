@@ -26,6 +26,8 @@ Every experiment is a branch: a parent run plus an ordered list of timed edits, 
 
 In-world edits are distinguished from god-mode edits in the log, because only in-world edits are things an agent could have done.
 
+An edit has an optional `op`, `set` (the default) or `mul`. With `mul` the edit's value is a factor on the target's value at the edit's tick, so a scenario can say "border iceberg x10" without naming a pack's fitted value (ADR 0381). `op` enters the run hash only when it is `mul`, so existing files and hashes do not move. `mul` is accepted for parameters and non-tariff barriers; tariff, state and switch edits reject it (ADR 0382).
+
 ### 14.3 Snapshots and replay
 
 Full state snapshots are written every 12 ticks as compressed chunks of the canonical encoding, content-addressed so unchanged regions are shared across branches (ADR 0326). Reaching any tick means loading the nearest earlier snapshot and replaying deterministically. Forking at tick t costs one snapshot load. A null intervention must reproduce the parent bit for bit (a CI test). A snapshot carries the run's parameters and names the network it was taken on by the network's content digest, so a restore returns to both; seek reapplies the branch's timed edits as it replays past their ticks, a snapshot at a tick holding the world before that tick's edits; an edit made after seeking back starts a new timeline and drops the later snapshots and edits (ADRs 0291 to 0293).

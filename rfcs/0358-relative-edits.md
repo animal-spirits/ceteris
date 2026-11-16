@@ -1,6 +1,6 @@
 # RFC 0358. Scenario edits may multiply a value instead of setting it
 
-Status: proposed
+Status: accepted
 Date: 2026-11-16
 Design sections: 14.2
 Release: 1.0 (P2 showcase set)
@@ -36,8 +36,8 @@ Options:
 Recommendation: A, because it adds one optional field that leaves every existing file and hash
 unchanged, and the validation lives in one place.
 
-Decision: <open>
-Row: <filled in once accepted>
+Decision: A, Antonio, 2026-11-16 (question card; "Optional op field (recommended)").
+Row: ADR 0381
 
 ### D2. Which targets are in scope for the first version?
 
@@ -50,13 +50,12 @@ Options:
 
 Recommendation: A, because nothing on the showcase list needs more, and B can follow by RFC.
 
-Decision: <open>
-Row: <filled in once accepted>
+Decision: A, Antonio, 2026-11-16 (question card; "Parameters and ntb only (recommended)").
+Row: ADR 0382
 
 ## Spec changes
 
-- 14.2: the edit record has an optional `op` (`set` default, `mul`); the targets that accept
-  `mul`; the run hash includes `op` only when it is `mul`.
+- 14.2: the edit record has an optional `op` (`set` default, `mul`), hashed only when `mul` (ADR 0381); `mul` is accepted for parameters and ntb only (ADR 0382).
 
 ## Work
 

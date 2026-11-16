@@ -349,4 +349,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0354 | [Per-class epsilon scale for classes whose border friction clamps at zero](0354-class-epsilon-scale.md) | accepted | ADR 0375, ADR 0376 |
 | 0356 | [Rest of world in the small pack is one pseudo-province with weighted distance](0356-small-pack-row-province.md) | accepted | ADR 0377 |
 | 0357 | [The small pack records rest of world's member countries and GDP weights](0357-small-pack-row-members.md) | accepted | ADR 0378 |
-| 0358 | [Scenario edits may multiply a value instead of setting it](0358-relative-edits.md) | proposed | |
+| 0358 | [Scenario edits may multiply a value instead of setting it](0358-relative-edits.md) | accepted | ADR 0381, 0382 |

@@ -5,7 +5,7 @@
 
 use std::fmt;
 
-use crate::scenario::{Edit, EditKind, EditSource, ReplaySel, Scenario};
+use crate::scenario::{Edit, EditKind, EditOp, EditSource, ReplaySel, Scenario};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReplayError {
@@ -93,6 +93,7 @@ pub fn replay_edits(
             kind,
             target: target.to_string(),
             value,
+            op: EditOp::Set,
             query: None,
         });
     }
