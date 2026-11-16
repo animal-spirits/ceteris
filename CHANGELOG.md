@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### BEHAVIOUR: good 2 takes its own theta class (RFC 0355 draft, #595)
+
+- N_CLASSES 4 to 5: coal and other mining is class 3 at theta 10.0 (a 3-point estimate; a Mac fit
+  refines it), fuels class 4 at 16.91; classes stay ordered by theta. `friction_groups` is now the
+  theta classes (ADR 0276's per-good split removed).
+- Fixture goldens move: `p2-econ.txt`, `p3-workbench.txt`, the committed fixture export, reference
+  and calibration, BALANCE re-derived (ADR 0299, residual 1e-13), the rationed-cell and held-chain
+  expectations in `p2_properties.rs`. Column-factor tolerance 1e-9 to 1e-7, nu independence 1e-12 to
+  1e-10, H2 skips classes under eight crossings.
+- Known failing: `e3_x10_border_shock_survives_700_ticks` (index 93 against the 1.10 go number).
+
 ### Cloud calibration runner
 
 - `ceteris calibrate --pack DIR --fit-cache DIR` stores each epsilon-fit trial on disk (f64 as hex

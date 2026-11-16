@@ -1,6 +1,6 @@
 //! The border friction (P05; ADRs 0092, 0276; `specs/econ/SPEC.md`, Calibration): one nu per
-//! friction group, a theta class's goods, except class [`PER_GOOD_CLASS`], each of whose goods
-//! is a group of its own. nu solves, given theta, the cross-border share of the group's goods in
+//! friction group, a theta class's goods (fuels and mining, once one class, have a class each).
+//! nu solves, given theta, the cross-border share of the group's goods in
 //! ICIO 2000.
 //!
 //! The moment of a group is the share of the ICIO economies' use of its goods that comes from
@@ -20,10 +20,6 @@ use crate::steady::{self, CalibrationError, Limits};
 use crate::write::Table;
 
 pub use ceteris_trade::N_CLASSES;
-/// The theta class whose goods take a border friction each (ADR 0276): crude oil, gas and
-/// refined fuels, and coal and other mining, whose ICIO cross-border shares differ and whose
-/// one class value chokes the second's trade.
-pub const PER_GOOD_CLASS: usize = 3;
 /// The bracket of nu searched: no friction, and a friction ten times the good's value, which cuts
 /// the frictionless kernel to 9e-4 at theta 2.91 and 2e-18 at 16.91.
 pub const NU_MAX: f64 = 10.0;
@@ -50,19 +46,9 @@ pub fn class_groups(theta_class: &[usize]) -> Vec<Vec<usize>> {
         .collect()
 }
 
-/// The friction groups (ADR 0276): [`class_groups`] with class [`PER_GOOD_CLASS`] split into one
-/// group per good.
+/// The friction groups: the goods of each theta class.
 pub fn friction_groups(theta_class: &[usize]) -> Vec<Vec<usize>> {
     class_groups(theta_class)
-        .into_iter()
-        .flat_map(|goods| {
-            if theta_class[goods[0]] == PER_GOOD_CLASS {
-                goods.into_iter().map(|g| vec![g]).collect()
-            } else {
-                vec![goods]
-            }
-        })
-        .collect()
 }
 
 /// The P05 of each friction group and the moments at it.

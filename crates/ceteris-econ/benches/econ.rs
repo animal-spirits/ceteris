@@ -85,7 +85,7 @@ fn bench(c: &mut Criterion) {
         .ok()
         .and_then(|r| r.parse().ok())
     {
-        trade.rho = [rho; 4];
+        trade.rho = [rho; ceteris_trade::N_CLASSES];
     }
     // tick 1: its prices are those of tick 0's repricing, so the sourcing that `source`
     // keeps from tick 0 is stale at E3, as in any tick away from an exact fixed point

@@ -1033,6 +1033,7 @@ mod tests {
         };
         let mut classes = [false; crate::params::N_CLASSES];
         classes[3] = true;
+        classes[4] = true;
         let net = Network {
             bulk: Some(BulkLegs {
                 classes,
@@ -1048,7 +1049,7 @@ mod tests {
         let wedges = Wedges::none(2);
         let k = Kernel::build(&net, &W, &wedges, &p);
         for g in 0..TRADED {
-            let on = p.theta_class[g] == 3;
+            let on = p.theta_class[g] >= 3;
             let pick = |b: &Vec<Leg>, n: &Vec<Leg>| if on { b.clone() } else { n.clone() };
             let gk = k.good(g);
             for (csr, legs) in [
@@ -1116,6 +1117,7 @@ mod tests {
         let base = world(&mut Rng(9));
         let mut classes = [false; crate::params::N_CLASSES];
         classes[3] = true;
+        classes[4] = true;
         let net = Network {
             bulk: Some(BulkLegs {
                 classes,
@@ -1182,7 +1184,7 @@ mod tests {
         crossings.swap(0, 1);
         let net = Network {
             bulk: Some(BulkLegs {
-                classes: [false, false, false, true],
+                classes: [false, false, false, true, true],
                 sea: 0.5,
                 port: 0.25,
                 domestic: base.domestic.clone(),
@@ -1198,7 +1200,7 @@ mod tests {
         let base = world(&mut Rng(9));
         Network {
             bulk: Some(BulkLegs {
-                classes: [false, false, false, true],
+                classes: [false, false, false, true, true],
                 sea,
                 port,
                 domestic: base.domestic.clone(),
@@ -1211,8 +1213,8 @@ mod tests {
 
     fn bulk_params(sea: f64, port: f64) -> TradeParams {
         TradeParams {
-            bulk_sea: [1.0, 1.0, 1.0, sea],
-            bulk_port: [1.0, 1.0, 1.0, port],
+            bulk_sea: [1.0, 1.0, 1.0, sea, sea],
+            bulk_port: [1.0, 1.0, 1.0, port, port],
             ..TradeParams::default().bulk_off()
         }
     }
@@ -1265,7 +1267,7 @@ mod tests {
         let with = |epsilon: f64| Network {
             pair_distance: Some(PairDistance {
                 epsilon,
-                ln_rel: (0..4)
+                ln_rel: (0..crate::params::N_CLASSES)
                     .map(|c| vec![0.0, 0.7 + 0.1 * c as f64, 0.7 + 0.1 * c as f64, 0.0])
                     .collect(),
             }),

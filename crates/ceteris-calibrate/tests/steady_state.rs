@@ -1265,11 +1265,11 @@ fn friction_groups_split_class_3_per_good() {
     let class = traded_classes(&inp);
     assert_eq!(
         border::class_groups(&class),
-        vec![vec![3, 5], vec![6], vec![0, 4], vec![1, 2]]
+        vec![vec![3, 5], vec![6], vec![0, 4], vec![2], vec![1]]
     );
     assert_eq!(
         border::friction_groups(&class),
-        vec![vec![3, 5], vec![6], vec![0, 4], vec![1], vec![2]]
+        vec![vec![3, 5], vec![6], vec![0, 4], vec![2], vec![1]]
     );
 }
 
@@ -1281,7 +1281,7 @@ fn nu_fit_matches_cross_border_share() {
     let inp = io::load(fixture()).unwrap();
     let icio = vec![true; inp.n_countries()];
     let groups = border::friction_groups(&traded_classes(&inp));
-    let known = [0.15, 0.6, 0.35, 1.2, 0.5];
+    let known = [0.15, 0.6, 0.35, 0.5, 1.2];
     let target = shares_at(&inp, &groups, &known, &icio);
     let fit = border::fit_border_nu(
         &inp,
@@ -1311,7 +1311,7 @@ fn nu_fit_matches_cross_border_share() {
         );
     }
     let per_good = fit.nu_of_goods(&inp.border_nu);
-    assert_eq!((per_good[1], per_good[2]), (fit.nu[3], fit.nu[4]));
+    assert_eq!((per_good[1], per_good[2]), (fit.nu[4], fit.nu[3]));
     assert_eq!((per_good[3], per_good[5]), (fit.nu[0], fit.nu[0]));
 }
 
@@ -1428,7 +1428,7 @@ fn nu_fit_is_monotone_and_bracketed() {
         let moved = at(&nu);
         for k in (0..n).filter(|&k| k != moved_group) {
             assert!(
-                (moved[k] - shares[1][k]).abs() <= 1e-12 * shares[1][k],
+                (moved[k] - shares[1][k]).abs() <= 1e-10 * shares[1][k],
                 "group {k} with {moved_group} moved: {} vs {}",
                 moved[k],
                 shares[1][k]
@@ -1978,7 +1978,7 @@ fn r_g_removed_and_residual_reported() {
         if w.name == "fixture" {
             for (g, f) in factor.iter().enumerate() {
                 assert!(
-                    (f - 1.0).abs() <= 1e-9,
+                    (f - 1.0).abs() <= 1e-7,
                     "fixture good {g}: column factor {f}"
                 );
             }

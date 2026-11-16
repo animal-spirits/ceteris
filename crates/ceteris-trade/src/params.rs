@@ -3,7 +3,12 @@
 use crate::goods::{Goods, p2};
 
 /// Theta classes of P01 (ADR 0023, Amendment 2026-10-29).
-pub const N_CLASSES: usize = 4;
+pub const N_CLASSES: usize = 5;
+/// P01 theta of good 2 (coal and other mining), class 3, between machinery-class 7.68 and fuels' 16.91 (class 4; RFC 0377 draft): fitted so its share of
+/// cross-border use at nu 0 meets its ICIO 2000 target; a 3-point estimate (theta 16.91, 13.53 and
+/// 8.0 gave shares 0.2057, 0.2209 and 0.2780 against 0.2583), within two s.e. of the Mining
+/// estimate 13.53 (3.67). A Mac fit refines it.
+pub const GOOD2_THETA: f64 = 10.0;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TradeParams {
@@ -319,8 +324,19 @@ impl Default for TradeParams {
     fn default() -> Self {
         Self {
             goods: Goods::p2(),
-            theta: vec![7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0],
-            theta_class: vec![2, 3, 3, 0, 2, 0, 1, 0, 0, 0],
+            theta: vec![
+                7.68,
+                16.91,
+                GOOD2_THETA,
+                2.91,
+                7.68,
+                2.91,
+                4.14,
+                0.0,
+                0.0,
+                0.0,
+            ],
+            theta_class: vec![2, 4, 3, 0, 2, 0, 1, 0, 0, 0],
             theta_scale: 1.0,
             coverage: vec![3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0],
             kappa1: 0.05,
@@ -334,8 +350,8 @@ impl Default for TradeParams {
                 0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010, 0.0, 0.0, 0.0,
             ],
             theta_r: 111.5,
-            bulk_sea: [1.0, 1.0, 1.0, 0.017],
-            bulk_port: [1.0, 1.0, 1.0, 0.40],
+            bulk_sea: [1.0, 1.0, 1.0, 0.017, 0.017],
+            bulk_port: [1.0, 1.0, 1.0, 0.40, 0.40],
             storage_loss: vec![0.0; p2::N],
             storage_cost: vec![0.009, 0.011, 0.007, 0.0, 0.0, 0.0067, 0.0, 0.0, 0.0, 0.0],
             speculation: vec![0.0; p2::N],
@@ -385,7 +401,7 @@ mod tests {
     fn bulk_rate_is_on_for_class_3_by_default() {
         assert_eq!(
             TradeParams::default().bulk_rate(),
-            Some(([false, false, false, true], 0.017, 0.40))
+            Some(([false, false, false, true, true], 0.017, 0.40))
         );
     }
 
@@ -436,7 +452,7 @@ mod tests {
     #[should_panic(expected = "bulk freight rate (NaN, 1.0) of class 3")]
     fn bulk_rate_rejects_nan() {
         TradeParams {
-            bulk_sea: [1.0, 1.0, 1.0, f64::NAN],
+            bulk_sea: [1.0, 1.0, 1.0, f64::NAN, 1.0],
             ..TradeParams::default().bulk_off()
         }
         .bulk_rate();

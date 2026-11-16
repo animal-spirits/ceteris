@@ -47,8 +47,8 @@ pub const N_TRADED: usize = ceteris_trade::goods::p2::TRADED;
 /// SPEC), traded goods.
 pub const TIME_COST: [f64; N_TRADED] = [0.002, 0.002, 0.002, 0.005, 0.010, 0.010, 0.010];
 /// P01 classes of `TradeParams::default()` (ADRs 0023 and 0101) and their current values.
-pub const CLASSES: [&[usize]; 4] = [&[3, 5], &[6], &[0, 4], &[1, 2]];
-pub const THETA_DEFAULT: [f64; 4] = [2.91, 4.14, 7.68, 16.91];
+pub const CLASSES: [&[usize]; 5] = [&[3, 5], &[6], &[0, 4], &[2], &[1]];
+pub const THETA_DEFAULT: [f64; 5] = [2.91, 4.14, 7.68, ceteris_trade::params::GOOD2_THETA, 16.91];
 /// P05 start.
 pub const BORDER_DEFAULT: f64 = 0.3;
 /// `ceteris_trade::goods::tariff_group`: primary, manufactured.

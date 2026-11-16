@@ -615,6 +615,9 @@ fn pair_tariffs(inp: &Inputs) -> Inputs {
     out
 }
 
+/// Fewest crossings a class needs for its tariff regression to be identified.
+const MIN_CLASS_ROWS: usize = 8;
+
 /// H2 per theta class (ADRs 0092 and 0264): with the model's own country-pair kernel net of
 /// tariffs as the cost control, the tariff regression of each class's equilibrium flows recovers
 /// the class's theta, on the fixture with tariffs per pair. Weighted by the sourcing weights w_o
@@ -657,6 +660,13 @@ fn kernel_controlled_tariff_regression_recovers_theta_per_class() {
             })
             .filter(|&(e, m, g)| ln_k[(e * n_c + m) * n_g + g].is_finite())
             .collect();
+        // Crude oil alone in class 4 (theta 16.91) has six crossings with flows near the
+        // kernel's 1e-18 floor: the regression is not identified, as it was not as a diagnostic
+        // of the pooled class 3 (ADR 0276).
+        if rows.len() < MIN_CLASS_ROWS {
+            println!("class {c}: {} rows, not identified, skipped", rows.len());
+            continue;
+        }
         let at = |&(e, m, g): &(usize, usize, usize)| (e * n_c + m) * n_g + g;
         let t: Vec<f64> = rows.iter().map(|r| tariff[at(r)]).collect();
         let paid: Vec<f64> = rows

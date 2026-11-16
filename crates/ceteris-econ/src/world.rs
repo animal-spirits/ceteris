@@ -4149,7 +4149,7 @@ mod tests {
 
     fn slow_world(rho: f64) -> EconWorld {
         let trade = TradeParams {
-            rho: [rho; 4],
+            rho: [rho; ceteris_trade::N_CLASSES],
             ..TradeParams::default()
         };
         EconWorld::new(Arc::new(small_world()), EconParams::default(), trade)
@@ -4270,7 +4270,7 @@ mod tests {
     #[test]
     fn sticky_sourcing_runs_through_a_tariff_edit() {
         let trade = TradeParams {
-            rho: [0.2; 4],
+            rho: [0.2; ceteris_trade::N_CLASSES],
             ..TradeParams::default()
         };
         let mut sim = EconWorld::sim(Arc::new(small_world()), EconParams::default(), trade);
@@ -4288,7 +4288,7 @@ mod tests {
     #[test]
     fn smoothed_prices_round_trip() {
         let trade = TradeParams {
-            rho: [0.2; 4],
+            rho: [0.2; ceteris_trade::N_CLASSES],
             ..TradeParams::default()
         };
         let mut sim = EconWorld::sim(Arc::new(small_world()), EconParams::default(), trade);

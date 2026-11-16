@@ -69,7 +69,7 @@ fn known_scaled(w: &World, epsilon: f64, scale: &[f64], nu_group: &[f64]) -> (Ve
     let (mut mean, min) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &trade_weight(&w.inp));
     // a scaled class is a floored one: d_0 at its smallest linked distance
     // the per-good class at nu 0 is floored likewise
-    for c in (0..scale.len()).filter(|&c| scale[c] < 1.0 || c == border::PER_GOOD_CLASS) {
+    for c in (0..scale.len()).filter(|&c| scale[c] < 1.0 || c >= 3) {
         mean[c] = min[c];
     }
     let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &mean, scale, epsilon).unwrap();
@@ -98,7 +98,15 @@ fn trade_weight(inp: &Inputs) -> Vec<f64> {
 #[test]
 fn epsilon_zero_is_the_inputs() {
     let w = world();
-    let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &[0.0; 4], &[1.0; 4], 0.0).unwrap();
+    let at = epsilon::at_epsilon(
+        &w.inp,
+        &w.class,
+        &w.ln_d,
+        &[0.0; border::N_CLASSES],
+        &[1.0; border::N_CLASSES],
+        0.0,
+    )
+    .unwrap();
     assert_eq!(at.crossing.k, w.inp.crossing.k);
 }
 
@@ -173,8 +181,8 @@ fn run_and_calibration_apply_the_same_distance_cost() {
     let ln_d = ln_distance(n);
     let d = Distance {
         epsilon: 0.4,
-        ln_d0: vec![6.0, 6.2, 6.4, f64::NAN],
-        scale: vec![1.0, 0.7, 1.0, 1.0],
+        ln_d0: vec![6.0, 6.2, 6.4, f64::NAN, f64::NAN],
+        scale: vec![1.0, 0.7, 1.0, 1.0, 1.0],
         ln_d: ln_d.clone(),
     };
     let dir = tempfile::tempdir().unwrap();
@@ -292,36 +300,6 @@ fn clamped_class_takes_an_epsilon_scale() {
         nu_target[c]
     );
     assert!((tr.scale[c] - s0).abs() <= 1e-3, "{:?}", tr.scale);
-    for k in (0..border::N_CLASSES).filter(|&k| k != c) {
-        assert_eq!(tr.scale[k], 1.0);
-    }
-}
-
-/// The per-good class (3) takes one s_c on its pooled share (ADR 0376): both of its goods, held at
-/// nu 0, recover the scale the targets were made at.
-#[test]
-fn per_good_class_takes_one_epsilon_scale() {
-    let w = world();
-    let (e0, c, s0) = (0.4, border::PER_GOOD_CLASS, 0.5);
-    let mut scale = [1.0; border::N_CLASSES];
-    scale[c] = s0;
-    let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
-    let (nu_target, data_flows) = known_scaled(&w, e0, &scale, &nu_group);
-    let t = Targets {
-        nu_target: &nu_target,
-        icio: &w.icio,
-        theta_class: &w.class,
-        ln_d: &w.ln_d,
-        weight: &trade_weight(&w.inp),
-        gravity: &w.gravity,
-        data_flows: &data_flows,
-    };
-    let tr = epsilon::fit_at_epsilon(&w.inp, &t, e0, Limits::default(), &mut quiet()).unwrap();
-    assert!((tr.scale[c] - s0).abs() <= 1e-3, "{:?}", tr.scale);
-    for (k, target) in nu_target.iter().enumerate().skip(3) {
-        assert!(tr.fit.nu[k] < 1e-4, "{:?}", tr.fit.nu);
-        assert!((tr.fit.share[k] - target).abs() <= 1e-4);
-    }
     for k in (0..border::N_CLASSES).filter(|&k| k != c) {
         assert_eq!(tr.scale[k], 1.0);
     }
