@@ -1289,7 +1289,8 @@ impl State {
 }
 
 /// Stage 1 at the data state: traded spending E (P, G) of households (transfers included, ADR
-/// 0100) and enterprises at the data's output values, no rebates, the data state's buyer prices (`Inputs::base_price`) and the inputs' PIGL weights,
+/// 0100) and enterprises at the data's output values, no rebates, the data state's buyer prices
+/// (`Inputs::base_price`) and PIGL weights inverted at those prices (the calibrated ones if any),
 /// with income and local output settled; and the sales value V / (1 + delta s) (P, G) of traded
 /// origins, their output value less the spoilage it replaces (ADR 0091).
 pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), CalibrationError> {
@@ -1299,7 +1300,12 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
     // traded goods at their base buyer prices, local goods at p_c (ADR 0098)
     let q = inp.base_price.clone();
     let rebate = vec![0.0; n_c];
-    let weights = inp.pigl_weights()?;
+    // stage 4 at q: weights inverted at prices 1 would let every cost in q, another class's
+    // distance cost included, move households off the data's final demand shares
+    let weights = match &inp.calibrated_weights {
+        Some(w) => w.clone(),
+        None => inp.pigl_weights_at(&q)?,
+    };
     let v = setup.settle(
         &rebate,
         &q,
