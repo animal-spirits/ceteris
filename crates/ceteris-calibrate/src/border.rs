@@ -36,6 +36,14 @@ pub const NU_TOL: f64 = 1e-9;
 pub const MAX_HALVINGS: usize = 10;
 /// Rounds of Brent's method before the fit gives up.
 pub const MAX_ROUNDS: usize = 200;
+/// The fit's data state is settled when, from one round to the next, every group's nu moves by
+/// at most this (ten brackets of [`NU_TOL`], above the root's resolution of a flat share), or
+/// its share at the fitted nu moves by at most [`STATE_SHARE_TOL`] once the spending is taken
+/// there (the scaling's noise, below which nu cannot be told).
+pub const STATE_TOL: f64 = 1e-8;
+pub const STATE_SHARE_TOL: f64 = 1e-13;
+/// Rounds of fit and spending before the fit gives up.
+pub const STATE_ROUNDS: usize = 20;
 
 /// The goods of each theta class, `theta_class` given per traded good; classes without goods
 /// are left out.
@@ -352,7 +360,7 @@ pub fn data_state_parts(
     icio: &[bool],
     limits: Limits,
 ) -> Result<(Vec<f64>, Vec<f64>), CalibrationError> {
-    let (spend, supply) = steady::data_state_spending(inp, limits)?;
+    let (spend, supply) = spending_at(inp, nu, limits)?;
     let (at, price, _) = solve_at(inp, nu, &spend, &supply, None, limits)?;
     Ok(cross_border_parts(&at, &price, &spend, icio, groups)?)
 }
@@ -367,8 +375,18 @@ pub fn data_state_shares(
     icio: &[bool],
     limits: Limits,
 ) -> Result<Vec<f64>, CalibrationError> {
-    let (spend, supply) = steady::data_state_spending(inp, limits)?;
+    let (spend, supply) = spending_at(inp, nu, limits)?;
     Ok(shares_at(inp, nu, groups, &spend, &supply, icio, None, limits)?.0)
+}
+
+/// [`steady::data_state_spending`] of `inp` at border frictions `nu` (per good): rebates and the
+/// final demand balance follow the sourcing, so the data state is one per nu.
+pub fn spending_at(
+    inp: &Inputs,
+    nu: &[f64],
+    limits: Limits,
+) -> Result<(Mat, Mat), CalibrationError> {
+    steady::data_state_spending(&at_border_nu(inp, nu)?, limits)
 }
 /// Brent's method (Brent 1973, `zeroin`) on one bracket, driven from outside: [`Brent::next`]
 /// names the point to evaluate, [`Brent::update`] takes f there, so several brackets can share
@@ -502,6 +520,60 @@ pub fn fit_border_nu_seeded(
     seed: Option<&[f64]>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<Fit, CalibrationError> {
+    // The data state's rebates and balance follow the sourcing, so its spending is one per nu
+    // ([`spending_at`]). Each round fits at a spending held fixed, where a group's share moves
+    // with its own nu alone, then takes the spending at the fitted nu, until nu settles.
+    let (mut spend, supply) = steady::data_state_spending(inp, limits)?;
+    let mut evaluations = 0;
+    let mut last: Option<Vec<f64>> = None;
+    for round in 1..=STATE_ROUNDS {
+        let (mut fit, held) = fit_at_spending(
+            inp, groups, target, icio, limits, seed, &spend, &supply, progress,
+        )?;
+        let nu = fit.nu_of_goods(&inp.border_nu);
+        spend = spending_at(inp, &nu, limits)?.0;
+        let (share, _) = shares_at(inp, &nu, groups, &spend, &supply, icio, None, limits)?;
+        evaluations += fit.evaluations + 1;
+        let settled = (0..groups.len()).all(|k| {
+            fit.target[k].is_nan()
+                || (share[k] - fit.share[k]).abs() <= STATE_SHARE_TOL
+                || last
+                    .as_ref()
+                    .is_some_and(|l| (fit.nu[k] - l[k]).abs() <= STATE_TOL)
+        });
+        progress(&format!(
+            "border friction: data state round {round}, nu {:?}",
+            fit.nu
+        ));
+        if settled {
+            // a target still outside a group's shares at the settled spending has no root
+            if let Some(e) = held.into_iter().next() {
+                return Err(e.into());
+            }
+            (fit.share, fit.evaluations) = (share, evaluations);
+            return Ok(fit);
+        }
+        last = Some(fit.nu);
+    }
+    Err(format!("the data state of the border fit did not settle in {STATE_ROUNDS} rounds").into())
+}
+
+/// [`fit_border_nu_seeded`] at the data state's spending `spend` and sales `supply` (P, G) held
+/// fixed. A group whose target is below its share at the bracket's upper end stays at that end
+/// and its error is returned beside the fit: the spending of another round may bring the target
+/// back inside, and the caller fails on it only once the spending is settled.
+#[allow(clippy::too_many_arguments)]
+fn fit_at_spending(
+    inp: &Inputs,
+    groups: &[Vec<usize>],
+    target: &[f64],
+    icio: &[bool],
+    limits: Limits,
+    seed: Option<&[f64]>,
+    spend: &Mat,
+    supply: &Mat,
+    progress: &mut dyn FnMut(&str),
+) -> Result<(Fit, Vec<String>), CalibrationError> {
     let n = groups.len();
     if target.len() != n || inp.border_nu.len() != inp.n_goods() {
         return Err(format!(
@@ -513,7 +585,6 @@ pub fn fit_border_nu_seeded(
         .into());
     }
     group_of(groups, inp.n_goods())?;
-    let (spend, supply) = steady::data_state_spending(inp, limits)?;
     let own: Vec<f64> = groups.iter().map(|goods| inp.border_nu[goods[0]]).collect();
     let mut fitted: Vec<usize> = (0..n).filter(|&k| !target[k].is_nan()).collect();
     let mut evaluations = 0;
@@ -537,8 +608,8 @@ pub fn fit_border_nu_seeded(
         inp,
         &at(&vec![0.0; n]),
         groups,
-        &spend,
-        &supply,
+        spend,
+        supply,
         icio,
         None,
         limits,
@@ -550,8 +621,8 @@ pub fn fit_border_nu_seeded(
             inp,
             &at(nu),
             groups,
-            &spend,
-            &supply,
+            spend,
+            supply,
             icio,
             Some(&start),
             limits,
@@ -628,6 +699,7 @@ pub fn fit_border_nu_seeded(
             "border friction: warm brackets for groups {warm:?}"
         ));
     }
+    let mut held: Vec<(usize, String)> = Vec::new();
     for &k in fitted.iter().filter(|&&k| !warm[k]) {
         let mut halvings = 0;
         let f_hi = loop {
@@ -659,19 +731,25 @@ pub fn fit_border_nu_seeded(
         };
         let f_lo = at_zero[k] - target[k];
         if !(f_lo >= 0.0 && f_hi <= 0.0) {
-            return Err(format!(
+            let e = format!(
                 "{}: target cross-border share {} outside the model's {} (nu 0) to {} (nu {})",
                 name(k),
                 target[k],
                 at_zero[k],
                 f_hi + target[k],
                 hi[k]
-            )
-            .into());
+            );
+            progress(&format!("border friction: {e}; held at nu {}", hi[k]));
+            held.push((k, e));
+            continue;
         }
         brent[k] = Some(Brent::new(0.0, f_lo, hi[k], f_hi));
     }
+    fitted.retain(|k| held.iter().all(|(h, _)| h != k));
     let mut nu = own.clone();
+    for (k, _) in &held {
+        nu[*k] = hi[*k];
+    }
     for k in (0..n).filter(|&k| clamped[k]) {
         nu[k] = 0.0;
     }
@@ -689,14 +767,17 @@ pub fn fit_border_nu_seeded(
         }
         if open.is_empty() {
             let share = shares(&nu)?;
-            return Ok(Fit {
-                groups: groups.to_vec(),
-                nu,
-                target: target.to_vec(),
-                share,
-                evaluations,
-                clamped,
-            });
+            return Ok((
+                Fit {
+                    groups: groups.to_vec(),
+                    nu,
+                    target: target.to_vec(),
+                    share,
+                    evaluations,
+                    clamped,
+                },
+                held.into_iter().map(|(_, e)| e).collect(),
+            ));
         }
         let share = shares(&nu)?;
         for &k in &open {

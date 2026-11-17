@@ -1072,12 +1072,21 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
    own share and the calibration failed). It is fitted so that the cross-border share of the
    group's goods in the ICIO economies, sum of (1 - home share) absorption over sum of absorption from
    `econ_home_shares.arrow`, is the model's: the value the destinations of those countries buy
-   from other countries over all they buy, at origin prices. Each evaluation is stage 2 at stage
-   1's spending of the data state (r = 1, no rebates, the data state's buyer prices, and PIGL
-   weights inverted at those buyer prices as stage 4 does, so households buy the country's final
-   demand shares whatever cost the buyer prices carry, another class's distance cost included;
-   `a_class_without_distance_cost_keeps_its_share_under_the_others_cost`), held across trials, so each group's share depends on its own nu only and falls as it
-   rises; the roots (five on the 2000 pack) are found by Brent's method per group, its bracket narrowed to 1e-9 in
+   from other countries over all they buy, at origin prices. Each evaluation is stage 2 at the
+   spending of the data state: the calibration's passes of stages 1, 2 and 4 with the buyer
+   prices held at the data state's, so the tariff rebates at stage 2's origin prices, stage 1's
+   final demand balance (ADR 0318) and PIGL weights inverted at those buyer prices on the
+   balanced shares, as the calibrated state has them (issue #622; shares within 5e-6 of the
+   calibrated state's on the fixture and 2e-6 on the small pack, where the unbalanced, rebate-free
+   state was off by up to 2.6e-3; `the_fits_data_state_is_the_calibrated_state`,
+   `a_class_without_distance_cost_has_the_calibrated_share_under_the_others_cost`). That spending depends
+   on every nu through the rebates, so the fit runs in rounds: the spending is held while the
+   groups are fitted, each group's share then depending on its own nu only and falling as it
+   rises, and is retaken at the fitted nu until every group's nu moves by at most 1e-8 between rounds
+   (or its share at the fitted nu by at most 1e-13 once the spending is retaken). A group whose
+   target is below its share at the bracket's upper end in a round stays at that end for the
+   round, and is an error only if it is still there once the rounds settle. Within a
+   round the roots (five on the 2000 pack) are found by Brent's method per group, its bracket narrowed to 1e-9 in
    nu over [0, 10] (the upper end halved where the scaling fails there, on a scaling failure
    only), the groups sharing each evaluation and every scaling starting from the scaling at nu
    0, so the result does not depend on the order of the evaluations (22 evaluations on the

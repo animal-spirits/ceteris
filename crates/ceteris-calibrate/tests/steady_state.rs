@@ -1383,6 +1383,7 @@ fn per_good_fit_clamps_one_good_of_class_3() {
     let at_zero = shares_at(&inp, &groups, &[0.0; 5], &icio);
     let mut target = shares_at(&inp, &groups, &[0.3; 5], &icio);
     target[4] = 0.5 * (1.0 + at_zero[4]);
+
     let fit = border::fit_border_nu(
         &inp,
         &groups,
@@ -1394,17 +1395,21 @@ fn per_good_fit_clamps_one_good_of_class_3() {
     .unwrap();
     assert_eq!(fit.clamped, vec![false, false, false, false, true]);
     assert_eq!(fit.nu[4], 0.0);
+    // the clamped good's share is read at the others' fitted nu: the spending is one per nu
+    let at_zero = shares_at(&inp, &groups, &fit.nu, &icio);
     assert!(
         (fit.share[4] - at_zero[4]).abs() <= 1e-12 * at_zero[4],
         "{fit:?}"
     );
     for (k, t) in target.iter().enumerate().take(4) {
         assert!((fit.share[k] / t - 1.0).abs() <= 1e-6, "group {k}: {fit:?}");
-        assert!((fit.nu[k] - 0.3).abs() <= 1e-6 * 0.3, "group {k}: {fit:?}");
+        // good 2 at nu 0, not the targets' 0.3, moves the spending the others are fitted at
+        assert!((fit.nu[k] - 0.3).abs() <= 1e-5 * 0.3, "group {k}: {fit:?}");
     }
 }
 
-/// Each group's share falls as its nu rises and does not depend on the other groups' nu; a
+/// Each group's share falls as its nu rises and reads the other groups' nu only through the
+/// data state's rebates and final demand balance (issue #622; up to 3.3e-4 of the share here for a nu moved from 0.3 to 3); a
 /// target outside the shares at nu 0 and `NU_MAX` is an error naming the group.
 #[test]
 fn nu_fit_is_monotone_and_bracketed() {
@@ -1420,15 +1425,14 @@ fn nu_fit_is_monotone_and_bracketed() {
             assert!(w[1][k] < w[0][k], "group {k}: {shares:?}");
         }
     }
-    // the groups are independent: moving class 2's nu or good 2's leaves the others' shares
-    // unchanged, up to the scaling's tolerance (Anderson mixing runs over all goods at once)
+    // moving class 2's nu or good 2's moves the others' shares only through the spending
     for moved_group in [2, 4] {
         let mut nu = vec![0.3; n];
         nu[moved_group] = 3.0;
         let moved = at(&nu);
         for k in (0..n).filter(|&k| k != moved_group) {
             assert!(
-                (moved[k] - shares[1][k]).abs() <= 1e-12 * shares[1][k],
+                (moved[k] - shares[1][k]).abs() <= 1e-3 * shares[1][k],
                 "group {k} with {moved_group} moved: {} vs {}",
                 moved[k],
                 shares[1][k]
