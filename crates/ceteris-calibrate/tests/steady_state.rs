@@ -465,6 +465,50 @@ fn slow_rates(m: &Model, spend: &Mat, lw: &Mat) -> Vec<f64> {
         .collect()
 }
 
+/// RFC 0355: a fit's scaling stops on a plateau (residual within the bound, no 1% fall for the
+/// stated sweeps) that the strict rule would run to the sweep cap on; the strict rule still errors.
+#[test]
+fn a_plateaued_scaling_stops_where_the_strict_rule_runs_out() {
+    let w = &worlds()[0];
+    let (inp, s) = (&w.inp, &w.s);
+    let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
+    let m = Model::new(inp).unwrap();
+    let mut v = Mat::zeros(n_p, n_g);
+    for (e, (&p, &g)) in inp.ent_province.iter().zip(&inp.ent_good).enumerate() {
+        v[(p, g)] += if inp.traded[g] {
+            s.value[e] / (1.0 + s.spoilage[g])
+        } else {
+            0.0
+        };
+    }
+    let spend = Mat::from_fn(n_p, n_g, |p, g| s.spend_hh[(p, g)] + s.spend_int[(p, g)]);
+    let mut rng = Rng(3);
+    let mut start = Mat::zeros(n_p, n_g);
+    for p in 0..n_p {
+        for g in (0..n_g).filter(|&g| inp.active[p][g] && inp.traded[g]) {
+            start[(p, g)] = rng.normal(0.0, 3.0);
+        }
+    }
+    let run = |plateau| {
+        steady::sinkhorn_with(
+            &m,
+            &spend,
+            &v,
+            Some(&start),
+            4,
+            steady::SINKHORN_TOL,
+            steady::Accel::Joint,
+            plateau,
+        )
+    };
+    assert!(run(None).is_err());
+    let at = run(Some((f64::INFINITY, 0))).unwrap();
+    assert!(
+        at.residual > steady::SINKHORN_TOL && at.sweeps <= 4,
+        "{at:?}"
+    );
+}
+
 /// Stage 2: from two starts the scaling reaches the same weights up to one scale per good.
 ///
 /// The bound on the spread is derived from the stop rule. Let g(ln w) = ln received - ln target

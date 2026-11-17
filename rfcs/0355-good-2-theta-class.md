@@ -67,6 +67,21 @@ Recommendation: A.
 Decision: A, Antonio, 2026-11-17 (question card, class 3 good 2 thread).
 Row: to be taken in the spec PR.
 
+### D4. How does a fit's scaling stop when good 2's residual plateaus? (decided: option A, Antonio 2026-11-17)
+
+The joint theta_2 fit probes thetas where good 2's Brazil block (a near-closed block, 0.999 of its
+coupling) leaves the scaling's residual at about 4e-13, above the absolute `SINKHORN_TOL` 1e-13,
+and the scaling runs its 100,000-sweep cap and errors (Mac, 1893 s, 2026-11-17).
+
+- A. Stagnation-aware stop, fits only: the evaluation the fits use (`steady::sinkhorn_plateau`,
+  `data_state_spending`, `border` evaluations) ends the scaling when the residual is within
+  `PLATEAU_TOL` 1e-11 and the smallest residual has not fallen by 1% in `PLATEAU_SWEEPS` 5,000
+  sweeps; the residual is returned, not hidden. The calibration proper keeps the strict rule.
+  Recommended: it fixes the cause for every theta, and a share to 1e-9 needs no more than 1e-11.
+- B. Narrow the theta band to where calibrate settles: no tolerance change, but theta 9.27 sits
+  next to the unstable range.
+- C. Stop and treat it as a structure issue.
+
 ## Consequences
 
 - N_CLASSES 5; `theta_class` [2, 4, 3, 0, 2, 0, 1, ...]; bulk freight rates apply to classes 3 and 4.

@@ -74,6 +74,13 @@ pub const SINKHORN_TOL: f64 = 1e-13;
 /// Jacobian, `sinkhorn_is_unique_up_to_scale`). The cap was set when an earlier pack's mode
 /// (province 3906, 0.99995 a sweep) needed 34,614 sweeps in pass 7.
 pub const MAX_SWEEPS: usize = 100_000;
+/// A fit's evaluation (`border::spending_at` and what reads it) takes a scaling whose residual
+/// has stopped falling above [`SINKHORN_TOL`] if it is within this: a share to 1e-9 needs no
+/// more, and good 2's Brazil block plateaus at about 4e-13 (RFC 0355). The calibration proper
+/// keeps the strict rule.
+pub const PLATEAU_TOL: f64 = 1e-11;
+/// Sweeps without the smallest residual so far falling by 1% that make it a plateau.
+pub const PLATEAU_SWEEPS: usize = 5_000;
 /// The scaling stops at this fraction of the last pass's change, within [`SINKHORN_TOL`] and
 /// [`INNER_TOL_MAX`].
 pub const INNER_PER_OUTER: f64 = 1e-2;
@@ -434,6 +441,27 @@ pub fn sinkhorn_limited(
     sinkhorn_to(m, spend, supply, start, max_sweeps, SINKHORN_TOL)
 }
 
+/// [`sinkhorn_limited`] for a fit's evaluation: a residual within [`PLATEAU_TOL`] that has
+/// stopped falling for [`PLATEAU_SWEEPS`] sweeps ends the scaling, its residual reported.
+pub fn sinkhorn_plateau(
+    m: &Model,
+    spend: &Mat,
+    supply: &Mat,
+    start: Option<&Mat>,
+    max_sweeps: usize,
+) -> Result<Scaling, CalibrationError> {
+    sinkhorn_with(
+        m,
+        spend,
+        supply,
+        start,
+        max_sweeps,
+        SINKHORN_TOL,
+        Accel::Joint,
+        Some((PLATEAU_TOL, PLATEAU_SWEEPS)),
+    )
+}
+
 /// [`sinkhorn_limited`] stopping at `tol` (at least [`SINKHORN_TOL`]).
 pub fn sinkhorn_to(
     m: &Model,
@@ -443,7 +471,7 @@ pub fn sinkhorn_to(
     max_sweeps: usize,
     tol: f64,
 ) -> Result<Scaling, CalibrationError> {
-    sinkhorn_with(m, spend, supply, start, max_sweeps, tol, Accel::Joint)
+    sinkhorn_with(m, spend, supply, start, max_sweeps, tol, Accel::Joint, None)
 }
 
 /// [`sinkhorn_to`] with the mixing `accel`.
@@ -455,6 +483,7 @@ pub fn sinkhorn_with(
     max_sweeps: usize,
     tol: f64,
     accel: Accel,
+    plateau: Option<(f64, usize)>,
 ) -> Result<Scaling, CalibrationError> {
     let inp = m.inp;
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
@@ -570,6 +599,7 @@ pub fn sinkhorn_with(
     let mut gbest = vec![f64::INFINITY; n_g];
     let mut gsince = vec![0usize; n_g];
     let mut err = f64::NAN;
+    let (mut floor, mut flat) = (f64::INFINITY, 0usize);
     let mut last_by_good = Vec::new();
     // the plain sweep from the last finite point, where a mixed step leaves f64
     let mut plain: Option<Vec<f64>> = None;
@@ -578,7 +608,13 @@ pub fn sinkhorn_with(
         (err, last_by_good) = (e, by_good);
         // Stalled within the gap's own rounding (`summation_depth`): no sweep can do better.
         // 1.6e-13 on the full pack with storage on, where one gateway's sums are 858 deep.
-        if err <= tol || (within && since >= ANDERSON_STALL) {
+        if err < 0.99 * floor {
+            (floor, flat) = (err, 0);
+        } else {
+            flat += 1;
+        }
+        let plateaued = plateau.is_some_and(|(p, n)| err <= p && flat >= n);
+        if err <= tol || (within && since >= ANDERSON_STALL) || plateaued {
             let r = (0..n_g)
                 .map(|g| if inp.traded[g] { r[g] } else { 1.0 })
                 .collect();
@@ -1408,7 +1444,7 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
         });
         // stage 2 at this spending: who pays which tariff follows the solved origin prices, not
         // posted prices 1, where imports and so duties are several times the calibrated ones
-        let scaling = sinkhorn_limited(&m, &spend, &sales, lw.as_ref(), limits.max_sweeps)?;
+        let scaling = sinkhorn_plateau(&m, &spend, &sales, lw.as_ref(), limits.max_sweeps)?;
         let l = &scaling.log_weight;
         let price = Mat::from_fn(n_p, n_g, |p, g| {
             if traded[g] && inp.active[p][g] {
@@ -1594,6 +1630,7 @@ pub fn calibrate_from(
             limits.max_sweeps,
             tol,
             limits.accel,
+            None,
         )?;
         let log_weight = scaling.log_weight.clone();
         let mut top = vec![f64::NEG_INFINITY; n_g];
