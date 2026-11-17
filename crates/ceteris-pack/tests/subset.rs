@@ -39,12 +39,20 @@ fn pack(dir: &Path) {
         vec![
             ("id", s(&["a0", "a1", "b0", "c0", "d0"])),
             ("country", s(&["A", "A", "B", "C", "D"])),
+            ("lon", f(&[0.0, 1.0, 2.0, 10.0, 20.0])),
+            ("lat", f(&[0.0, 0.0, 0.0, 0.0, 0.0])),
         ],
     );
     put(
         dir,
         "countries.arrow",
-        vec![("code", s(&["A", "B", "C", "D"]))],
+        vec![
+            ("code", s(&["A", "B", "C", "D"])),
+            ("name", s(&["a", "b", "c", "d"])),
+            ("sovereign", s(&["A", "B", "C", "D"])),
+            ("sovereign_name", s(&["a", "b", "c", "d"])),
+            ("colour", b(&[0, 1, 2, 3])),
+        ],
     );
     put(
         dir,
@@ -56,14 +64,25 @@ fn pack(dir: &Path) {
         dir,
         "nodes.arrow",
         vec![
-            ("kind", b(&[0, 0, 0, 0, 0, 1])),
+            ("kind", b(&[0, 0, 0, 0, 0, 4])),
             ("province", u(&[0, 1, 2, 3, 4, NONE])),
+            ("lon", f(&[0.0, 1.0, 2.0, 10.0, 20.0, 15.0])),
+            ("lat", f(&[0.0, 0.0, 0.0, 0.0, 0.0, 1.0])),
+            ("label", s(&["n0", "n1", "n2", "n3", "n4", "sea"])),
+            ("sea_zone", u(&[NONE, NONE, NONE, NONE, NONE, 0])),
         ],
     );
     put(
         dir,
         "edges.arrow",
-        vec![("a", u(&[0, 1, 2, 3, 5])), ("b", u(&[1, 2, 3, 4, 2]))],
+        vec![
+            ("a", u(&[0, 1, 2, 3, 5])),
+            ("b", u(&[1, 2, 3, 4, 2])),
+            ("mode", b(&[0, 0, 0, 0, 2])),
+            ("length_km", f(&[1.0; 5])),
+            ("tri_m", f(&[0.0; 5])),
+            ("chokepoint", b(&[0; 5])),
+        ],
     );
     put(dir, "sea_zones.arrow", vec![("h3", s(&["z"]))]);
     put(dir, "chokepoints.arrow", vec![("name", s(&["c"]))]);
@@ -96,12 +115,19 @@ fn pack(dir: &Path) {
     put(
         dir,
         "econ_provinces.arrow",
-        vec![("population", f(&[1.0, 2.0, 3.0, 4.0, 5.0]))],
+        vec![
+            ("population", f(&[1.0, 2.0, 3.0, 4.0, 5.0])),
+            ("va_0", f(&[1.0, 2.0, 3.0, 4.0, 12.0])),
+        ],
     );
     put(
         dir,
         "econ_pops.arrow",
-        vec![("province", u(&[0, 2, 3, 4])), ("edu", b(&[0; 4]))],
+        vec![
+            ("province", u(&[0, 2, 3, 4])),
+            ("edu", b(&[0; 4])),
+            ("population", f(&[1.0, 3.0, 4.0, 5.0])),
+        ],
     );
     let (mut imp, mut exp, mut grp, mut rate, mut agr, mut imputed) =
         (vec![], vec![], vec![], vec![], vec![], vec![]);
@@ -133,6 +159,7 @@ fn pack(dir: &Path) {
         vec![
             ("node", u(&[1, 3, 4])),
             ("country", u(&[0, 2, 3])),
+            ("kind", b(&[0, 0, 0])),
             ("mass", f(&[1.0, 2.0, 3.0])),
         ],
     );
@@ -170,6 +197,18 @@ fd_0 = "mean"
 "*_imputed" = "any"
 "*_source" = "first"
 __country = "key"
+[rules.provinces]
+id = "const:ROW-0"
+country = "const:ROW"
+lon = "mean"
+lat = "mean"
+[rules.econ_provinces]
+population = "sum"
+va_0 = "sum"
+[rules.econ_pops]
+province = "key"
+edu = "key"
+population = "sum"
 [rules.econ_io]
 country = "key"
 input = "key"
@@ -212,20 +251,21 @@ fn col_f(t: &Table, name: &str) -> Vec<f64> {
 fn geography_is_filtered_and_renumbered() {
     let dir = tempfile::tempdir().unwrap();
     let (_, out, report) = run(dir.path(), CONFIG);
-    assert_eq!((report.provinces, report.countries), (3, 3));
+    assert_eq!((report.provinces, report.countries), (4, 3));
     let t = |n: &str| read(&out.join(n)).unwrap();
-    assert_eq!(t("provinces.arrow").rows(), 3);
-    assert_eq!(t("countries.arrow").rows(), 2);
+    assert_eq!(t("provinces.arrow").rows(), 4);
+    assert_eq!(t("countries.arrow").rows(), 3);
     // cells of province 0, 2 survive as 0, 2 -> new 0, 2; counties: only province 1 -> 1
     assert_eq!(t("cells.arrow").rows(), 2);
     assert_eq!(t("counties.arrow").rows(), 1);
-    // nodes 0, 1, 2 and the sea node survive; edges 0-1, 1-2 and sea-2 survive
-    assert_eq!(t("nodes.arrow").rows(), 4);
-    assert_eq!(t("edges.arrow").rows(), 3);
-    assert_eq!(t("econ_provinces.arrow").rows(), 3);
-    assert_eq!(t("econ_pops.arrow").rows(), 2);
-    // gateway of country A at node 1 only; C and D have none
-    assert_eq!(t("gateways.arrow").rows(), 1);
+    // nodes 0, 1, 2 and the sea node survive, plus the rest of world's province and port nodes;
+    // edges 0-1, 1-2 and sea-2 survive, plus the port access and sea edges
+    assert_eq!(t("nodes.arrow").rows(), 6);
+    assert_eq!(t("edges.arrow").rows(), 5);
+    assert_eq!(t("econ_provinces.arrow").rows(), 4);
+    assert_eq!(t("econ_pops.arrow").rows(), 3);
+    // gateway of country A at node 1, and the rest of world's at its port
+    assert_eq!(t("gateways.arrow").rows(), 2);
 }
 
 #[test]
@@ -320,4 +360,53 @@ fn calibrated_pack_is_refused() {
     )
     .unwrap_err();
     assert!(err.contains("epsilon.arrow"), "{err}");
+}
+
+fn col_u(t: &Table, name: &str) -> Vec<u32> {
+    let i = t.names.iter().position(|n| n == name).unwrap();
+    match &t.cols[i] {
+        ceteris_pack::subset::Col::U32(v) => v.clone(),
+        _ => panic!("{name}"),
+    }
+}
+
+#[test]
+fn rest_of_world_is_one_pseudo_province_with_a_port() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_, out, _) = run(dir.path(), CONFIG);
+    let t = |n: &str| read(&out.join(n)).unwrap();
+    // C and D's provinces sum into province 3; value added weights the centroid (3 : 12 on lon
+    // 10 and 20), lat 0
+    let e = t("econ_provinces.arrow");
+    assert_eq!(col_f(&e, "population")[3], 9.0);
+    assert_eq!(col_f(&e, "va_0")[3], 16.0);
+    let p = t("provinces.arrow");
+    let lon = col_f(&p, "lon")[3];
+    assert!((10.0..20.0).contains(&lon) && lon > 15.0, "{lon}");
+    assert_eq!(col_f(&p, "lat")[3], 0.0);
+    // province node 3 (after the kept provinces), the old sea node at 4, the port last
+    let n = t("nodes.arrow");
+    assert_eq!(col_u(&n, "province")[3], 3);
+    assert_eq!(col_u(&n, "province")[5], 3);
+    let ed = t("edges.arrow");
+    assert_eq!(col_u(&ed, "a")[3..], [3, 4]);
+    assert_eq!(col_u(&ed, "b")[3..], [5, 5]);
+    let g = t("gateways.arrow");
+    assert_eq!(col_u(&g, "node")[1], 5);
+    assert_eq!(col_u(&g, "country")[1], 2);
+    assert_eq!(col_f(&g, "mass")[1], 1.0);
+    assert_eq!(col_f(&t("econ_pops.arrow"), "population")[2], 9.0);
+}
+
+#[test]
+fn row_members_lists_the_absorbed_countries_with_their_gdp() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_, out, _) = run(dir.path(), CONFIG);
+    let m = read(&out.join("row_members.arrow")).unwrap();
+    let i = m.names.iter().position(|n| n == "code").unwrap();
+    match &m.cols[i] {
+        ceteris_pack::subset::Col::S(v) => assert_eq!(v, &["C", "D"]),
+        _ => panic!("code"),
+    }
+    assert_eq!(col_f(&m, "gdp"), vec![30.0, 10.0]);
 }

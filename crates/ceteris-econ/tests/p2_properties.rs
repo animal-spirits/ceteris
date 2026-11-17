@@ -4258,3 +4258,36 @@ fn foreign_dividends_net_to_zero_worldwide() {
     assert!((world_base / world_plain - 1.0).abs() < 1e-12);
     assert!(by_country(&base, 1) > by_country(&plain, 1));
 }
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(6))]
+    /// Fuzz of the stability paths (ADR 0120, RFC 0214): random shocks between ticks, a
+    /// price scaling of one province's goods or a new tariff table, never halt the run or
+    /// leave a non-finite or non-positive price.
+    #[test]
+    fn random_shocks_never_halt(
+        shocks in proptest::collection::vec(
+            (1u32..50, 0usize..25, 0.1f64..10.0, proptest::collection::vec(0.0f32..2.0, 32)),
+            1..5,
+        ),
+    ) {
+        let mut sim = sim_of(world(EconParams::default()));
+        let mut shocks = shocks;
+        shocks.sort_by_key(|s| s.0);
+        for (tick, province, scale, tariff) in shocks {
+            let run = sim.run_until(tick);
+            prop_assert!(run.is_ok(), "{}", run.unwrap_err());
+            sim.intervene(move |w| {
+                for g in 0..N_GOODS {
+                    w.markets.price[province * N_GOODS + g] *= scale;
+                }
+                let mut wedges = w.inputs().wedges.clone();
+                wedges.tariff = tariff.clone();
+                w.set_wedges(wedges);
+            });
+        }
+        let run = sim.run_until(60);
+        prop_assert!(run.is_ok(), "{}", run.unwrap_err());
+        prop_assert!(sim.world().markets.price.iter().all(|p| p.is_finite() && *p > 0.0));
+    }
+}

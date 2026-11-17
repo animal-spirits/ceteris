@@ -190,6 +190,19 @@ impl Col {
         }
     }
 
+    fn insert_from(&mut self, at: usize, o: &Col, row: usize) -> Result<(), String> {
+        match (self, o) {
+            (Col::F(a), Col::F(b)) => a.insert(at, b[row]),
+            (Col::U8(a), Col::U8(b)) => a.insert(at, b[row]),
+            (Col::U32(a), Col::U32(b)) => a.insert(at, b[row]),
+            (Col::U64(a), Col::U64(b)) => a.insert(at, b[row]),
+            (Col::B(a), Col::B(b)) => a.insert(at, b[row]),
+            (Col::S(a), Col::S(b)) => a.insert(at, b[row].clone()),
+            _ => return Err("column type changed".into()),
+        }
+        Ok(())
+    }
+
     /// An integer column's value as a key.
     fn key(&self, r: usize) -> Result<u64, String> {
         match self {
@@ -258,6 +271,24 @@ impl Table {
     fn keep(&self, mask: &[bool]) -> Table {
         let rows: Vec<usize> = (0..mask.len()).filter(|&r| mask[r]).collect();
         self.take(&rows)
+    }
+
+    /// `other`'s row `row` inserted at `at`; the columns match by name.
+    fn insert_row(&mut self, at: usize, other: &Table, row: usize) -> Result<(), String> {
+        for (name, col) in self.names.iter().zip(&mut self.cols) {
+            let j = other.index(name)?;
+            col.insert_from(at, &other.cols[j], row)?;
+        }
+        Ok(())
+    }
+
+    /// `other`'s rows after this table's.
+    fn append(&mut self, other: &Table) -> Result<(), String> {
+        for r in 0..other.rows() {
+            let at = self.rows();
+            self.insert_row(at, other, r)?;
+        }
+        Ok(())
     }
 
     /// Column `name` with every value through `map`.
@@ -579,6 +610,48 @@ pub fn schema(pack: &Path, config: &Config) -> Result<(Vec<String>, Vec<String>)
     Ok((lines, missing))
 }
 
+impl Table {
+    /// This table with the named columns added.
+    fn with(mut self, cols: &[(&str, Col)]) -> Table {
+        for (n, c) in cols {
+            self.names.push((*n).to_owned());
+            self.cols.push(c.clone());
+        }
+        self
+    }
+}
+
+/// A one-row table of `names` and `cols`.
+fn one_row(names: &[&str], cols: Vec<Col>) -> Table {
+    Table {
+        names: names.iter().map(|n| (*n).to_owned()).collect(),
+        cols,
+    }
+}
+
+/// Great-circle distance in km (spherical earth).
+fn haversine_km(a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (la, lb) = (a.1.to_radians(), b.1.to_radians());
+    let h = libm::pow(libm::sin((lb - la) / 2.0), 2.0)
+        + libm::cos(la) * libm::cos(lb) * libm::pow(libm::sin((b.0 - a.0).to_radians() / 2.0), 2.0);
+    2.0 * 6371.0 * libm::asin(libm::sqrt(h))
+}
+
+/// The weighted centroid on the sphere of `points` (lon, lat in degrees) as (lon, lat).
+fn centroid(points: &[(f64, f64)], weight: &[f64]) -> (f64, f64) {
+    let (mut x, mut y, mut z) = (0.0, 0.0, 0.0);
+    for (&(lon, lat), &w) in points.iter().zip(weight) {
+        let (lo, la) = (lon.to_radians(), lat.to_radians());
+        x += w * libm::cos(la) * libm::cos(lo);
+        y += w * libm::cos(la) * libm::sin(lo);
+        z += w * libm::sin(la);
+    }
+    (
+        libm::atan2(y, x).to_degrees(),
+        libm::atan2(z, libm::hypot(x, y)).to_degrees(),
+    )
+}
+
 pub fn subset(pack: &Path, config: &Config, out: &Path) -> Result<Report, String> {
     for entry in std::fs::read_dir(pack).map_err(|e| format!("{}: {e}", pack.display()))? {
         let name = entry.map_err(|e| e.to_string())?.file_name();
@@ -650,6 +723,67 @@ pub fn subset(pack: &Path, config: &Config, out: &Path) -> Result<Report, String
         })
         .collect();
     let n_provinces = next as usize;
+    // Rest of world is one pseudo-province after the kept ones (RFC 0356, ADR 0377): the dropped
+    // provinces' rows combined by the `provinces`, `econ_provinces` and `econ_pops` rules, at
+    // their value-added weighted centroid.
+    let econ_provinces_all = t("econ_provinces.arrow")?;
+    if econ_provinces_all.rows() != province_kept.len() {
+        return Err("econ_provinces has a row per province".into());
+    }
+    let dropped: Vec<usize> = (0..province_kept.len())
+        .filter(|&p| !province_kept[p])
+        .collect();
+    if dropped.is_empty() {
+        return Err("every province is kept: nothing for the rest of world".into());
+    }
+    let row_province = n_provinces as u32;
+    let to_row = vec![row_province; province_kept.len()];
+    let province_weight: Vec<f64> = (0..province_kept.len())
+        .map(|p| {
+            (0..10)
+                .map(|g| match econ_provinces_all.col(&format!("va_{g}")) {
+                    Ok(Col::F(v)) if !v[p].is_nan() => v[p],
+                    _ => 0.0,
+                })
+                .sum()
+        })
+        .collect();
+    let row_of = |name: &str, x: &Table| -> Result<Table, String> {
+        let mut d = x.take(&dropped);
+        d.names.push("__row".into());
+        d.cols
+            .push(Col::U32(dropped.iter().map(|&p| p as u32).collect()));
+        let mut r = aggregate(
+            config,
+            name,
+            &d,
+            &["__row"],
+            &to_row,
+            row_province,
+            &province_weight,
+        )?;
+        r.names.pop();
+        r.cols.pop();
+        Ok(r)
+    };
+    let mut row_province_table = row_of("provinces", &provinces)?;
+    let points: Vec<(f64, f64)> = {
+        let (Col::F(lon), Col::F(lat)) = (provinces.col("lon")?, provinces.col("lat")?) else {
+            return Err("lon and lat are not f64".into());
+        };
+        dropped.iter().map(|&p| (lon[p], lat[p])).collect()
+    };
+    let weights: Vec<f64> = dropped.iter().map(|&p| province_weight[p]).collect();
+    let weights = if weights.iter().sum::<f64>() > 0.0 {
+        weights
+    } else {
+        vec![1.0; dropped.len()]
+    };
+    let centre = centroid(&points, &weights);
+    for (name, v) in [("lon", centre.0), ("lat", centre.1)] {
+        let i = row_province_table.index(name)?;
+        row_province_table.cols[i] = Col::F(vec![v]);
+    }
     let filter_by_province = |mut x: Table| -> Result<Table, String> {
         let mask: Vec<bool> = x
             .u32s("province")?
@@ -661,14 +795,27 @@ pub fn subset(pack: &Path, config: &Config, out: &Path) -> Result<Report, String
         Ok(x)
     };
 
-    let mut tables: Vec<(&str, Table)> = vec![("provinces.arrow", provinces.keep(&province_kept))];
+    let mut kept_provinces = provinces.keep(&province_kept);
+    kept_provinces.append(&row_province_table)?;
+    let mut tables: Vec<(&str, Table)> = vec![("provinces.arrow", kept_provinces)];
     let countries = t("countries.arrow")?;
     let mask: Vec<bool> = countries
         .strings("code")?
         .iter()
         .map(|c| kept.contains(c.as_str()))
         .collect();
-    tables.push(("countries.arrow", countries.keep(&mask)));
+    let mut kept_countries = countries.keep(&mask);
+    kept_countries.append(&one_row(
+        &["code", "name", "sovereign", "sovereign_name", "colour"],
+        vec![
+            Col::S(vec![config.row.clone()]),
+            Col::S(vec!["Rest of world".into()]),
+            Col::S(vec![config.row.clone()]),
+            Col::S(vec!["Rest of world".into()]),
+            Col::U8(vec![0]),
+        ],
+    ))?;
+    tables.push(("countries.arrow", kept_countries));
     tables.push(("cells.arrow", filter_by_province(t("cells.arrow")?)?));
     tables.push(("counties.arrow", filter_by_province(t("counties.arrow")?)?));
 
@@ -690,8 +837,48 @@ pub fn subset(pack: &Path, config: &Config, out: &Path) -> Result<Report, String
             }
         })
         .collect();
+    // The pseudo-province's node follows the kept provinces' (province nodes come first), its
+    // port after every other node, joined to the sea node nearest its centre.
+    let nmap: Vec<u32> = nmap
+        .iter()
+        .map(|&m| {
+            if m != NONE && m >= row_province {
+                m + 1
+            } else {
+                m
+            }
+        })
+        .collect();
     let mut new_nodes = nodes.keep(&node_kept);
     new_nodes.remap("province", &pmap)?;
+    let sea = {
+        let (Col::U8(kind), Col::F(lon), Col::F(lat)) =
+            (nodes.col("kind")?, nodes.col("lon")?, nodes.col("lat")?)
+        else {
+            return Err("nodes columns changed".into());
+        };
+        (0..kind.len())
+            .filter(|&n| kind[n] == 4)
+            .map(|n| (haversine_km(centre, (lon[n], lat[n])), n))
+            .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+            .ok_or("no sea node for the rest of world")?
+    };
+    let node_row = |kind: u8, label: &str| {
+        one_row(
+            &["kind", "province", "lon", "lat", "label", "sea_zone"],
+            vec![
+                Col::U8(vec![kind]),
+                Col::U32(vec![row_province]),
+                Col::F(vec![centre.0]),
+                Col::F(vec![centre.1]),
+                Col::S(vec![label.into()]),
+                Col::U32(vec![NONE]),
+            ],
+        )
+    };
+    new_nodes.insert_row(n_provinces, &node_row(0, "ROW-0"), 0)?;
+    let port = new_nodes.rows() as u32;
+    new_nodes.append(&node_row(2, "ROW port"))?;
     tables.push(("nodes.arrow", new_nodes));
     let edges = t("edges.arrow")?;
     let mask: Vec<bool> = edges
@@ -703,20 +890,48 @@ pub fn subset(pack: &Path, config: &Config, out: &Path) -> Result<Report, String
     let mut new_edges = edges.keep(&mask);
     new_edges.remap("a", &nmap)?;
     new_edges.remap("b", &nmap)?;
+    let edge_row = |a: u32, b: u32, mode: u8, km: f64| {
+        one_row(
+            &["a", "b", "mode", "length_km", "tri_m", "chokepoint"],
+            vec![
+                Col::U32(vec![a]),
+                Col::U32(vec![b]),
+                Col::U8(vec![mode]),
+                Col::F(vec![km]),
+                Col::F(vec![0.0]),
+                Col::U8(vec![0]),
+            ],
+        )
+    };
+    // port access (5) from the province, sea (2) from the nearest sea node, 1 km at the least
+    new_edges.append(&edge_row(row_province, port, 5, 1.0))?;
+    new_edges.append(&edge_row(nmap[sea.1], port, 2, sea.0.max(1.0)))?;
     tables.push(("edges.arrow", new_edges));
 
     for name in COPIED {
         tables.push((name, t(name)?));
     }
-    let provinces_econ = t("econ_provinces.arrow")?;
-    if provinces_econ.rows() != province_kept.len() {
-        return Err("econ_provinces has a row per province".into());
-    }
-    tables.push(("econ_provinces.arrow", provinces_econ.keep(&province_kept)));
-    tables.push((
-        "econ_pops.arrow",
-        filter_by_province(t("econ_pops.arrow")?)?,
-    ));
+    let mut econ_provinces = econ_provinces_all.keep(&province_kept);
+    econ_provinces.append(&row_of("econ_provinces", &econ_provinces_all)?)?;
+    tables.push(("econ_provinces.arrow", econ_provinces));
+    let pops = t("econ_pops.arrow")?;
+    let mut kept_pops = filter_by_province(pops.clone())?;
+    let dropped_pops: Vec<bool> = pops
+        .u32s("province")?
+        .iter()
+        .map(|&p| p != NONE && !province_kept[p as usize])
+        .collect();
+    let row_pops = aggregate(
+        config,
+        "econ_pops",
+        &pops.keep(&dropped_pops),
+        &["province"],
+        &to_row,
+        row_province,
+        &province_weight,
+    )?;
+    kept_pops.append(&row_pops)?;
+    tables.push(("econ_pops.arrow", kept_pops));
 
     let rule_name = |n: &str| n.trim_end_matches(".arrow").to_owned();
     let agg = |n: &str, x: &Table, keys: &[&str]| {
@@ -760,7 +975,21 @@ pub fn subset(pack: &Path, config: &Config, out: &Path) -> Result<Report, String
         )?,
     ));
 
-    // gateways of kept countries only; the rest of world has no ports
+    // the countries the rest of world absorbed and their GDP, the weights of its distances and
+    // flows in `epsilon::pack_data` (RFC 0357, ADR 0378)
+    let members: Vec<usize> = (0..codes.len()).filter(|&i| map[i] == row_index).collect();
+    tables.push((
+        "row_members.arrow",
+        one_row(&[], vec![]).with(&[
+            (
+                "code",
+                Col::S(members.iter().map(|&i| codes[i].clone()).collect()),
+            ),
+            ("gdp", Col::F(members.iter().map(|&i| gdp[i]).collect())),
+        ]),
+    ));
+
+    // gateways of kept countries only; the rest of world's is added below
     let mut g = t("gateways.arrow")?;
     let mask: Vec<bool> = g
         .u32s("country")?
@@ -771,6 +1000,16 @@ pub fn subset(pack: &Path, config: &Config, out: &Path) -> Result<Report, String
     g = g.keep(&mask);
     g.remap("country", &map)?;
     g.remap("node", &nmap)?;
+    // the pseudo-province's one gateway, its port (kind 0), carries all its throughput
+    g.append(&one_row(
+        &["node", "country", "kind", "mass"],
+        vec![
+            Col::U32(vec![port]),
+            Col::U32(vec![row_index]),
+            Col::U8(vec![0]),
+            Col::F(vec![1.0]),
+        ],
+    ))?;
     tables.push(("gateways.arrow", g));
 
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
@@ -793,7 +1032,7 @@ pub fn subset(pack: &Path, config: &Config, out: &Path) -> Result<Report, String
     Ok(Report {
         tables: digests,
         bytes,
-        provinces: n_provinces,
+        provinces: n_provinces + 1,
         countries: new_codes.len() + 1,
     })
 }

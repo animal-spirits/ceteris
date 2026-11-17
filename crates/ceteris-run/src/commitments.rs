@@ -74,6 +74,7 @@ impl Commitments {
 mod tests {
     use super::*;
     use crate::scenario::EditKind;
+    use crate::scenario::EditOp;
 
     fn commitment(id: u32, offset: u32, rate: f64) -> Commitment {
         Commitment {
@@ -86,6 +87,7 @@ mod tests {
                 kind: EditKind::Policy,
                 target: "tariff.0.1.0".into(),
                 value: 0.1,
+                op: EditOp::Set,
                 query: None,
             },
             rate,

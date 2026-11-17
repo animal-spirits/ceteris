@@ -163,6 +163,7 @@ mod tests {
     use ceteris_core::toy::Toy;
 
     use super::*;
+    use crate::scenario::EditOp;
     use crate::scenario::{Branch, EditKind, EditSource, ReplaySel};
 
     fn edit(tick: u32, province: usize, value: f64) -> Edit {
@@ -173,6 +174,7 @@ mod tests {
             kind: EditKind::State,
             target: format!("price.{province}"),
             value,
+            op: EditOp::Set,
             query: None,
         }
     }

@@ -378,3 +378,41 @@ fn good_2_theta_is_fitted_jointly_with_epsilon() {
     assert_eq!(off.theta2, start.inp.theta[epsilon::THETA_GOOD]);
     assert!(off.fit.nu[3] > 1e-2, "{:?}", off.fit.nu);
 }
+
+/// A class's cross-border share at the data state does not read another class's distance cost:
+/// good 2 at nu 0 and epsilon scale 0 buys the share it buys at epsilon 0 whatever the other
+/// classes pay. Stage 1 inverts the PIGL weights at the buyer prices it spends at; with weights
+/// inverted at prices 1 the other classes' cost moved the share by -1.7e-4 here.
+#[test]
+fn a_class_without_distance_cost_keeps_its_share_under_the_others_cost() {
+    const GOOD: usize = 2;
+    let w = world();
+    let lim = Limits::default();
+    let k = w.groups.iter().position(|g| g.contains(&GOOD)).unwrap();
+    let c = w.class[GOOD];
+    let (mut d0, min) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &trade_weight(&w.inp));
+    d0[c] = min[c];
+    let mut nu = w.inp.border_nu.clone();
+    for &g in &w.groups[k] {
+        nu[g] = 0.0;
+    }
+    let share =
+        |inp: &Inputs| border::data_state_shares(inp, &nu, &w.groups, &w.icio, lim).unwrap()[k];
+    let base = share(&w.inp);
+    let mut scale = [1.0; border::N_CLASSES];
+    scale[c] = 0.0;
+    let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &d0, &scale, 2.0).unwrap();
+    // the other classes' cost is on: their buyer prices moved
+    assert!((0..at.n_provinces()).any(|p| {
+        (0..w.class.len())
+            .any(|g| (at.base_price[(p, g)] / w.inp.base_price[(p, g)] - 1.0).abs() > 1e-2)
+    }));
+    let moved = share(&at) - base;
+    // what is left is the price geography within countries, not the level of the weights
+    assert!(moved.abs() <= 5e-6, "share moved by {moved}");
+    // household spending by country and good stays at the data's final demand
+    let (s0, _) = steady::data_state_spending(&w.inp, lim).unwrap();
+    let (s1, _) = steady::data_state_spending(&at, lim).unwrap();
+    let total = |m: &ceteris_reference::io::Mat| (0..m.rows).map(|p| m[(p, GOOD)]).sum::<f64>();
+    assert!((total(&s1) / total(&s0) - 1.0).abs() <= 1e-4);
+}

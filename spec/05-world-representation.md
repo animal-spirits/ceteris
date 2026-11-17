@@ -6,7 +6,7 @@ Geography enters the economy through land and resource endowments and through tr
 
 A global hexagonal grid (H3 resolution 4, cells of roughly 1,800 sq km; finer cells for provinces too small to hold one; resolution 6 for county statistics) stores: elevation, slope and ruggedness (ETOPO 2022), land cover, climate normals, crop suitability (FAO GAEZ v4, current input levels), gridded population and built-up area, night lights (for downscaling economic activity), energy and mineral resources, and coastlines and ports. The raster feeds province aggregates and transport costs; it is not simulated directly, except by the climate damage module.
 
-The CI small pack keeps every country the benchmark and shock files name, aggregates the others to rest of world on the ICIO grid, and keeps all 10 goods (ADR 0370).
+The CI small pack keeps every country the benchmark and shock files name, aggregates the others to rest of world on the ICIO grid, and keeps all 10 goods (ADR 0370). Rest of world is one pseudo-province carrying its summed value added and population, with GDP-weighted distance and flows (ADR 0377). The pack carries a `row_members` table (code, GDP) of the countries it absorbed (ADR 0378).
 
 ### 5.2 Provinces
 

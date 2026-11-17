@@ -3,7 +3,7 @@
 //! verbs are functions here; verbs that run worlds are registered and built by later tasks.
 
 use crate::scenario::{
-    Branch, Edit, EditKind, EditSource, MAX_EDITS_PER_BRANCH, Scenario, ScenarioError,
+    Branch, Edit, EditKind, EditOp, EditSource, MAX_EDITS_PER_BRANCH, Scenario, ScenarioError,
 };
 use crate::vcs::{self, Skipped};
 
@@ -182,6 +182,7 @@ pub fn user_edit(
         kind,
         target: target.to_string(),
         value,
+        op: EditOp::Set,
         query,
     }
 }

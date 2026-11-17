@@ -535,3 +535,31 @@ fn the_current_manifest_passes_the_holdout_register() {
         .collect();
     assert!(lines.is_empty(), "{lines:?}");
 }
+
+#[test]
+fn the_committed_small_pack_passes_both_profiles() {
+    let root = sources::workspace_root();
+    let pack = root.join("tests/fixtures/pack-ci");
+    assert!(!sources::manifest_sources(&pack).unwrap().is_empty());
+    for profile in [Profile::Research, Profile::Release] {
+        let report = sources::check_pack(&root, Some(profile), Some(&pack)).unwrap();
+        assert_eq!(report.problems.len(), 0, "{:?}", report.summary());
+    }
+}
+
+#[test]
+fn a_subset_pack_reading_a_non_commercial_source_fails_the_release_profile() {
+    let root = sources::workspace_root();
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("manifest.json"),
+        r#"{"sources":[{"name":"x","sha256":"0","source":"epr-v1"}]}"#,
+    )
+    .unwrap();
+    let release = sources::check_pack(&root, Some(Profile::Release), Some(dir.path())).unwrap();
+    assert!(release.problems.iter().any(|p| {
+        p.0.starts_with("epr-v1: release pack reads a source without commercial use")
+    }));
+    let research = sources::check_pack(&root, Some(Profile::Research), Some(dir.path())).unwrap();
+    assert!(research.problems.is_empty());
+}

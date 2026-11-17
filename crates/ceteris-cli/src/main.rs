@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! ceteris pack compare A B [--iterative] [--table NAME]
-//! ceteris pack check-sources --profile research|release
+//! ceteris pack check-sources --profile research|release [--pack DIR]
 //! ceteris pack fetch [--record]
 //! ceteris pack record-counties
 //! ceteris pack build [--out DIR]
@@ -118,7 +118,7 @@ use ceteris_trade::{Kernel, PriceAnchor, TradeParams};
 
 const USAGE: &str = "usage:
   ceteris pack compare A B [--iterative] [--table NAME]
-  ceteris pack check-sources [--profile research|release]
+  ceteris pack check-sources [--profile research|release [--pack DIR]]
   ceteris setup [--from DIR]
   ceteris pack fetch [--record]
   ceteris pack record-counties
@@ -566,9 +566,11 @@ fn write_timing(out: &Path, spans: &[timing::Span]) -> std::io::Result<()> {
     Ok(())
 }
 
-/// `pack check-sources [--profile research|release]`: exit 1 when the manifest has problems.
+/// `pack check-sources [--profile research|release [--pack DIR]]`: exit 1 when the manifest has
+/// problems; `--pack` reads the sources of a built or subset pack's `manifest.json`.
 fn check_sources(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     let mut profile = None;
+    let mut pack = None;
     while let Some(a) = args.next() {
         match a.as_str() {
             "--profile" => {
@@ -576,10 +578,18 @@ fn check_sources(mut args: impl Iterator<Item = String>) -> Result<ExitCode, Str
                 profile =
                     Some(Profile::parse(&name).ok_or("--profile must be research or release")?);
             }
+            "--pack" => {
+                pack = Some(PathBuf::from(
+                    args.next().ok_or("--pack needs a directory")?,
+                ))
+            }
             other => return Err(format!("unknown argument '{other}'")),
         }
     }
-    let report = sources::check(&sources::workspace_root(), profile)?;
+    if pack.is_some() && profile.is_none() {
+        return Err("--pack needs --profile".into());
+    }
+    let report = sources::check_pack(&sources::workspace_root(), profile, pack.as_deref())?;
     for problem in &report.problems {
         eprintln!("{problem}");
     }

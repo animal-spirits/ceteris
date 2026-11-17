@@ -236,6 +236,7 @@ mod tests {
 
     use super::*;
     use crate::fixture::small_world;
+    use ceteris_run::EditOp;
 
     fn priors() -> Vec<ParamPrior> {
         vec![
@@ -288,6 +289,7 @@ mod tests {
             kind,
             target: target.into(),
             value,
+            op: EditOp::Set,
             query: None,
         }
     }

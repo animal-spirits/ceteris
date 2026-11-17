@@ -1,6 +1,6 @@
 # RFC 0334. Linux app for the 1.0 Steam release (amends ADR 0216)
 
-Status: proposed
+Status: accepted
 Date: 2026-11-09
 Design sections: 19 (platforms)
 Release: 1.0, R
@@ -26,12 +26,12 @@ Options:
 Recommendation: B, because it is a cheap gain in reach and Windows can wait for demand.
 
 Decision: B, Antonio, 2026-11-09 (decision card in the polish-plan thread).
-Row: to be taken when this PR writes the spec.
+Row: ADR 0380
 
 ## Spec changes
 
 - 19, platforms: app on macOS and Linux; Windows runs only the cross-platform golden test (ADR 0128).
-- ADR 0216 status line notes the amendment; its tests gain a Linux app launch on a clean machine.
+- ADR 0216 is a record and is not rewritten; this RFC and its row carry the amendment, and the tests gain a Linux app launch on a clean machine (ADR 0380).
 
 ## Open points for the review
 

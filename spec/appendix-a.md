@@ -364,4 +364,10 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0374 | [The small pack ships only redistributable primary sources; EXIOBASE and the ETH/EPR family are excluded](../rfcs/0353-ci-pack-and-fit-cache.md) | 16, 21.1 |
 | 0375 | [A theta class whose border friction clamps at zero under ADR 0272's distance cost takes its own scale s_c on epsilon, so its cross-border share target stays feasible; other classes keep s_c = 1 (amends ADR 0272 Decision 2)](../rfcs/0354-class-epsilon-scale.md) | 5.4, 8.3, 17.1 |
 | 0376 | [s_c is fitted jointly with epsilon and nu_c: for a floored class nu_c is 0 and s_c is the root in (0, 1] of the class's ICIO share residual, found inside each epsilon trial](../rfcs/0354-class-epsilon-scale.md) | 17.1 |
+| 0377 | [The small pack's rest of world is one pseudo-province carrying its summed value added and population, with GDP-weighted distance and flows, so the pack calibrates through the full-pack path](../rfcs/0356-small-pack-row-province.md) | 5.1 |
+| 0378 | [The small pack carries a row_members table of rest of world's absorbed countries and their GDP, which weights ROW's distances and flows in the epsilon fit](../rfcs/0357-small-pack-row-members.md) | 5.1 |
+| 0379 | [First run installs a prebuilt pack of redistributable sources by default; fetching the remaining sources upgrades it to the fuller pack](../rfcs/0333-prebuilt-redistributable-pack-at-first-run.md) | 16, 19 |
+| 0380 | [The 1.0 Steam app ships on macOS and Linux (x86_64 and aarch64); Windows runs only the cross-platform golden test](../rfcs/0334-linux-app-for-the-steam-release.md) | 19.1 |
+| 0381 | [A scenario edit carries an optional op, set (the default) or mul; with mul the value is a factor on the target's value at the edit's tick, and op enters the run hash only when it is mul](../rfcs/0358-relative-edits.md) | 14.2 |
+| 0382 | [Multiply edits are accepted for parameters (econ.*, trade.*, trade.border_nu.<good>) and non-tariff barriers (ntb.*); tariff, state and switch edits reject them](../rfcs/0358-relative-edits.md) | 14.2 |
 <!-- rows:end -->

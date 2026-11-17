@@ -121,6 +121,22 @@ pub enum ReplaySel {
     All,
 }
 
+/// How an edit's `value` combines with the target (RFC 0358): `Set` replaces it, `Mul` is a
+/// factor on the value at the edit's tick, so a scenario need not name a pack's fitted value.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EditOp {
+    #[default]
+    Set,
+    Mul,
+}
+
+impl EditOp {
+    fn is_set(&self) -> bool {
+        *self == Self::Set
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Edit {
     pub tick: u32,
@@ -130,6 +146,8 @@ pub struct Edit {
     pub kind: EditKind,
     pub target: String,
     pub value: f64,
+    #[serde(default, skip_serializing_if = "EditOp::is_set")]
+    pub op: EditOp,
     /// Selects the rows of `target`'s table by a stored predicate, re-evaluated at the edit's
     /// tick (edit by query, ADR 0155); `target` then names a column.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -288,6 +306,9 @@ impl Scenario {
                 h.str(e.kind.name());
                 h.str(&e.target);
                 h.f64(e.value);
+                if e.op == EditOp::Mul {
+                    h.str("mul");
+                }
                 if let Some(q) = &e.query {
                     h.str("query");
                     h.str(q);
@@ -484,5 +505,23 @@ tick = 24
             Scenario::parse(&no_fork),
             Err(ScenarioError::ChildWithoutForkTick("tariff".into()))
         );
+    }
+
+    /// RFC 0358: `op` is absent from files that do not use it, so no existing file or run hash
+    /// moves; `mul` round-trips and changes the hash.
+    #[test]
+    fn op_is_omitted_when_set_and_hashed_when_mul() {
+        let a = scenario();
+        assert!(!a.to_toml().contains("op ="));
+        let with_set = TEXT.replace("value = 0.25", "value = 0.25\nop = \"set\"");
+        let b = Scenario::parse(&with_set).unwrap();
+        assert_eq!(a, b);
+        assert_eq!(hash(&a), hash(&b));
+        let with_mul = TEXT.replace("value = 0.25", "value = 0.25\nop = \"mul\"");
+        let c = Scenario::parse(&with_mul).unwrap();
+        assert_eq!(c.branches[1].edits[0].op, EditOp::Mul);
+        assert!(c.to_toml().contains("op = \"mul\""));
+        assert_eq!(Scenario::parse(&c.to_toml()).unwrap(), c);
+        assert_ne!(hash(&a), hash(&c));
     }
 }

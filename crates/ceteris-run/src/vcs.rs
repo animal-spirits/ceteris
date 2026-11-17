@@ -162,6 +162,7 @@ mod tests {
 
     use super::*;
     use crate::branch::Workbench;
+    use crate::scenario::EditOp;
     use crate::scenario::{Branch, EditKind, EditSource, ReplaySel};
     use crate::store::ChunkStore;
 
@@ -173,6 +174,7 @@ mod tests {
             kind: EditKind::State,
             target: format!("price.{province}"),
             value,
+            op: EditOp::Set,
             query: None,
         }
     }

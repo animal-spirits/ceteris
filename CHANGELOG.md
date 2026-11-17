@@ -4,14 +4,25 @@
 
 ### BEHAVIOUR: good 2 takes its own theta class (RFC 0355 draft, #595)
 
-- N_CLASSES 4 to 5: coal and other mining is class 3 at theta 10.0 (a 3-point estimate; a Mac fit
-  refines it), fuels class 4 at 16.91; classes stay ordered by theta. `friction_groups` is now the
+- N_CLASSES 4 to 5: coal and other mining is class 3 at theta 9.27 (`GOOD2_THETA`, Mac fit; refit after #619), fuels class 4 at 16.91; classes stay ordered by theta. `friction_groups` is now the
   theta classes (ADR 0276's per-good split removed).
 - Fixture goldens move: `p2-econ.txt`, `p3-workbench.txt`, the committed fixture export, reference
   and calibration, BALANCE re-derived (ADR 0299, residual 1e-13), the rationed-cell and held-chain
   expectations in `p2_properties.rs`. Column-factor tolerance 1e-9 to 1e-7, nu independence 1e-12 to
   1e-10, H2 skips classes under eight crossings.
-- Known failing: `e3_x10_border_shock_survives_700_ticks` (index 93 against the 1.10 go number).
+- `calibrate` fits theta_2 jointly with epsilon, good 2's class held at scale 0.
+
+### BEHAVIOUR: data-state spending inverts the PIGL weights at its buyer prices (#619)
+
+- `steady::data_state_spending`, which the border friction and epsilon fits evaluate at, inverted
+  the PIGL weights at prices 1 for traded goods and spent at the base buyer prices, so every cost
+  in a buyer price moved households off the data's final demand shares. With epsilon on, the other
+  classes' distance cost lowered the cross-border share of a class held at nu 0 and scale 0 (good
+  2 on the pack: 0.0033 below its target at epsilon 2). The weights are now inverted at the buyer
+  prices spent at (`Inputs::pigl_weights_at`). Fixture: the shift at epsilon 2 goes from -1.6e-4
+  to -2e-6 (what is left is price geography within countries); good 2's share at nu 0 and epsilon
+  0 moves from 0.05549 to 0.05611.
+- Fitted nu, epsilon and theta_2 move on the pack (owner-side refit). Fixture goldens do not move.
 
 ### Cloud calibration runner
 

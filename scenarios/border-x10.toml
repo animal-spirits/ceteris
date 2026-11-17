@@ -1,0 +1,78 @@
+pack_hash = "UNPINNED"
+engine = "UNPINNED"
+start_year = 2000
+replay = "off"
+seeds = [0, 1, 2, 3, 4, 5, 6, 7]
+
+[params]
+
+[[branch]]
+id = "main"
+
+[[branch]]
+id = "deglobalisation"
+parent = "main"
+fork_tick = 12
+
+[[branch.edit]]
+tick = 13
+source = "cli"
+god = false
+kind = "param"
+target = "trade.border_nu.0"
+value = 10.0
+op = "mul"
+
+[[branch.edit]]
+tick = 13
+source = "cli"
+god = false
+kind = "param"
+target = "trade.border_nu.1"
+value = 10.0
+op = "mul"
+
+[[branch.edit]]
+tick = 13
+source = "cli"
+god = false
+kind = "param"
+target = "trade.border_nu.2"
+value = 10.0
+op = "mul"
+
+[[branch.edit]]
+tick = 13
+source = "cli"
+god = false
+kind = "param"
+target = "trade.border_nu.3"
+value = 10.0
+op = "mul"
+
+[[branch.edit]]
+tick = 13
+source = "cli"
+god = false
+kind = "param"
+target = "trade.border_nu.4"
+value = 10.0
+op = "mul"
+
+[[branch.edit]]
+tick = 13
+source = "cli"
+god = false
+kind = "param"
+target = "trade.border_nu.5"
+value = 10.0
+op = "mul"
+
+[[branch.edit]]
+tick = 13
+source = "cli"
+god = false
+kind = "param"
+target = "trade.border_nu.6"
+value = 10.0
+op = "mul"

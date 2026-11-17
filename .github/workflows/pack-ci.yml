@@ -1,0 +1,59 @@
+name: pack-ci
+
+# Small-pack calibration and benchmark (RFC 0353, ADRs 0370 to 0372). Linux only, hosted
+# runners, no secrets. Report-only for the first 4 weeks: the job never fails the PR.
+on:
+  pull_request:
+    paths:
+      - "crates/ceteris-calibrate/**"
+      - "crates/ceteris-trade/**"
+      - "crates/ceteris-econ/**"
+      - "crates/ceteris-pack/**"
+      - "spec/**"
+      - "tests/fixtures/pack-ci/**"
+      - "scripts/pack-ci.sh"
+      - ".github/workflows/pack-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: pack-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  small-pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (pinned by rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Fit-cache key (git tree hash of the calibration inputs)
+        id: key
+        run: |
+          echo "tree=$(git rev-parse HEAD:crates/ceteris-calibrate HEAD:crates/ceteris-trade HEAD:crates/ceteris-econ HEAD:crates/ceteris-pack HEAD:tests/fixtures/pack-ci | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: fit-cache
+          key: pack-ci-fit-${{ steps.key.outputs.tree }}
+          restore-keys: pack-ci-fit-
+      - name: Licence check of the pack's sources (report-only, ADR 0374)
+        continue-on-error: true
+        run: |
+          cargo run -q --release --bin ceteris -- pack check-sources --profile research --pack tests/fixtures/pack-ci
+          cargo run -q --release --bin ceteris -- pack check-sources --profile release --pack tests/fixtures/pack-ci
+      - name: Calibrate and benchmark the small pack (report-only)
+        continue-on-error: true
+        run: scripts/pack-ci.sh "$GITHUB_WORKSPACE/pack-ci-logs" "$GITHUB_WORKSPACE/fit-cache"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pack-ci-logs
+          path: pack-ci-logs
+          retention-days: 14

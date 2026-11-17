@@ -1,6 +1,6 @@
 # RFC 0333. Prebuilt redistributable pack at first run (amends ADR 0215)
 
-Status: proposed
+Status: accepted
 Date: 2026-11-09
 Design sections: 19 (first-run data, pack profiles)
 Release: 1.0, R
@@ -30,12 +30,12 @@ Options:
 Recommendation: B, because it removes the 13 manual downloads from the first five minutes and keeps the fuller pack available.
 
 Decision: B, Antonio, 2026-11-09 (decision card in the polish-plan thread).
-Row: to be taken when this PR writes the spec.
+Row: ADR 0379
 
 ## Spec changes
 
-- 19, pack profiles: the prebuilt profile is the default install; fetch upgrades it. Row to be taken.
-- ADR 0215 status line notes the amendment.
+- 19, pack profiles: the prebuilt profile is the default install; fetch upgrades it (ADR 0379).
+- ADR 0215 is a record (RFCs 0001 to 0281 are not rewritten); the amendment is carried by this RFC and its row.
 
 ## Open points for the review
 

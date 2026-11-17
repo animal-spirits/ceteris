@@ -14,7 +14,7 @@ use std::path::Path;
 use ceteris_econ::EconInputs;
 use ceteris_geo::graph::TransportParams;
 use ceteris_geo::pack::Pack;
-use ceteris_pack::read::natural_earth::{ADMIN0, read_codes};
+use ceteris_pack::read::natural_earth::{ADMIN0, IsoCodes, read_codes};
 use ceteris_pack::read::tariffs::{GRAVITY, read_distances};
 use ceteris_reference::io::Inputs;
 use ceteris_reference::ppml;
@@ -714,6 +714,91 @@ fn fit_epsilon_inner(
     })
 }
 
+/// The countries the pack's rest of world absorbed and their GDP, if the pack has them.
+#[allow(clippy::type_complexity)]
+fn read_members(pack: &Path) -> Result<Option<(Vec<String>, Vec<f64>)>, String> {
+    let file = pack.join("row_members.arrow");
+    if !file.exists() {
+        return Ok(None);
+    }
+    let t = Table::open(&file)?;
+    Ok(Some((t.strings("code")?, t.f64("gdp")?)))
+}
+
+/// BACI flows, CEPII distw and contiguity of a pack whose last country is the rest of world:
+/// flows into and out of it are the sums over its members; its distance to a country is the
+/// members' mean weighted by GDP (members without a CEPII pair skipped; unweighted if the weights
+/// vanish). Row-major `n` squared, the rest of world's own pair NaN in distw and contig.
+#[allow(clippy::type_complexity)]
+fn row_data(
+    codes: &[String],
+    iso3: &[String],
+    iso: &IsoCodes,
+    cache: &Path,
+    cepii: &BTreeMap<(String, String), (f64, f64)>,
+    members: &[String],
+    gdp: &[f64],
+) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>), String> {
+    let n = codes.len();
+    let r = n - 1;
+    let mut ext: Vec<String> = codes[..r].to_vec();
+    ext.extend(members.iter().cloned());
+    let nc = ext.len();
+    let flows = baci_flows(cache, &ext, iso)?;
+    let n_g = flows.len() / (nc * nc);
+    let at = |i: usize| i.min(r);
+    let mut data_flows = vec![0.0; n * n * n_g];
+    for o in 0..nc {
+        for d in 0..nc {
+            let cell = (at(o) * n + at(d)) * n_g;
+            for g in 0..n_g {
+                data_flows[cell + g] += flows[(o * nc + d) * n_g + g];
+            }
+        }
+    }
+    let member_iso: Vec<String> = members
+        .iter()
+        .map(|c| iso.get(c).cloned().unwrap_or_else(|| c.clone()))
+        .collect();
+    let (mut distw, mut contig) = (vec![f64::NAN; n * n], vec![f64::NAN; n * n]);
+    for o in 0..n {
+        for d in (0..n).filter(|&d| d != o) {
+            let pair = |k: usize| -> Option<(f64, f64, f64)> {
+                let key = match (o == r, d == r) {
+                    (false, false) => (iso3[o].clone(), iso3[d].clone()),
+                    (false, true) => (iso3[o].clone(), member_iso[k].clone()),
+                    (true, false) => (member_iso[k].clone(), iso3[d].clone()),
+                    (true, true) => return None,
+                };
+                let w = if o == r || d == r { gdp[k] } else { 1.0 };
+                cepii.get(&key).map(|&(a, b)| (a, b, w))
+            };
+            let found: Vec<(f64, f64, f64)> = if o == r || d == r {
+                (0..members.len()).filter_map(pair).collect()
+            } else {
+                pair(0).into_iter().collect()
+            };
+            // each quantity over the members that have it, GDP-weighted (unweighted if the
+            // weights vanish)
+            let mean = |pick: fn(&(f64, f64, f64)) -> f64| -> f64 {
+                let have: Vec<&(f64, f64, f64)> =
+                    found.iter().filter(|p| pick(p).is_finite()).collect();
+                let total: f64 = have.iter().map(|p| p.2).sum();
+                if have.is_empty() {
+                    f64::NAN
+                } else if total > 0.0 {
+                    have.iter().map(|p| p.2 * pick(p)).sum::<f64>() / total
+                } else {
+                    have.iter().map(|p| pick(p)).sum::<f64>() / have.len() as f64
+                }
+            };
+            distw[o * n + d] = mean(|p| p.0);
+            contig[o * n + d] = mean(|p| p.1);
+        }
+    }
+    Ok((data_flows, distw, contig))
+}
+
 /// What [`Targets`] borrows besides the inputs, read from the pack and the data cache.
 pub struct PackData {
     pub ln_d: Vec<f64>,
@@ -733,24 +818,34 @@ pub fn pack_data(pack: &Path, cache: &Path) -> Result<PackData, String> {
         .iter()
         .map(|c| iso.get(c).cloned().unwrap_or_else(|| c.clone()))
         .collect();
-    let data_flows = baci_flows(cache, &codes, &iso)?;
-    let n_g = data_flows.len() / (n * n);
-    let weight = (0..n * n)
-        .map(|k| data_flows[k * n_g..(k + 1) * n_g].iter().sum())
-        .collect();
-
     let cepii: BTreeMap<(String, String), (f64, f64)> = read_distances(&cache.join(GRAVITY), 2000)?
         .into_iter()
         .map(|r| ((r.iso3_o, r.iso3_d), (r.distw, r.contig)))
         .collect();
-    let (mut distw, mut contig) = (vec![f64::NAN; n * n], vec![f64::NAN; n * n]);
-    for o in 0..n {
-        for d in (0..n).filter(|&d| d != o) {
-            if let Some(&(w, c)) = cepii.get(&(iso3[o].clone(), iso3[d].clone())) {
-                (distw[o * n + d], contig[o * n + d]) = (w, c);
+    // A small pack's last country is the rest of world, with the countries it absorbed in
+    // `row_members` (RFC 0357); a pack without that table is read as before.
+    let members = read_members(pack)?;
+    let (data_flows, distw, contig) = match &members {
+        None => {
+            let data_flows = baci_flows(cache, &codes, &iso)?;
+            let (mut distw, mut contig) = (vec![f64::NAN; n * n], vec![f64::NAN; n * n]);
+            for o in 0..n {
+                for d in (0..n).filter(|&d| d != o) {
+                    if let Some(&(w, c)) = cepii.get(&(iso3[o].clone(), iso3[d].clone())) {
+                        (distw[o * n + d], contig[o * n + d]) = (w, c);
+                    }
+                }
             }
+            (data_flows, distw, contig)
         }
-    }
+        Some((member_codes, gdp)) => {
+            row_data(&codes, &iso3, &iso, cache, &cepii, member_codes, gdp)?
+        }
+    };
+    let n_g = data_flows.len() / (n * n);
+    let weight = (0..n * n)
+        .map(|k| data_flows[k * n_g..(k + 1) * n_g].iter().sum())
+        .collect();
 
     let graph = Pack::load(pack, &TransportParams::default()).map_err(|e| e.to_string())?;
     let econ = EconInputs::from_pack_data(&graph, pack).map_err(|e| e.to_string())?;
@@ -833,5 +928,18 @@ impl EpsilonFit {
                 ),
             ),
         ])
+    }
+}
+
+#[cfg(test)]
+mod row_members_tests {
+    use super::read_members;
+
+    /// A pack without `row_members.arrow` takes pack_data's unchanged path (RFC 0357); checked
+    /// bit-for-bit on the full pack against the previous code when this table was added.
+    #[test]
+    fn a_pack_without_the_table_has_no_members() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(read_members(dir.path()).unwrap().is_none());
     }
 }

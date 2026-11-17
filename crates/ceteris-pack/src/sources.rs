@@ -417,8 +417,32 @@ fn profile_problems(source: &Table, profile: Profile) -> Vec<String> {
     found
 }
 
+/// Source ids named by a built or subset pack's `manifest.json`.
+pub fn manifest_sources(pack: &Path) -> Result<BTreeSet<String>, String> {
+    let path = pack.join("manifest.json");
+    let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let json: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(json["sources"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|f| f["source"].as_str().map(str::to_owned))
+        .collect())
+}
+
 /// Checks `sources.toml` under `root`, and the pack's sources too when a profile is given.
 pub fn check(root: &Path, profile: Option<Profile>) -> Result<Report, String> {
+    check_pack(root, profile, None)
+}
+
+/// As [`check`], reading the sources of the pack in `pack` (its `manifest.json`, as a subset
+/// pack has, ADR 0374) instead of those of the pack build.
+pub fn check_pack(
+    root: &Path,
+    profile: Option<Profile>,
+    pack: Option<&Path>,
+) -> Result<Report, String> {
     let manifest = read_table(&root.join(CONFIG_DIR).join("sources.toml"))?;
     let distribution = manifest
         .get("project")
@@ -459,7 +483,11 @@ pub fn check(root: &Path, profile: Option<Profile>) -> Result<Report, String> {
     errors.extend(validation_problems(root, &by_id)?);
     errors.extend(holdout_problems(root, &by_id)?);
     if let Some(profile) = profile {
-        for sid in pack_sources(root)? {
+        let read = match pack {
+            Some(dir) => manifest_sources(dir)?,
+            None => pack_sources(root)?,
+        };
+        for sid in read {
             match by_id.get(sid.as_str()) {
                 None => errors.push(format!(
                     "{sid}: read by the pack but missing from sources.toml"

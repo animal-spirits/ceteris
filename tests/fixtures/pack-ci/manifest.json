@@ -1,0 +1,1159 @@
+{
+  "excluded_sources": [],
+  "pack_format": 3,
+  "sources": [
+    {
+      "name": "ne_10m_admin_1_states_provinces.zip",
+      "sha256": "efc59726337323058f9446210adc96673179cd344e053666ee3d28cb58ba2b05",
+      "source": "natural-earth-admin1"
+    },
+    {
+      "name": "ne_10m_admin_0_countries.zip",
+      "sha256": "ce1ac7036499a0edd641fbc093cd209a98f96a49d2eca8480aaacad35138a7f6",
+      "source": "natural-earth"
+    },
+    {
+      "name": "ne_10m_railroads.zip",
+      "sha256": "0bce64d1bb7ce1178810f0a341322b0459acb0689a61016259ef38f75abed0a4",
+      "source": "natural-earth"
+    },
+    {
+      "name": "ne_10m_ports.zip",
+      "sha256": "1824cccd897a6c2ad546abbaf1f3545d51cff4bddfbda40244a1ad1ab1e4371d",
+      "source": "natural-earth"
+    },
+    {
+      "name": "ne_10m_land.zip",
+      "sha256": "e547d749445eaa0964aba76738090ec88f5e63c4585122170f98c67a7ea922dc",
+      "source": "natural-earth"
+    },
+    {
+      "name": "ne_10m_geography_marine_polys.zip",
+      "sha256": "a2d3395904c41e718e02c3ec5bc988712164c524c236fad32d95d282ca303b2a",
+      "source": "natural-earth"
+    },
+    {
+      "name": "ne_10m_rivers_lake_centerlines.zip",
+      "sha256": "ded71b01870855ccfe19b51f2ec14c9bb48fae23c0e9f3c11974d426433b5c38",
+      "source": "natural-earth"
+    },
+    {
+      "name": "ETOPO_2022_v1_60s_N90W180_surface.tif",
+      "sha256": "9d27d4b8ea8e76977e2988bca667d7c8fa68b927355feffcddd6b4875a7fd08e",
+      "source": "etopo-2022"
+    },
+    {
+      "name": "airports.csv",
+      "sha256": "13f1f1a6298635c816b5bedfd47f8290339cc54730b38274b475fcb261daae4c",
+      "source": "ourairports"
+    },
+    {
+      "name": "mrds-csv.zip",
+      "sha256": "31be4baaa86b082787bc74989146183db21badf7157db39b3f0a6fe0b38a5477",
+      "source": "usgs-mrds"
+    },
+    {
+      "name": "BACI_HS92_V202601.zip",
+      "sha256": "43259580059fa83e17fcdb6866e7b7f39aaf0dd50277cfe494a1ed05a4844faf",
+      "source": "baci"
+    },
+    {
+      "name": "OECD-Bilateral-Trade-in-Goods-End-use-Conversion-Key.xlsx",
+      "sha256": "16b1e00e98d44948ea6e807db5787149e6c84c1e3f5cf5db11ff33e2092cee4f",
+      "source": "oecd-btige-key"
+    },
+    {
+      "name": "BPJresult_AGE_V01.csv",
+      "sha256": "c1fec8888ae8de1ead8f2fdf8b7f31c86ae9eb251887259128fe4cc95504841a",
+      "source": "wic-reconstruction"
+    },
+    {
+      "name": "BL_v3_MF1564.csv",
+      "sha256": "349374c63cb869455dd208a2dd6bc4f7119003a9fc19b06188f4c443abd80861",
+      "source": "barro-lee"
+    },
+    {
+      "name": "ilostat_EAP_2WAP_SEX_AGE_RT_A_2000.csv",
+      "sha256": "350493edbacc7dcab02bada7ec1ec51801ee6d8740844cc9c35389555c815a9a",
+      "source": "ilostat"
+    },
+    {
+      "name": "ilostat_UNE_2EAP_SEX_AGE_RT_A_2000.csv",
+      "sha256": "614ec8ec463b07354e41d38bee2606aca6553b39b5a1f85a97ab7a7bf084ae90",
+      "source": "ilostat"
+    },
+    {
+      "name": "ilostat_UNE_2EAP_SEX_AGE_RT_A_1995-2005.csv",
+      "sha256": "8731614cc0c0ab6b6e39fcb77077facf052abdd9c27530591a45a108da7777cc",
+      "source": "ilostat"
+    },
+    {
+      "name": "pwt110.xlsx",
+      "sha256": "7b337e94f39dfe304bc459e433f8ce0624496c812707ae0c924888f5142b3ab3",
+      "source": "pwt"
+    },
+    {
+      "name": "wdi_SI.POV.GINI.zip",
+      "sha256": "ee7af858347bc313934732f51830864df83bcd77def0be4a2556cff5447639de",
+      "source": "wdi"
+    },
+    {
+      "name": "wdi_SP.POP.TOTL.zip",
+      "sha256": "9c8a27460bb951b2b6e18fe9c01fac3938c78fd6b8862a84240d01f218b649b0",
+      "source": "wdi"
+    },
+    {
+      "name": "swiid9_92.zip",
+      "sha256": "d36c541307a4e3d16f79f878ae9c23f88effb6650ebc634be829870f383dbbf0",
+      "source": "swiid"
+    },
+    {
+      "name": "wdi_SP.POP.1564.TO.ZS.zip",
+      "sha256": "0488393fecd4589401b8017b8d34efa8e42fbaf4f9a24f1c41756d6cee1d1a39",
+      "source": "wdi"
+    },
+    {
+      "name": "ppp_2000_1km_Aggregated.tif",
+      "sha256": "3404d3fff958acf6bba98f88edbfdc0e9ff8062d85a5bc609da0e9c3b2bef148",
+      "source": "worldpop"
+    },
+    {
+      "name": "1995-2000_SML.zip",
+      "sha256": "3bfd5cb014bf3436e3435ad50c0e6b66039ad2f6c484e6e26fad0bc92ef4725b",
+      "source": "oecd-icio"
+    },
+    {
+      "name": "1995-2000_EXT.zip",
+      "sha256": "318875a509d208852e6adcc902bcfb8e6266cd318ea8201878a4766ce4eb0de7",
+      "source": "oecd-icio"
+    },
+    {
+      "name": "2001-2005_SML.zip",
+      "sha256": "75015a66e7944e7377a5a08a02155a472517efe4e4a36b1116c7542f759f78f6",
+      "source": "oecd-icio"
+    },
+    {
+      "name": "2001-2005_EXT.zip",
+      "sha256": "182d6d6dc723a73585b57beebe3b6565b061cd109e50b2df128a37a3817d4312",
+      "source": "oecd-icio"
+    },
+    {
+      "name": "2006-2010_SML.zip",
+      "sha256": "e57685c00ad30b4353e1e7de24910ba70b181c5198c9dbb6d46eb349de76f35a",
+      "source": "oecd-icio"
+    },
+    {
+      "name": "2006-2010_EXT.zip",
+      "sha256": "343eb3638a7d1eeb2c88d171bd7a33408b31a213ba5eb4c72987b05deaa59533",
+      "source": "oecd-icio"
+    },
+    {
+      "name": "2011-2015_SML.zip",
+      "sha256": "d9025195bdb9a03278ba6403066cef2969cc30185a1b28117c9452994a203619",
+      "source": "oecd-icio"
+    },
+    {
+      "name": "2011-2015_EXT.zip",
+      "sha256": "171c74914cdb1d6952492441f2a771a1a1a65cd3eba015dbf8522754b1e11b0a",
+      "source": "oecd-icio"
+    },
+    {
+      "name": "2016-2022_SML.zip",
+      "sha256": "46db55c45747e26dde5c1716d072b2aa74ace362a4424491ac646d2ab175befb",
+      "source": "oecd-icio"
+    },
+    {
+      "name": "2016-2022_EXT.zip",
+      "sha256": "80ea6fb868ccaafbdd0f430532e638f0971b3b6712a2fc7eb08d88fff6405c4e",
+      "source": "oecd-icio"
+    },
+    {
+      "name": "wdi_NV.AGR.TOTL.ZS.zip",
+      "sha256": "b74440759337932e724a3e623a94914c384c2a7c2408f41491e0b710f5185895",
+      "source": "wdi"
+    },
+    {
+      "name": "wdi_NV.IND.TOTL.ZS.zip",
+      "sha256": "dc9ee04da6fcdc3d22b125de391204e30ad369143eedf795b42a82966373d265",
+      "source": "wdi"
+    },
+    {
+      "name": "wdi_NV.IND.MANF.ZS.zip",
+      "sha256": "8cf1fcc0f5b7a0f5ebeaccc86ffbca6cc051197c4f4da3a3cdd574377354f3e2",
+      "source": "wdi"
+    },
+    {
+      "name": "wdi_NV.SRV.TOTL.ZS.zip",
+      "sha256": "796663c59cdd989af2772da9c81669885e6683400af2ab45b599f5dacef52234",
+      "source": "wdi"
+    },
+    {
+      "name": "wdi_NY.GDP.MKTP.CD.zip",
+      "sha256": "ec349303c263d3b36924e83a9780e5002ce7a1809ecaf29e7829db946ec01d81",
+      "source": "wdi"
+    },
+    {
+      "name": "wdi_NY.GDP.PETR.RT.ZS.zip",
+      "sha256": "f28ef1dac1fb4651a8df845097cb527dab18433c79eba6571abada54d36a1f63",
+      "source": "wdi"
+    },
+    {
+      "name": "wdi_NY.GDP.NGAS.RT.ZS.zip",
+      "sha256": "e77b29f91026cee0df109141c15be90a6e268915f64255f5551293772cea1f60",
+      "source": "wdi"
+    },
+    {
+      "name": "adb_kidb_NY_GDP_PCAP_CD_COO.csv",
+      "sha256": "fff1e442fba05e11ffb46dcfc75a9ee4a4d678623cf61ea81cd18cefdf9b9325",
+      "source": "adb-kidb"
+    },
+    {
+      "name": "mpd2023_web.xlsx",
+      "sha256": "ecc5916ca12789b983fc4be437f8a354bbf4291323605324ac3e0aea4c57cbb6",
+      "source": "maddison-2023"
+    },
+    {
+      "name": "spam2000v3.0.7_global_physical-area.geotiff.zip",
+      "sha256": "4ddfc353bc4c87ac7e7cb2eb35101c48d4d5da2efbc3d6942e543e910986fb86",
+      "source": "mapspam-2000"
+    },
+    {
+      "name": "DOSE_V2.14.csv",
+      "sha256": "28c4501aa87314cce4dbb2054f64eb82276caf01f4674ee22e02864a177c900c",
+      "source": "dose"
+    },
+    {
+      "name": "Complete_SEDS.csv",
+      "sha256": "f541facb1d1ab1cdb1ca564700c1a27fa09e0a153f5be16341582198d143e654",
+      "source": "eia"
+    },
+    {
+      "name": "GDP_PPP_1990_2015_5arcmin_v2.nc",
+      "sha256": "975ddfad5d2ee71aa227c269b530a4917f8305299b77d09ee0f9cfabc83e5e5b",
+      "source": "kummu-gdp"
+    },
+    {
+      "name": "kummu_gdp_ppp_2000_5arcmin.tif",
+      "sha256": "7fa7b4be4fe7d12ecfb5000bc52728712f560f7ccc8f8d1173471294f4ad0210",
+      "source": "kummu-gdp"
+    },
+    {
+      "name": "Global Coal Mine Tracker, August 2026.xlsx",
+      "sha256": "9aa804479c4b76456678fa02f1b5b9af826e12fa57d98cbcade35f4ee0417d43",
+      "source": "gem-trackers"
+    },
+    {
+      "name": "Global-Oil-and-Gas-Extraction-Tracker-March-2026.xlsx",
+      "sha256": "10ed7bc007e47895c2f387449365c20d0a87679cb8c69be678d0cc60df4d1aa5",
+      "source": "gem-trackers"
+    },
+    {
+      "name": "wdi_TM.TAX.TCOM.WM.AR.ZS.zip",
+      "sha256": "a79f2589136cec8136f9b2e9af57d875264d551a04285ddaa46aa07448c2ef73",
+      "source": "wdi"
+    },
+    {
+      "name": "wdi_TM.TAX.MANF.WM.AR.ZS.zip",
+      "sha256": "0e1cdd868fd2cd152bee4aa941118b42d2bcf9c3a1613ff5185fab959744a8ca",
+      "source": "wdi"
+    },
+    {
+      "name": "Gravity_csv_V202211.zip",
+      "sha256": "7ffea0510a536587f2f9295bbafef4a312a36b366acc256eb6d9770fe35e44b1",
+      "source": "cepii-gravity"
+    },
+    {
+      "name": "DTA 1.0 - Horizontal Content (v2).xlsx",
+      "sha256": "7c7a5b1e47233749290ffb54ce8546ef7d23094cf05b2f59291566b8bd4b7ede",
+      "source": "wb-dta"
+    },
+    {
+      "name": "geoboundaries/AFG-ADM2.geojson",
+      "sha256": "ded11c6a9b558170e7d52a23309106254608f269258e2ccf1ad464c9603fa169",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/AGO-ADM2.geojson",
+      "sha256": "a48f3a218e3684bb1a465fe1e1bba742a33c79eb17fd550040cf6fe98a085177",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ALB-ADM2.geojson",
+      "sha256": "a9645171af6a28338f6fb82e4ef0ad67debc42c7b483ce8d8a7aeb41e5a22604",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ARG-ADM2.geojson",
+      "sha256": "cedee8710e49d9017327fc1d4b2dc536e95a82317dc94c3bac8d9404af6bf771",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ARM-ADM2.geojson",
+      "sha256": "00a9e367b4a97a39786aa26965e0056e9ac7a829b1c517995c7fc9dc79af4dc8",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ASM-ADM3.geojson",
+      "sha256": "2cf8e6693bd94464edd3001f8aa0a6ec4fbfb12879b96a336030a58108827a1d",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/AUS-ADM2.geojson",
+      "sha256": "69115100f6d6fa953651988ecb091b1c3a687a4a8a95782bfafaa950af66b3e4",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/AUT-ADM2.geojson",
+      "sha256": "d233a5447dfbe517844536aec583cc7054475ce9e6a34013ab0d4e6e8b63bb18",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BDI-ADM2.geojson",
+      "sha256": "b90f58bf70724da30e8fd2fc5e89ea68ce2139e88dade8722fd85d20f92b15c2",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BEL-ADM3.geojson",
+      "sha256": "7413a21f138cda534c61d8ef72fa54516d0759e504190726706772513df61ad1",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BEN-ADM2.geojson",
+      "sha256": "6a72cc64ed016badd2b80b8474b8c05a7da1132558973a4a93b460d446dff171",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BFA-ADM3.geojson",
+      "sha256": "e6f8af518e7dffd7d2e7bb95fbba41f0ed3287ebb04b8f55762d2737c563d6c9",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BGD-ADM2.geojson",
+      "sha256": "7dbdb186f3b8af10417147a99859196fcd89c619fb5c6ac3804251fb6b449b6a",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BGR-ADM2.geojson",
+      "sha256": "06274be24b1fc1fb29c61598018ab53aaa95223ab5cf3ca4bfc3860bdaf84fb9",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BIH-ADM3.geojson",
+      "sha256": "75d25d61ff6f3b5d5ba0ccfeb500653d2b83a83f34c806739e2b6ceb4a41a20f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BLR-ADM2.geojson",
+      "sha256": "8d88002a6b05014da9af4dc1f33f8cb928d961b23c1912654cc056cddca5841a",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BLZ-ADM2.geojson",
+      "sha256": "6472de63055c96e848f16903c240c098818f90f2a747a52bb21f28c87f55573f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BOL-ADM2.geojson",
+      "sha256": "66e35823e45822268d2ab47c2c8d14e5e33341ba76dbbda30f22344819fcd099",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BRA-ADM2.geojson",
+      "sha256": "96abf365ab2be5f620a1516bc555e6f7cfade6b43313c562ab1ab05d1039973f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BRN-ADM2.geojson",
+      "sha256": "ac47557d4e3efd3381121a6b2418676cf1b9eea99051ae46812454170944b787",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BTN-ADM2.geojson",
+      "sha256": "583d6e99461c75f057c6224902e3c61e2c33e7220ac26f93759d42e1e7bd1e93",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/BWA-ADM2.geojson",
+      "sha256": "8931d2e634f89c81146470b098918b90f2e58c89bb16914d81928e1a230286fb",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/CAF-ADM2.geojson",
+      "sha256": "891357fe42dcc29a7c2ef847bef6422eea857602c515e0141ab015a78b1899bc",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/CAN-ADM2.geojson",
+      "sha256": "8b92b84ac3dda411e821fe6268bb310ab1b3bff01ae6b8d44ceb270b27bc5c92",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/CHE-ADM2.geojson",
+      "sha256": "bb272c66b2ad16c5e9d8a82dd6dbb774027dbac5f05a3a48288783f49ab11dfc",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/CHL-ADM2.geojson",
+      "sha256": "9dc86c2b3eb09a33c3c62634b4900591e70a2dbe27ba3b263bf53503180b74c7",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/CHN-ADM2.geojson",
+      "sha256": "8c7dfa8e40842f9162453d9b0b614276a48bf635559ba371c7982cb288e7b303",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/CIV-ADM3.geojson",
+      "sha256": "af24871c7f73caceae0d291b4b0131e14a2800a35049a2d59671207cf7836159",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/CMR-ADM2.geojson",
+      "sha256": "ae9d695817788f7b1482a7ee62a4c82e17184a64a36013fd2c6f7abbdfd67fc9",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/COD-ADM2.geojson",
+      "sha256": "922427143fcff23010af3931fb3f5e4ffea8b05c5d2b797ca02fc04c6c8b1baa",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/COG-ADM2.geojson",
+      "sha256": "b44d1fdcc6f61f0d0b2a4b3402f49dfd317ea9cdddd0a854bd20cae0996291ae",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/COL-ADM2.geojson",
+      "sha256": "cfd3a0bc62f4ebb09aaccc6377a31af66ae7778ef72aa8fbe14c8baad8517566",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/COM-ADM2.geojson",
+      "sha256": "d4ad8339a4747b4cbcf9a2cab9e58da0a6749f9fb400700684266fdfb6e705d9",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/CRI-ADM2.geojson",
+      "sha256": "3aefbfb2c8b6c5bfe4e46449ee98a1b2248cccf12187e76215a76173a2d8f5e0",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/CUB-ADM2.geojson",
+      "sha256": "1673cb709da1d112b9e81f4a0c105ccfb6c9edcf3f72c392b28069b74d801d45",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/CZE-ADM2.geojson",
+      "sha256": "3f5c8670210bdddf2d91290cbcebe5c92bcb2d57c94dd75379596a9344d6114f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/DEU-ADM3.geojson",
+      "sha256": "a711f65d1eafa075e24c9efe0b37af042567bea00e7b2b6d9e49d63f0a421ade",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/DJI-ADM2.geojson",
+      "sha256": "e32ff52ad478a8713bb59417b10060499090aab1509aecdc458150b8a4d598b7",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/DNK-ADM2.geojson",
+      "sha256": "d67ed4e8b7f1bb613f93edd2bfc7c69e85169aab31e19596115cf648d9b31628",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/DOM-ADM2.geojson",
+      "sha256": "584bd762d9c57e3f90b180acaa1156e42b09a24ff78cb90935631aa200844553",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/DZA-ADM3.geojson",
+      "sha256": "55bf7b1305192a190ca71cdf53f4a49c6de20648ca5b77921713a284d6f0bc9b",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ECU-ADM2.geojson",
+      "sha256": "cb4dd3a2203d72322298f294056b2fbc4bf12537330ee2fba11c22293b8a1cc7",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/EGY-ADM2.geojson",
+      "sha256": "abd2e419ce95e1cdd46bb18025a4eccfa6f877956494a56da3ebed4bc6a153d9",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ERI-ADM2.geojson",
+      "sha256": "a978e92ec9c1442b82b436cb39101387afc84ca9e4ddcec2ec08e4a9bf14e88f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/EST-ADM2.geojson",
+      "sha256": "2e69faa7fd86ebf7e6299e6cb5cf613979406d8310a5a98ce6cd485824bc72bd",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ETH-ADM2.geojson",
+      "sha256": "ff3ba99f2f83e6e9891f5694720b4d12f8b051e27e977d553f18408b596c72ef",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/FIN-ADM2.geojson",
+      "sha256": "3acac2bca764d0ef9c8f5b0caf05c2ce021ba427b68333e258bd951e6c5f99d7",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/FJI-ADM2.geojson",
+      "sha256": "0339f90794264719b98c93a9a7c2d71fdb473c0a2f9c1e9b74ecd98a67ddb93f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/FRA-ADM3.geojson",
+      "sha256": "318606bceafa5fea93412c66438f333e35bad41079dc756270e961a213a4d6a0",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/FSM-ADM2.geojson",
+      "sha256": "76df02ae5033408e0289cb39736fd9729a2dd24a46492e540b691fdf30a9f2eb",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/GAB-ADM2.geojson",
+      "sha256": "973f483e7441c09b4f4fe531b61c3d6a17fd8c815f9807c094ae94d9253c6262",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/GEO-ADM2.geojson",
+      "sha256": "15c6b10e5418bcb5bab0a812bf69e9961b7b2e4c5c8f0f5a224709438af3ded9",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/GHA-ADM2.geojson",
+      "sha256": "ae10ae6edbf0a04e5cbedde2d6cb9c30e7867969c530264772d1e76990142f02",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/GIN-ADM3.geojson",
+      "sha256": "fc27f2c48b4d1801d68b85498962b014bb3dc87e251300f40bac5c3a0b6ac95a",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/GMB-ADM2.geojson",
+      "sha256": "5d6cb6b88e96c3e7d3d6d9a6ecacc5fdb83ec69124d057888a1aa53bbbb19a2f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/GNB-ADM2.geojson",
+      "sha256": "8e7d33531e3febc81420d07ceddb1a89c4393139534c6633bcc9330c4a9be5f9",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/GNQ-ADM2.geojson",
+      "sha256": "9fd552624a47dbc46224c65f509cdba458081782b5077f217d1b71b083bb025a",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/GRC-ADM3.geojson",
+      "sha256": "72179d50a8a85aa9fecf996761f905db9e8a59f4eb882f8481f88651692b7e18",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/GTM-ADM2.geojson",
+      "sha256": "04ec4cacdc6c1aa01b4e67ccea28fe4b8f9fa758047a6c7d666668171e95eb94",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/GUM-ADM2.geojson",
+      "sha256": "cda4a989f68bbf9b34e5cf5916226bdc9de1e9fe9012e9ab62c6cb6a3fa52805",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/GUY-ADM2.geojson",
+      "sha256": "990d8b3daf688ebe7970af75339ca80ac901788ed42b0a189f2c48e6bcd5b661",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/HND-ADM2.geojson",
+      "sha256": "97ce3b0fdc6fe8a9b206dcedfd61ed209dc5e69c5e55834ee38a4d09d55a81e5",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/HRV-ADM2.geojson",
+      "sha256": "bfcda6087b26678f026c2a1ac5c4fe903bd67ad24a7c9761519f7929b3915d16",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/HTI-ADM2.geojson",
+      "sha256": "5f4d51a9df2a2372a4b2e56aaee14fa7495ca94eb6c56efdcfe214be9c000564",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/HUN-ADM2.geojson",
+      "sha256": "88a9601bd634471c8a748dc23d8bbd5aa5cad58c0f0de1494df63c0bde8ef286",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/IDN-ADM2.geojson",
+      "sha256": "146653d488331086ddc43d159a261b01ea6dd08c7ed422e34a9886c3c690430c",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/IND-ADM2.geojson",
+      "sha256": "d68db39cd3e2d0892af268e2b0454166368ce3b5b8a78fcda63069ec92a641db",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/IRL-ADM2.geojson",
+      "sha256": "62c859cd16f0567a8b43e1dbe704cbc9af086d6ad035258e38d4c21faacec6ba",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/IRN-ADM2.geojson",
+      "sha256": "16502da0eabcbaa3ffbe24a99db12c18ca8a1f5d4980749911aa5e298e6ae17c",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/IRQ-ADM2.geojson",
+      "sha256": "ed266313714d84fcfffd2495d2c8150e93302e5193c8d294bbacc760b34cc7d1",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ISL-ADM2.geojson",
+      "sha256": "c5f945365d1704d9d9fe75e7cecda83143f133f6499344c349bedd4d696324f0",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ISR-ADM2.geojson",
+      "sha256": "7ac8dbeab70a711f9c05e38c4c200457775eccbc9e67ce70a47cabd11d3c2cf8",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/JAM-ADM2.geojson",
+      "sha256": "275ce40500cd2b6e8f64fa771458136958636ccfb5515c1ab5496a9795e3deab",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/JOR-ADM2.geojson",
+      "sha256": "a68a61fe1ee44e85560946b961fe4ea4867983e94d98eb85043ef43103cba571",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/JPN-ADM2.geojson",
+      "sha256": "c1c3f4d70bf7d02ef3fd2f98410597ac714c521280520fc7e85073fdee75af46",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/KAZ-ADM2.geojson",
+      "sha256": "68868f08e28fa4b8510fa28db21b8432ad9c1539625b92842158a168edfd2efd",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/KEN-ADM2.geojson",
+      "sha256": "1330f031cf0fd00c7a0ef29ab09d0544da12482094a85d60165a1534e45d84ad",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/KGZ-ADM2.geojson",
+      "sha256": "d59b89a8b6814ee4a5b52300aff23cf9cf5e3c652f9cf55898b3cf9e7902bb97",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/KHM-ADM2.geojson",
+      "sha256": "9ab44792fb4a0353f0661794b5bf2111afa1ae2ca36117b61982bbdee8474bba",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/KIR-ADM2.geojson",
+      "sha256": "d52bb5b73a9c090459f383618c8be5848d5f7d058c868e934417734030bacc4e",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/KOR-ADM2.geojson",
+      "sha256": "06d1b604a843b5cc8b7adb6483ca0e2fbf4fe5cbbd8d3633ebe0c6e1df01119f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/KWT-ADM2.geojson",
+      "sha256": "f5f7ce241c068e364de0728405bbb8dbc39597128cf2e27df45aeb8c4f599c83",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/LAO-ADM2.geojson",
+      "sha256": "a433001f30fd6caa368c3ca44ecc5b739250350601bb4159be6968dcc947e25e",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/LBN-ADM2.geojson",
+      "sha256": "5a3382f024aea0e5a204893dcf0738e18166ee6e4282518d30250d013b744042",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/LBR-ADM2.geojson",
+      "sha256": "9708518c0e606d1d662e29493f3c85fe9053149c0f9d81cf11e81df0a7992d8b",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/LCA-ADM2.geojson",
+      "sha256": "cdf45bfe1b17244683a5cb36bcbc8cb4cbc3271218a916490a161ee2bb0aa881",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/LKA-ADM3.geojson",
+      "sha256": "8b7ada3e7df25c43a422e40f9005b8e1ec378dbe87599c192dc663de4f409e9d",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/LSO-ADM2.geojson",
+      "sha256": "f960c1cbbe57b95dfb92595d989ccae36781393f67ad42b46aa0fa76d206a37c",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/LTU-ADM2.geojson",
+      "sha256": "65a2c1aa9531a6a09af906d87ddc812a290ccc0ef32ac81df4a783f5ffa04e6f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/LUX-ADM2.geojson",
+      "sha256": "20b6668a58fc76e5f55a0223c04db180bc1b221fe6f4cc1c1e623308741f80d7",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/LVA-ADM2.geojson",
+      "sha256": "944c3d425fff55748cc29717a6d4169476e7bc59239a4b178ebb6129e42120db",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/MAR-ADM2.geojson",
+      "sha256": "0486dad7e941c1f9ec494a1106a7789737ff4224b878fc2081a1e30b88164dff",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/MCO-ADM2.geojson",
+      "sha256": "510ebba1679281b3e09a5a7dfcdb60ff03c067bf144533b627917271ceda44c9",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/MDG-ADM2.geojson",
+      "sha256": "0d8c2c12364a75c4d374540e35f1a9e5c52ff9c26ba198c5742d2ecd70f0bde8",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/MEX-ADM2.geojson",
+      "sha256": "3cb8aca7c2759120817ce7e51407f6aa7f9ee693bc7173c55c9f578c060ca3cd",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/MLI-ADM2.geojson",
+      "sha256": "aeaa50219bbd1e383c959c1f191e50c58f0831b5e7404bd97e6d91c7f1764e57",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/MMR-ADM2.geojson",
+      "sha256": "ac13eddca60dd54830e4951c3646d3898d8ec7ab086660dfb12d8f89579abf29",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/MNG-ADM2.geojson",
+      "sha256": "c1b915d68f353cd8844cb8d70120cc97d76f1620200506b6b6fe7b892bf04e47",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/MOZ-ADM2.geojson",
+      "sha256": "c50d41139d653bb03889cdf383d72a3cf851b5b576f406dfb0bc3a1b70de2bb9",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/MRT-ADM2.geojson",
+      "sha256": "1902199c8a95554f6fc671b72445584e6b511a79223e0cd30399de2da6fb69da",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/MWI-ADM3.geojson",
+      "sha256": "337e5e2a33f90ceffc04700d13d7576a495932b12e959dd9d254b45242cb7738",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/MYS-ADM2.geojson",
+      "sha256": "2370e1df1da8e8db2d582ea404d2bcb538127a01785dd994cbe4c1bbf33a951f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/NAM-ADM2.geojson",
+      "sha256": "203efe728da20c121ccff44ebd1c7862a8da9ed703d6bc7187bdc65ff1d88eb8",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/NER-ADM2.geojson",
+      "sha256": "dc7fe5ac7d6725cd6729f5b78e0f77b4726db1a11f87f7d6af0977361741d397",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/NGA-ADM2.geojson",
+      "sha256": "daac9ba2c98f0d8984085c8a5b3a5301fca362f3ca37e6ac7dfcc7633719fc1d",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/NIC-ADM2.geojson",
+      "sha256": "2a77bdfd3fc8917d0fb38128ea64413cb920f3a6b8cf09f9366182336120058d",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/NLD-ADM2.geojson",
+      "sha256": "a973d6452362a29a8b8d364df0a377362e0cf68ce8f7da0298008c77c1c678c7",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/NOR-ADM2.geojson",
+      "sha256": "ab294b0b1dadfb937daa07963aa5995544fd8a16a6c9eb6261a82bb66401d90e",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/NPL-ADM2.geojson",
+      "sha256": "38e74f43a01a713f315cdcee131411c5934742376d4a4658290b8b8dce46f4b1",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/NZL-ADM2.geojson",
+      "sha256": "137f95bb411c47b9d77ef37ddfc1b032acfd8a621ee00ff673ffe164bb1a216a",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/OMN-ADM2.geojson",
+      "sha256": "8c1dfe827be1374b98aaf25207677284f93ef4d7c59ced70f1d3a0968435ed75",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/PAK-ADM2.geojson",
+      "sha256": "f274cfc377b3b570b6fd620c2911b5e4acd14460f9cb48551747f1d698566f2e",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/PAN-ADM2.geojson",
+      "sha256": "8c9420a50c50be54630029bbcd60c725d621db6e88f63a2ae6f9847596e0adec",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/PER-ADM2.geojson",
+      "sha256": "4986d514b9898f7c415febd47d2ae302f79f5a0d23434cc81fb2bdbfaec623a3",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/PHL-ADM3.geojson",
+      "sha256": "2ece3d44a5c6a2afb385ffbf3a6b88d83e4d3a3e7eed9a52cb3be1bc59e289fc",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/PLW-ADM2.geojson",
+      "sha256": "3e9adfbf40632ac8b4ade25bdbda745a15804dffe5c83811787cad81b988d49f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/PNG-ADM2.geojson",
+      "sha256": "666e6aad9b69a34156fe9eb178e7541ca16d928856ff2e3d0da8792097f05282",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/POL-ADM2.geojson",
+      "sha256": "c19830763e611df9b4b56bab55c0c856a9a33dc7b80a6d28fe611f3462e1f3ce",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/PRI-ADM2.geojson",
+      "sha256": "85aea3a038dc35ac59523782041e0553d2a4d4b427f348189c5140f5d09361eb",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/PRK-ADM2.geojson",
+      "sha256": "b18ef28c60d6b7a388052a4469d93ceef8e7c50d7dd295e68101a635c19dd4a0",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/PRT-ADM2.geojson",
+      "sha256": "f7a9143190715b85812b03617adc4879898b8c6a6789b9c9732c9705ea6c21ac",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/PRY-ADM2.geojson",
+      "sha256": "11c700bb9176f8620b510bb20e7a0efcabc2bfaa61019e70b89dbe9f88983fb7",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/QAT-ADM2.geojson",
+      "sha256": "f966f77633bc12ce4e03776ea7f325c2e52286fe77f5a2b8205e8e5b8626205e",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ROU-ADM2.geojson",
+      "sha256": "401206108399ef39301b9fff1d5ab3ebd12aaeb072cf336d80197c9b26b538a2",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/RUS-ADM2.geojson",
+      "sha256": "81dabf7930ff5e306e2423b586bcec14163fbd10481db6e49aab47273953b128",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/RWA-ADM2.geojson",
+      "sha256": "56b0995c7a7735847659b766e00c5cfa29b1b3a197f231dc396f399948c46c09",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SAU-ADM2.geojson",
+      "sha256": "1a336a495dfcf3c369c5b5d05c205d7509610e0ab27ef1539140f8a8c763e335",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SDN-ADM2.geojson",
+      "sha256": "ed896036aa7296be35e8164e261966f03564ecc25fae83819faa082882416991",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SEN-ADM2.geojson",
+      "sha256": "cb9aa64a7c8d1302527dd97e85acccafefe28b63e2a3f550c2218ed9a22ba335",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SGP-ADM2.geojson",
+      "sha256": "bcf6d3c995a4142fabd8e024cef14c89f5e6b9232d7fea9dd86141b18f3bffa9",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SLB-ADM2.geojson",
+      "sha256": "e129bb4624e54b33e75f976cbb24f3deed5f83a1ace770c8f35703a76b0252fc",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SLE-ADM2.geojson",
+      "sha256": "79ab7eb1c08112c416074f8f3cc7fd641b3fd868525acddc4c74877014583aea",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SLV-ADM2.geojson",
+      "sha256": "785a265bb9c11e2b45064d4f285e57b639e8f4029f4bf868aa475c75f2150d58",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SOM-ADM2.geojson",
+      "sha256": "fda57ec0acae5d43ab60523ba65283ce0923dfc52dbe2aebb2e600afe8015009",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SRB-ADM2.geojson",
+      "sha256": "a6b70eb39c0efe525bab5ca28ac3173680718577bd59b166fcd244236e8c8565",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/STP-ADM2.geojson",
+      "sha256": "6e20c5918a92c491452a0b105ac66dde1af4af63e62fd5bcbdf73a3d64e70b6e",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SUR-ADM2.geojson",
+      "sha256": "8f592af504cb81ac0c0ec1c3b75a1bf4e3246e5702dce88416ede4770d45fb46",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SVK-ADM2.geojson",
+      "sha256": "10805ba684c4ac52d10c1cdc3670e9242dd8e9fb503515b67275d42d6aac080a",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SWE-ADM2.geojson",
+      "sha256": "da1070d503e08824b28f8dfac98df108f7ba07772da8c0d3a6f5016a5938801a",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SWZ-ADM2.geojson",
+      "sha256": "5d54a3629b8b766c061734f7fa3d04c84eab5946b62932e77d067d1b01e7749f",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/SYR-ADM2.geojson",
+      "sha256": "864ec968af360c252942d3052a544fb7ed5d88795d3075f6791bd94cff4c90a1",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/TCD-ADM2.geojson",
+      "sha256": "b8178a45b9a2060889181f75d2754395bba9d165ff06a9fac33c9f3ca45f7e99",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/TGO-ADM2.geojson",
+      "sha256": "f0b555060987b20814aaf807c156cecfbe91d822d62e1b1e2920930d910bc291",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/THA-ADM2.geojson",
+      "sha256": "faae0d9d6fe56b489a9cb3bd5b8fe100025aad99ec554bf7a9f49cbe2216bf10",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/TJK-ADM2.geojson",
+      "sha256": "deb8d8a6635585b6ad41fc5fe1c6351661cfcd23e8bede05c98709a916397cc8",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/TKM-ADM2.geojson",
+      "sha256": "af6d0ea1274198ae5579ef23c9da9c2a45bb1fcc4e77fa5532e18c47c778d27d",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/TLS-ADM2.geojson",
+      "sha256": "84106c050c23cb5cedee5f4bc4823c3d3bfcd2400754c67ba4244c6b4c347177",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/TON-ADM2.geojson",
+      "sha256": "482cd93243d709eaebcf86b75e7b1e1f481b85361d53fe0874ec969022ed572d",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/TUN-ADM2.geojson",
+      "sha256": "293bff8c7a2a7b4ad777515e71dc626251d34e804286d0d3c8f3cc60d63aecaa",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/TUR-ADM2.geojson",
+      "sha256": "17af9a6bff9bed53390e49cbbf66569e0d296f134cd4528e1dc3c0d204e358f3",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/TUV-ADM2.geojson",
+      "sha256": "685bdd6d4d54346d62863d159fe726c68fd94c007e76946f001a2ad6494e8622",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/TWN-ADM2.geojson",
+      "sha256": "471e4f933fceb1d0fca0121e5f37709972c08eea0df4d1d2a172e998f2aec958",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/TZA-ADM2.geojson",
+      "sha256": "ab80d1831c5c45f08d401514c057dcef05abad790225fa2208805fd0b93dc993",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/UKR-ADM2.geojson",
+      "sha256": "c102ab08775ce4dc25a64e133bb7726a1b50715d31140e9846eaad26602631cb",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/URY-ADM2.geojson",
+      "sha256": "6cfdb1d40b8090891ec7b77805d6e52f1980fa8fd1e4a500e9f229f7f683873a",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/USA-ADM2.geojson",
+      "sha256": "16249e8d795aaded6a72910a8c72115a073814b25ee902d61ccc9a9490c6641a",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/UZB-ADM2.geojson",
+      "sha256": "c8ced4bb1497234c7659e9dab605bda642a61474bedf90569e4ac68d4e2eb190",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/VEN-ADM2.geojson",
+      "sha256": "90220a05cb77775a848c48618b753fd1efef5e673068cb731d7b701077844938",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/VIR-ADM3.geojson",
+      "sha256": "669e884497829ecdf6eab0e360719e2a0add78a69787cfd29ba1678e647f77d7",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/VNM-ADM2.geojson",
+      "sha256": "2dff75b58e71f736ca9fd6ef7c859be40c6f9a9b7ae5cd0806b36fe8cfa4c4f6",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/VUT-ADM2.geojson",
+      "sha256": "c77299735bff9ad2eb56a5912b1f2346bba94edbad785f16109633f27ad32f6a",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/WSM-ADM2.geojson",
+      "sha256": "61a9bd0214a962c457907e09ff3a37c3f41c7e86df2130ef768d06cf0a66965c",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/YEM-ADM2.geojson",
+      "sha256": "4d025b2a5e09dc826694766bce78d875bfacd94c107dab2bbdc8080d48000a22",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ZAF-ADM2.geojson",
+      "sha256": "bb4800b804811ce9cfa5f6bf535466e3f812751249f0e1b7375d5f5753570e7c",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ZMB-ADM2.geojson",
+      "sha256": "58e9df3f95bb4c7539e5fb48839b246b2bfb12694cf5db3ed595240156016c60",
+      "source": "geoboundaries"
+    },
+    {
+      "name": "geoboundaries/ZWE-ADM2.geojson",
+      "sha256": "3486ef2803574e63db97e2a35b6688bb327cb8d6ff5e439691c1cc3068ddb424",
+      "source": "geoboundaries"
+    }
+  ],
+  "subset": {
+    "config_sha256": "e0cebebf8f46677d445a96cd912b315736c3ddd7eab34a98e5ab81e7e5e66c63",
+    "countries": [
+      "AUT",
+      "BEL",
+      "BGR",
+      "CHN",
+      "CYP",
+      "CZE",
+      "DEU",
+      "DNK",
+      "ESP",
+      "EST",
+      "FIN",
+      "FRA",
+      "GBR",
+      "GRC",
+      "HRV",
+      "HUN",
+      "IRL",
+      "ITA",
+      "JPN",
+      "LTU",
+      "LUX",
+      "LVA",
+      "MLT",
+      "NLD",
+      "POL",
+      "PRT",
+      "ROU",
+      "SVK",
+      "SVN",
+      "SWE",
+      "USA"
+    ],
+    "row": "ROW",
+    "source_manifest_sha256": "a84f502aec433d8180dc5b4a217e1a1410f2a4683455b717ee28aa5dfbbd8cd7"
+  },
+  "tables": {
+    "cells.arrow": "e8868f5a531311c8465ff43fd7d5c55b28d64a997bdae1ff19071e23772a2804",
+    "chokepoints.arrow": "283bd43678fc7a10d092b5fe1fbccfd5b68f85dd40bd619430f7723ad1769159",
+    "counties.arrow": "7670ba43cd2aa076c85eeac16f80b4c9260b7df55511c6cff9cd33cdf24789dd",
+    "countries.arrow": "a62661d3371971b0084e4eab5847f9a863e19a1d02ae22b3c5da0aa926b8ba05",
+    "econ_countries.arrow": "9923f2d64140b5896ef8949b85ecd7d8139d15b116f4ec4bd5ad3548ed94f830",
+    "econ_goods.arrow": "1e246063462d0814d8146ef2a2896e575d7e07a7b98d8d907c4d1c663526f701",
+    "econ_home_shares.arrow": "41bd141c44b23fb49d224c45b7e80615d2d9dd4e85f8c78844c623c758931a3f",
+    "econ_io.arrow": "308df1a999aad9d86371a2ef9d6a651803ee0ec6c4b5c6529001e5b2a54778fe",
+    "econ_pops.arrow": "09ff390a0fe63037f0ac8f084ed64936901b12e3921534b0e87e3938f5ee85d0",
+    "econ_provinces.arrow": "9c1f2d95f6990570f52f5367425f50dda874e9999412d2d7deb62d1b4a0f4a72",
+    "econ_tariffs.arrow": "13a5de54e30013e9dcc80c09ce6e8d0f3dddcf43438125f36b5469a2241843d7",
+    "edges.arrow": "35b6e2598c46e04ef531dbb2efdbfd29b605931aa612e800a534121f59b6c81a",
+    "gateways.arrow": "c00a1e799fca0483f4ba8806d9aaa94253f4a90f7fcbde0df9be3a5c2f132a4c",
+    "nodes.arrow": "f0b819837e44a6888304898aee6c0fc9ff0e0179294d439e2740094582bc6244",
+    "provinces.arrow": "a805520a08f82cdc74dc087d4e28cd24c850e6f8a73e0302f7adc2909312d208",
+    "row_members.arrow": "a21f691ec550b3bf7c484cfda93a53e68e1b8a41d26e803ce28992d8212be5b7",
+    "sea_zones.arrow": "788d428442ed3e4a7c19d123c19f7e681981ee2b5226c4d338f8785a7ed71122"
+  },
+  "year": 2000
+}
