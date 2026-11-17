@@ -1438,6 +1438,7 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
     };
     let mut y_local = setup.local_start()?;
     let mut ras_start: Option<Vec<f64>> = None;
+    let mut history: Vec<(usize, [f64; 3])> = Vec::new();
     for _ in 0..limits.max_passes {
         let v = setup.settle(&rebate, &q, &weights, &y_local, limits.max_local)?;
         y_local = (0..v.len())
@@ -1475,18 +1476,29 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
             ras_start = Some(ras.b);
             w
         };
-        let change = py_max([
+        let parts = [
             relative(&rebate_new, &rebate),
             relative(&weights_new.scale, &weights.scale),
             relative(&weights_new.omega.data, &weights.omega.data),
-        ]);
+        ];
+        let change = py_max(parts);
         if change <= PASS_TOL {
             return Ok((spend, sales));
         }
+        history.push((scaling.sweeps, parts));
         (rebate, weights) = (rebate_new, weights_new);
     }
+    // the last passes' sweeps and change of rebates, weights' scale and omega: shrinking or cycling
+    let tail = history
+        .iter()
+        .rev()
+        .take(6)
+        .rev()
+        .map(|(sw, c)| format!("{sw} sweeps [{}, {}, {}]", sci(c[0]), sci(c[1]), sci(c[2])))
+        .collect::<Vec<_>>()
+        .join("; ");
     Err(format!(
-        "the data state's rebates and weights did not settle in {} passes",
+        "the data state's rebates and weights did not settle in {} passes; last passes: {tail}",
         limits.max_passes
     )
     .into())
