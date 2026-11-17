@@ -1439,6 +1439,19 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
     let mut y_local = setup.local_start()?;
     let mut ras_start: Option<Vec<f64>> = None;
     let mut history: Vec<(usize, [f64; 3])> = Vec::new();
+    // Anderson mixing of the passes' fixed point, as the calibration has it: plain passes contract
+    // a few percent each on the pack (RFC 0355 D4). Prices are fixed, so q drops out of the mix.
+    let mut state = State {
+        n_p,
+        n_c,
+        traded: traded.clone(),
+        sigma: inp.within_sigma(),
+        rebate_unit: 0.0,
+        scale_unit: block_unit(&weights.scale),
+        level: q.clone(),
+        split: weights.gov.rows > 0,
+    };
+    let (mut zs, mut fs): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (Vec::new(), Vec::new());
     for _ in 0..limits.max_passes {
         let v = setup.settle(&rebate, &q, &weights, &y_local, limits.max_local)?;
         y_local = (0..v.len())
@@ -1486,7 +1499,30 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
             return Ok((spend, sales));
         }
         history.push((scaling.sweeps, parts));
-        (rebate, weights) = (rebate_new, weights_new);
+        if state.rebate_unit == 0.0 {
+            state.rebate_unit = block_unit(&rebate_new);
+        }
+        let z = state.pack(&q, &rebate, &weights);
+        let fz: Vec<f64> = state
+            .pack(&q, &rebate_new, &weights_new)
+            .iter()
+            .zip(&z)
+            .map(|(f, z)| f - z)
+            .collect();
+        if zs.len() > ANDERSON_MEMORY {
+            zs.remove(0);
+            fs.remove(0);
+        }
+        zs.push(z);
+        fs.push(fz.clone());
+        if fs.len() > 1 {
+            let (dz, df) = (diffs(&zs), diffs(&fs));
+            let gamma = lstsq(&df, &fz)?;
+            let f = state.pack(&q, &rebate_new, &weights_new);
+            (_, rebate, weights) = state.unpack(&mix(&f, &dz, &df, &gamma));
+        } else {
+            (rebate, weights) = (rebate_new, weights_new);
+        }
     }
     // the last passes' sweeps and change of rebates, weights' scale and omega: shrinking or cycling
     let tail = history

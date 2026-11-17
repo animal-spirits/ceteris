@@ -501,6 +501,19 @@ fn a_plateaued_scaling_stops_where_the_strict_rule_runs_out() {
     assert!(at.residual > 0.0 && at.sweeps <= 8, "{at:?}");
 }
 
+/// The data state's passes are Anderson-mixed (RFC 0355 D4): the fixture settles within a pass
+/// budget the plain iteration overruns (the pack's contracts a few percent a pass).
+#[test]
+fn the_data_states_passes_settle_within_a_small_budget() {
+    // plain passes need 17 on the fixture, Anderson mixing 11
+    let w = &worlds()[0];
+    let limits = Limits {
+        max_passes: 12,
+        ..Limits::default()
+    };
+    steady::data_state_spending(&w.inp, limits).unwrap();
+}
+
 /// Stage 2: from two starts the scaling reaches the same weights up to one scale per good.
 ///
 /// The bound on the spread is derived from the stop rule. Let g(ln w) = ln received - ln target

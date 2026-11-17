@@ -78,6 +78,9 @@ and the scaling runs its 100,000-sweep cap and errors (Mac, 1893 s, 2026-11-17).
   `PLATEAU_TOL` 1e-11 and its smallest value in a window of `PLATEAU_SWEEPS` 5,000 sweeps is not
   under half the previous window's (the slow mode contracts 0.01 a window); the residual is returned, not hidden. The calibration proper keeps the strict rule.
   Recommended: it fixes the cause for every theta, and a share to 1e-9 needs no more than 1e-11.
+- A (also, 2026-11-17, Antonio's card): the data state's rebate and weights passes contracted about
+  3% a pass on the pack (300-pass cap overrun, Mac log), so they are Anderson-mixed as the
+  calibration's are (fixture 17 passes to 11; same fixed point to 5e-14).
 - B. Narrow the theta band to where calibrate settles: no tolerance change, but theta 9.27 sits
   next to the unstable range.
 - C. Stop and treat it as a structure issue.
