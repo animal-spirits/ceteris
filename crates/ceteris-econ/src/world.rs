@@ -4115,6 +4115,86 @@ mod tests {
         assert_eq!(on.state_hash(), off.state_hash());
     }
 
+    /// Every switched-on module forks and threads like the status quo (ADR 0097): a seek back
+    /// to tick 14 restores the tick-12 snapshot and replays to the hashes of the continuous run
+    /// at every tick, and 1 and 4 threads give the same hashes.
+    #[test]
+    fn switched_on_modules_replay_from_a_snapshot_at_any_thread_count() {
+        use crate::energy_policy::{EnergyPolicy, EnergyWedges};
+        let base = world();
+        let (nc, n_ent) = (base.inputs().n_countries(), base.inputs().n_enterprises());
+        let capital = crate::investment::Capital::new(
+            vec![crate::investment::Pipeline::new(2, 4.0, 0.01, 1, 0.0, 0); n_ent],
+            vec![3.0; n_ent],
+        );
+        let energy = EnergyPolicy {
+            goods: [1, 2, 7],
+            countries: vec![EnergyWedges { wedge: [3, -2, 1] }; nc],
+        };
+        let cells = crate::state_cells::StateCells {
+            share: vec![0.4; n_ent],
+        };
+        let monetary = monetary_sim().world().clone();
+        let worlds: Vec<(&str, EconWorld)> = vec![
+            ("population", population_sim().world().clone()),
+            ("disease", disease_sim(0.002).world().clone()),
+            ("migration", migration_sim(50).world().clone()),
+            ("settlement", settlement_sim().world().clone()),
+            ("wage grid", wage_grid_sim(true).world().clone()),
+            ("hazards", hazard_sim(1.0).world().clone()),
+            ("fiscal", monetary.clone().with_fiscal(government(nc))),
+            ("energy", base.clone().with_energy_policy(energy.clone())),
+            ("state cells", base.clone().with_state_cells(cells.clone())),
+            ("capital", base.clone().with_capital(capital.clone())),
+            (
+                "all",
+                migration_sim(50)
+                    .world()
+                    .clone()
+                    .with_monetary(monetary.monetary.clone().unwrap())
+                    .with_fiscal(government(nc))
+                    .with_energy_policy(energy)
+                    .with_state_cells(cells)
+                    .with_capital(capital),
+            ),
+        ];
+        let hashes = |w: &EconWorld, threads: usize, from: Option<u32>| {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            pool.install(|| {
+                let mut sim = Sim::new(w.clone(), crate::systems::schedule(), crate::systems::SEED);
+                let record = |sim: &mut Sim<EconWorld>| {
+                    let mut out = Vec::new();
+                    while sim.tick() < 40 {
+                        sim.step().unwrap_or_else(|v| panic!("{v}"));
+                        out.push((sim.tick(), sim.state_hash()));
+                    }
+                    out
+                };
+                let continuous = record(&mut sim);
+                match from {
+                    Some(t) => {
+                        sim.seek(t).unwrap();
+                        record(&mut sim)
+                    }
+                    None => continuous,
+                }
+            })
+        };
+        for (name, w) in &worlds {
+            let continuous = hashes(w, 4, None);
+            assert_eq!(hashes(w, 1, None), continuous, "{name}: 1 thread");
+            let replayed = hashes(w, 4, Some(14));
+            assert_eq!(
+                replayed[..],
+                continuous[14..],
+                "{name}: replay from tick 14"
+            );
+        }
+    }
+
     #[test]
     fn encode_restore_round_trip() {
         let mut w = world();
