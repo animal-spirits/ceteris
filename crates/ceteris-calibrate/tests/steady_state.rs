@@ -496,9 +496,11 @@ fn a_plateaued_scaling_stops_where_the_strict_rule_runs_out() {
             &v,
             Some(&start),
             4,
-            steady::SINKHORN_TOL,
+            steady::Stop {
+                tol: steady::SINKHORN_TOL,
+                plateau,
+            },
             steady::Accel::Joint,
-            plateau,
         )
     };
     assert!(run(None).is_err());

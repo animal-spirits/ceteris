@@ -450,16 +450,11 @@ pub fn sinkhorn_plateau(
     start: Option<&Mat>,
     max_sweeps: usize,
 ) -> Result<Scaling, CalibrationError> {
-    sinkhorn_with(
-        m,
-        spend,
-        supply,
-        start,
-        max_sweeps,
-        SINKHORN_TOL,
-        Accel::Joint,
-        Some((PLATEAU_TOL, PLATEAU_SWEEPS)),
-    )
+    let stop = Stop {
+        tol: SINKHORN_TOL,
+        plateau: Some((PLATEAU_TOL, PLATEAU_SWEEPS)),
+    };
+    sinkhorn_with(m, spend, supply, start, max_sweeps, stop, Accel::Joint)
 }
 
 /// [`sinkhorn_limited`] stopping at `tol` (at least [`SINKHORN_TOL`]).
@@ -471,7 +466,17 @@ pub fn sinkhorn_to(
     max_sweeps: usize,
     tol: f64,
 ) -> Result<Scaling, CalibrationError> {
-    sinkhorn_with(m, spend, supply, start, max_sweeps, tol, Accel::Joint, None)
+    let stop = Stop { tol, plateau: None };
+    sinkhorn_with(m, spend, supply, start, max_sweeps, stop, Accel::Joint)
+}
+
+/// When a scaling stops: its residual within `tol`, or, for a fit, on a plateau (see
+/// [`PLATEAU_TOL`]): `(bound, sweeps)` of a residual within `bound` whose smallest value has not
+/// fallen by 1% in that many sweeps.
+#[derive(Clone, Copy, Debug)]
+pub struct Stop {
+    pub tol: f64,
+    pub plateau: Option<(f64, usize)>,
 }
 
 /// [`sinkhorn_to`] with the mixing `accel`.
@@ -481,9 +486,8 @@ pub fn sinkhorn_with(
     supply: &Mat,
     start: Option<&Mat>,
     max_sweeps: usize,
-    tol: f64,
+    stop: Stop,
     accel: Accel,
-    plateau: Option<(f64, usize)>,
 ) -> Result<Scaling, CalibrationError> {
     let inp = m.inp;
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
@@ -613,8 +617,8 @@ pub fn sinkhorn_with(
         } else {
             flat += 1;
         }
-        let plateaued = plateau.is_some_and(|(p, n)| err <= p && flat >= n);
-        if err <= tol || (within && since >= ANDERSON_STALL) || plateaued {
+        let plateaued = stop.plateau.is_some_and(|(p, n)| err <= p && flat >= n);
+        if err <= stop.tol || (within && since >= ANDERSON_STALL) || plateaued {
             let r = (0..n_g)
                 .map(|g| if inp.traded[g] { r[g] } else { 1.0 })
                 .collect();
@@ -1628,9 +1632,8 @@ pub fn calibrate_from(
             &sales_data,
             lw.as_ref(),
             limits.max_sweeps,
-            tol,
+            Stop { tol, plateau: None },
             limits.accel,
-            None,
         )?;
         let log_weight = scaling.log_weight.clone();
         let mut top = vec![f64::NEG_INFINITY; n_g];
