@@ -1082,7 +1082,10 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
    `a_class_without_distance_cost_has_the_calibrated_share_under_the_others_cost`). That spending depends
    on every nu through the rebates, so the fit runs in rounds: the spending is held while the
    groups are fitted, each group's share then depending on its own nu only and falling as it
-   rises, and is retaken at the fitted nu until the shares there move by at most 1e-9. Within a
+   rises, and is retaken at the fitted nu until every group's nu moves by at most 1e-8 between rounds
+   (or its share at the fitted nu by at most 1e-13 once the spending is retaken). A group whose
+   target is below its share at the bracket's upper end in a round stays at that end for the
+   round, and is an error only if it is still there once the rounds settle. Within a
    round the roots (five on the 2000 pack) are found by Brent's method per group, its bracket narrowed to 1e-9 in
    nu over [0, 10] (the upper end halved where the scaling fails there, on a scaling failure
    only), the groups sharing each evaluation and every scaling starting from the scaling at nu

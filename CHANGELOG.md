@@ -12,7 +12,8 @@
   2e-6 of it; fixture: pooled distance coefficient off by 2.5e-2, now 1.1e-4 (what is left is the
   buyer prices held at posted prices 1).
 - The spending now depends on nu, so `border::fit_border_nu` alternates the fit and the spending at
-  the fitted nu until the shares settle (`STATE_TOL`), and `data_state_shares`, `data_state_parts`
+  the fitted nu until nu settles (`STATE_TOL`; a group whose target is out of reach in a round is
+  held at its bracket end and fails only once settled), and `data_state_shares`, `data_state_parts`
   and the epsilon trial take the spending at their nu (`border::spending_at`). A class at nu 0 and
   scale 0 no longer keeps its epsilon-0 share under the other classes' cost: rebates and the
   balance move with it, as in the calibrated state.
