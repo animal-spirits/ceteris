@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### BEHAVIOUR: data-state spending inverts the PIGL weights at its buyer prices (#619)
+
+- `steady::data_state_spending`, which the border friction and epsilon fits evaluate at, inverted
+  the PIGL weights at prices 1 for traded goods and spent at the base buyer prices, so every cost
+  in a buyer price moved households off the data's final demand shares. With epsilon on, the other
+  classes' distance cost lowered the cross-border share of a class held at nu 0 and scale 0 (good
+  2 on the pack: 0.0033 below its target at epsilon 2). The weights are now inverted at the buyer
+  prices spent at (`Inputs::pigl_weights_at`). Fixture: the shift at epsilon 2 goes from -1.6e-4
+  to -2e-6 (what is left is price geography within countries); good 2's share at nu 0 and epsilon
+  0 moves from 0.05549 to 0.05611.
+- Fitted nu, epsilon and theta_2 move on the pack (owner-side refit). Fixture goldens do not move.
+
 ### Cloud calibration runner
 
 - `ceteris calibrate --pack DIR --fit-cache DIR` stores each epsilon-fit trial on disk (f64 as hex

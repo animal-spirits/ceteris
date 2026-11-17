@@ -608,6 +608,13 @@ impl Inputs {
         if let Some(w) = &self.calibrated_weights {
             return Ok(w.clone());
         }
+        self.pigl_weights_at(&self.data_state_price())
+    }
+
+    /// PIGL weights per country inverted over its pops at buyer prices `price` (P, G) and their
+    /// base incomes, so that households spending at `price` buy the country's final demand shares
+    /// (stage 4 of the calibration at those prices).
+    pub fn pigl_weights_at(&self, price: &Mat) -> Result<Weights, String> {
         let country = self.pop_country();
         let income = self.pop_base_income();
         let spend: Vec<f64> = income
@@ -615,7 +622,7 @@ impl Inputs {
             .zip(&self.pop_population)
             .map(|(m, n)| m * n)
             .collect();
-        let price = self.data_state_price().select_rows(&self.pop_province);
+        let price = price.select_rows(&self.pop_province);
         let (household, gov, inv) =
             self.final_demand_split(&Mat::filled(self.omega.rows, self.omega.cols, 1.0));
         let h = fixed_household_share(&gov, &inv, self.omega.rows);

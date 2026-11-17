@@ -1073,8 +1073,10 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
    group's goods in the ICIO economies, sum of (1 - home share) absorption over sum of absorption from
    `econ_home_shares.arrow`, is the model's: the value the destinations of those countries buy
    from other countries over all they buy, at origin prices. Each evaluation is stage 2 at stage
-   1's spending of the data state (r = 1, no rebates, the data state's buyer prices and PIGL
-   weights), held across trials, so each group's share depends on its own nu only and falls as it
+   1's spending of the data state (r = 1, no rebates, the data state's buyer prices, and PIGL
+   weights inverted at those buyer prices as stage 4 does, so households buy the country's final
+   demand shares whatever cost the buyer prices carry, another class's distance cost included;
+   `a_class_without_distance_cost_keeps_its_share_under_the_others_cost`), held across trials, so each group's share depends on its own nu only and falls as it
    rises; the roots (five on the 2000 pack) are found by Brent's method per group, its bracket narrowed to 1e-9 in
    nu over [0, 10] (the upper end halved where the scaling fails there, on a scaling failure
    only), the groups sharing each evaluation and every scaling starting from the scaling at nu
