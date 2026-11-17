@@ -2020,6 +2020,41 @@ fn chain_passes_beyond_their_kinks_are_uncovered() {
     }
 }
 
+/// Issue 621: collapses whose binding fills switch back and forth between jumps ahead (two or
+/// three sets of pieces in no cycle of up to 3 passes, each jump ending where they change), so
+/// the passes exceed [`kink_bound`], which counts one switch per pair of goods: 30 passes
+/// against 15 on the first, 163 against 23 on the last. Each pass back on pieces the fall left
+/// at an earlier jump ahead is uncovered; before that charge these reported 0 to 2 uncovered
+/// passes. Found among 5,000,001 random provinces; every good fits at their fills.
+#[test]
+fn chain_passes_back_on_left_pieces_are_uncovered() {
+    for (family, seed) in [
+        (2, 8530992775571175400u64),
+        (4, 2531432072492147758),
+        (3, 3063884759530189136),
+        (0, 18021748861991254537),
+        (3, 5808000598113153228),
+        (4, 15478840751906269408),
+        (3, 3626631301279052357),
+        (3, 11388627551832416590),
+    ] {
+        let (extra, coef_max, no_stock) = FAMILIES[family];
+        let p = random_province_with(seed, extra, coef_max, no_stock);
+        let out = local::fills(&p);
+        assert!(
+            out.passes > kink_bound(&p) && !out.stalled,
+            "family {family} seed {seed}: {out:?}"
+        );
+        for j in 0..3 {
+            assert!(
+                fits_up_to_rounding(&p, j, &out.fills),
+                "family {family} seed {seed}: good {j} short at {out:?}"
+            );
+        }
+        assert_within_kinks(&p, &format!("family {family} seed {seed}"));
+    }
+}
+
 /// The collapse of family 2 seed 10209637172777702640 (91 passes before the fix).
 #[test]
 fn collapse_alternating_two_pieces_shows_its_cycle() {
@@ -2035,12 +2070,13 @@ fn collapse_alternating_two_pieces_shows_its_cycle() {
 /// to 29).
 /// The stocked provinces 175527 and 3779 were pinned at 88 and 68 passes before the stock floor
 /// (ADR 0093, amendment of 2026-10-30), and 320, 419 and 461 at 7; they now take 3, 4, 5, 4 and
-/// 11.
+/// 11. With the charge for a pass back on pieces left at an earlier jump ahead (issue 621), k of
+/// the first two rows went from 3 and 0 uncovered passes to 5 and 1, their passes unchanged.
 #[test]
 fn chain_passes_and_uncovered_are_pinned() {
     for (family, seed, passes, uncovered) in [
-        (2, 13995925185394726438u64, 11, 3),
-        (2, 10209637172777702640, 8, 0),
+        (2, 13995925185394726438u64, 11, 5),
+        (2, 10209637172777702640, 8, 1),
         (2, 12969786537767039842, 257, 256),
         (4, 5355749340075788755, 792, 791),
         (1, 14587390709483492012, 257, 256),
