@@ -37,7 +37,7 @@ Recommendation: A.
 Decision: A, Antonio, 2026-11-15 (question card, class 3 good 2 thread).
 Row: to be taken in the spec PR.
 
-### D2. What is theta_2 in this change?
+### D2. What is theta_2 in this change? (superseded for the epsilon-on case by D3)
 
 Options:
 
@@ -46,6 +46,26 @@ Options:
 - B. The literature 13.53 until the fit runs.
 
 Recommendation: A. Pending Antonio's decision.
+
+### D3. How is theta_2 fitted once epsilon is on?
+
+Context: the first epsilon refit with theta_2 = 9.27 (fitted at epsilon 0, share 0.258310 against the
+target 0.258298) failed on the Mac (2026-11-16, 3,485 s): "the pooled distance coefficient is still
+above the data's -0.7512 at epsilon 2"; the last step reported class 3 outside the model's reach
+even at epsilon scale 0 (residual -0.00329). The distance cost lowers good 2's share, so a theta
+fitted at epsilon 0 is too high once epsilon is on.
+
+Options:
+
+- A. Fit theta_2 jointly with epsilon: for each epsilon trial, theta_2 is the root in the literature
+  band (6.2 to 20.9) of good 2's nu-0 share residual at that trial's distance cost.
+- B. Report good 2 as a known clamp (epsilon closure over the other classes).
+- C. Epsilon off for 1.0.
+
+Recommendation: A.
+
+Decision: A, Antonio, 2026-11-17 (question card, class 3 good 2 thread).
+Row: to be taken in the spec PR.
 
 ## Consequences
 
