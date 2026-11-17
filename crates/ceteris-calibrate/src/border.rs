@@ -36,6 +36,11 @@ pub const NU_TOL: f64 = 1e-9;
 pub const MAX_HALVINGS: usize = 10;
 /// Rounds of Brent's method before the fit gives up.
 pub const MAX_ROUNDS: usize = 200;
+/// The fit's data state is settled when the shares at the fitted nu move by at most this once
+/// the spending is taken there: the share a bracket of [`NU_TOL`] spans, at most.
+pub const STATE_TOL: f64 = 1e-9;
+/// Rounds of fit and spending before the fit gives up.
+pub const STATE_ROUNDS: usize = 20;
 
 /// The goods of each theta class, `theta_class` given per traded good; classes without goods
 /// are left out.
@@ -352,7 +357,7 @@ pub fn data_state_parts(
     icio: &[bool],
     limits: Limits,
 ) -> Result<(Vec<f64>, Vec<f64>), CalibrationError> {
-    let (spend, supply) = steady::data_state_spending(inp, limits)?;
+    let (spend, supply) = spending_at(inp, nu, limits)?;
     let (at, price, _) = solve_at(inp, nu, &spend, &supply, None, limits)?;
     Ok(cross_border_parts(&at, &price, &spend, icio, groups)?)
 }
@@ -367,8 +372,18 @@ pub fn data_state_shares(
     icio: &[bool],
     limits: Limits,
 ) -> Result<Vec<f64>, CalibrationError> {
-    let (spend, supply) = steady::data_state_spending(inp, limits)?;
+    let (spend, supply) = spending_at(inp, nu, limits)?;
     Ok(shares_at(inp, nu, groups, &spend, &supply, icio, None, limits)?.0)
+}
+
+/// [`steady::data_state_spending`] of `inp` at border frictions `nu` (per good): rebates and the
+/// final demand balance follow the sourcing, so the data state is one per nu.
+pub fn spending_at(
+    inp: &Inputs,
+    nu: &[f64],
+    limits: Limits,
+) -> Result<(Mat, Mat), CalibrationError> {
+    steady::data_state_spending(&at_border_nu(inp, nu)?, limits)
 }
 /// Brent's method (Brent 1973, `zeroin`) on one bracket, driven from outside: [`Brent::next`]
 /// names the point to evaluate, [`Brent::update`] takes f there, so several brackets can share
@@ -502,6 +517,50 @@ pub fn fit_border_nu_seeded(
     seed: Option<&[f64]>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<Fit, CalibrationError> {
+    // The data state's rebates and balance follow the sourcing, so its spending is one per nu
+    // ([`spending_at`]). Each round fits at a spending held fixed, where a group's share moves
+    // with its own nu alone, then takes the spending at the fitted nu, until the shares there
+    // are the fit's.
+    let (mut spend, supply) = steady::data_state_spending(inp, limits)?;
+    let mut evaluations = 0;
+    for round in 1..=STATE_ROUNDS {
+        let mut fit = fit_at_spending(
+            inp, groups, target, icio, limits, seed, &spend, &supply, progress,
+        )?;
+        let nu = fit.nu_of_goods(&inp.border_nu);
+        spend = spending_at(inp, &nu, limits)?.0;
+        let (share, _) = shares_at(inp, &nu, groups, &spend, &supply, icio, None, limits)?;
+        evaluations += fit.evaluations + 1;
+        let moved = share
+            .iter()
+            .zip(&fit.share)
+            .filter(|(a, b)| !(a.is_nan() && b.is_nan()))
+            .fold(0.0f64, |m, (a, b)| m.max((a - b).abs()));
+        progress(&format!(
+            "border friction: data state round {round}, shares moved by {moved:e} at the fitted nu"
+        ));
+        if moved <= STATE_TOL {
+            (fit.share, fit.evaluations) = (share, evaluations);
+            return Ok(fit);
+        }
+    }
+    Err(format!("the data state of the border fit did not settle in {STATE_ROUNDS} rounds").into())
+}
+
+/// [`fit_border_nu_seeded`] at the data state's spending `spend` and sales `supply` (P, G) held
+/// fixed.
+#[allow(clippy::too_many_arguments)]
+fn fit_at_spending(
+    inp: &Inputs,
+    groups: &[Vec<usize>],
+    target: &[f64],
+    icio: &[bool],
+    limits: Limits,
+    seed: Option<&[f64]>,
+    spend: &Mat,
+    supply: &Mat,
+    progress: &mut dyn FnMut(&str),
+) -> Result<Fit, CalibrationError> {
     let n = groups.len();
     if target.len() != n || inp.border_nu.len() != inp.n_goods() {
         return Err(format!(
@@ -513,7 +572,6 @@ pub fn fit_border_nu_seeded(
         .into());
     }
     group_of(groups, inp.n_goods())?;
-    let (spend, supply) = steady::data_state_spending(inp, limits)?;
     let own: Vec<f64> = groups.iter().map(|goods| inp.border_nu[goods[0]]).collect();
     let mut fitted: Vec<usize> = (0..n).filter(|&k| !target[k].is_nan()).collect();
     let mut evaluations = 0;
@@ -537,8 +595,8 @@ pub fn fit_border_nu_seeded(
         inp,
         &at(&vec![0.0; n]),
         groups,
-        &spend,
-        &supply,
+        spend,
+        supply,
         icio,
         None,
         limits,
@@ -550,8 +608,8 @@ pub fn fit_border_nu_seeded(
             inp,
             &at(nu),
             groups,
-            &spend,
-            &supply,
+            spend,
+            supply,
             icio,
             Some(&start),
             limits,

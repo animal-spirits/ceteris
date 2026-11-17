@@ -76,7 +76,7 @@ fn known_scaled(w: &World, epsilon: f64, scale: &[f64], nu_group: &[f64]) -> (Ve
     let nu = border::nu_of_goods(&w.groups, nu_group, &at.border_nu);
     let target =
         border::data_state_shares(&at, &nu, &w.groups, &w.icio, Limits::default()).unwrap();
-    let (spend, supply) = steady::data_state_spending(&at, Limits::default()).unwrap();
+    let (spend, supply) = border::spending_at(&at, &nu, Limits::default()).unwrap();
     let pairs = border::data_state_pair_values(
         &epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &mean, scale, epsilon).unwrap(),
         &nu,
@@ -142,7 +142,17 @@ fn fit_recovers_a_known_epsilon() {
 fn data_at_epsilon_zero_keeps_zero() {
     let w = world();
     let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
-    let (nu_target, data_flows) = known(&w, 0.0, &nu_group);
+    let (nu_target, mut data_flows) = known(&w, 0.0, &nu_group);
+    // The data's coefficient a hair weaker than the model's own: the refitted nu is the known one
+    // only to the fit's tolerance, so equal coefficients would leave the sign to rounding.
+    let (n, n_t) = (w.inp.n_countries(), w.class.len());
+    for (i, v) in data_flows.iter_mut().enumerate() {
+        let l = w.ln_d[i / n_t];
+        if l.is_finite() {
+            *v *= (1e-3 * l).exp();
+        }
+    }
+    debug_assert_eq!(data_flows.len(), n * n * n_t);
     let t = Targets {
         nu_target: &nu_target,
         icio: &w.icio,
@@ -351,12 +361,13 @@ fn fit_at_a_given_epsilon_is_one_trial() {
     assert!(fit.json().compact().contains("\"scale\""));
 }
 
-/// A class's cross-border share at the data state does not read another class's distance cost:
-/// good 2 at nu 0 and epsilon scale 0 buys the share it buys at epsilon 0 whatever the other
-/// classes pay. Stage 1 inverts the PIGL weights at the buyer prices it spends at; with weights
-/// inverted at prices 1 the other classes' cost moved the share by -1.7e-4 here.
+/// Issues #619, #622: with the other classes' distance cost on (their buyer prices move), good 2
+/// at nu 0 and epsilon scale 0 buys the share it buys in the calibrated state at those inputs.
+/// Stage 1 inverts the PIGL weights at the buyer prices it spends at, so no cost in a buyer price
+/// moves the level of the weights; the others' cost still moves duties, rebates and the final
+/// demand balance, and the share with them, as the calibration has it.
 #[test]
-fn a_class_without_distance_cost_keeps_its_share_under_the_others_cost() {
+fn a_class_without_distance_cost_has_the_calibrated_share_under_the_others_cost() {
     const GOOD: usize = 2;
     let w = world();
     let lim = Limits::default();
@@ -379,12 +390,77 @@ fn a_class_without_distance_cost_keeps_its_share_under_the_others_cost() {
         (0..w.class.len())
             .any(|g| (at.base_price[(p, g)] / w.inp.base_price[(p, g)] - 1.0).abs() > 1e-2)
     }));
-    let moved = share(&at) - base;
-    // what is left is the price geography within countries, not the level of the weights
-    assert!(moved.abs() <= 5e-6, "share moved by {moved}");
+    // The others' cost moves duties, rebates and the final demand balance, so the share is no
+    // longer the one at epsilon 0 (-5.3e-4 here): it is the calibrated state's at these inputs.
+    assert!((share(&at) - base).abs() > 1e-4);
+    let at_nu = border::at_border_nu(&at, &nu).unwrap();
+    let s = steady::calibrate(&at_nu, &at_nu.u_star.clone(), &mut quiet()).unwrap();
+    let mut spend = s.spend_hh.clone();
+    for (a, b) in spend.data.iter_mut().zip(&s.spend_int.data) {
+        *a += b;
+    }
+    let calibrated =
+        border::cross_border_shares(&at_nu, &s.price, &spend, &w.icio, &w.groups).unwrap()[k];
+    let moved = share(&at) - calibrated;
+    // what is left is the buyer prices held at posted prices 1 (-2.1e-5 here)
+    assert!(
+        moved.abs() <= 5e-5,
+        "share off the calibrated state's by {moved}"
+    );
     // household spending by country and good stays at the data's final demand
     let (s0, _) = steady::data_state_spending(&w.inp, lim).unwrap();
     let (s1, _) = steady::data_state_spending(&at, lim).unwrap();
     let total = |m: &ceteris_reference::io::Mat| (0..m.rows).map(|p| m[(p, GOOD)]).sum::<f64>();
     assert!((total(&s1) / total(&s0) - 1.0).abs() <= 1e-4);
+}
+
+/// Issue #622: the data state the fits evaluate at is the calibrated state the run starts from,
+/// buyer prices aside: with a distance cost and a border friction on, every group's cross-border
+/// share and the pooled distance coefficient are the steady state's. Without stage 1's rebates
+/// and final demand balance in the data state the shares were off by up to 7e-4 here and the
+/// coefficient by 2.5e-2.
+#[test]
+fn the_fits_data_state_is_the_calibrated_state() {
+    let w = world();
+    let lim = Limits::default();
+    let (d0, _) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &trade_weight(&w.inp));
+    let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &d0, &[1.0; 4], 0.4).unwrap();
+    let nu = border::nu_of_goods(&w.groups, &[0.15, 0.6, 0.35, 1.2, 0.5], &at.border_nu);
+    let at_nu = border::at_border_nu(&at, &nu).unwrap();
+    let fitted = border::data_state_shares(&at, &nu, &w.groups, &w.icio, lim).unwrap();
+    let (spend, supply) = border::spending_at(&at, &nu, lim).unwrap();
+    let pairs = border::data_state_pair_values(&at, &nu, &spend, &supply, lim).unwrap();
+
+    let s = steady::calibrate(&at_nu, &at_nu.u_star.clone(), &mut quiet()).unwrap();
+    let mut steady_spend = s.spend_hh.clone();
+    for (a, b) in steady_spend.data.iter_mut().zip(&s.spend_int.data) {
+        *a += b;
+    }
+    let calibrated =
+        border::cross_border_shares(&at_nu, &s.price, &steady_spend, &w.icio, &w.groups).unwrap();
+    for k in 0..w.groups.len() {
+        assert!(
+            (fitted[k] - calibrated[k]).abs() <= 5e-6,
+            "group {k}: {} at the fit's state, {} calibrated",
+            fitted[k],
+            calibrated[k]
+        );
+    }
+    let m = ceteris_reference::model::Model::new(&at_nu).unwrap();
+    let steady_pairs = m
+        .flows(&s.price, &steady_spend, &m.sourcing(&s.price))
+        .pair_value;
+    let (n, n_g, n_t) = (at.n_countries(), at.n_goods(), w.class.len());
+    let pooled = |pairs: &[f64]| {
+        let v: Vec<f64> = (0..n * n)
+            .map(|k| pairs[k * n_g..k * n_g + n_t].iter().sum())
+            .collect();
+        w.gravity.coefficient(&v).unwrap().0
+    };
+    let (a, b) = (pooled(&pairs), pooled(&steady_pairs));
+    // the residual, 1.1e-4 here, is the buyer prices held at posted prices 1
+    assert!(
+        (a - b).abs() <= 5e-4,
+        "pooled {a} at the fit's state, {b} calibrated"
+    );
 }
