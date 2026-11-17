@@ -617,11 +617,9 @@ pub fn sinkhorn_with(
         // 1.6e-13 on the full pack with storage on, where one gateway's sums are 858 deep.
         window_min = window_min.min(err);
         let mut plateaued = false;
-        if let Some((bound, window)) = stop.plateau {
-            if window > 0 && sweep % window == 0 {
-                plateaued = window_min <= bound && window_min >= PLATEAU_FALL * prev_min;
-                (prev_min, window_min) = (window_min, f64::INFINITY);
-            }
+        if let Some((bound, _)) = stop.plateau.filter(|&(_, w)| w > 0 && sweep % w == 0) {
+            plateaued = window_min <= bound && window_min >= PLATEAU_FALL * prev_min;
+            (prev_min, window_min) = (window_min, f64::INFINITY);
         }
         if err <= stop.tol || (within && since >= ANDERSON_STALL) || plateaued {
             let r = (0..n_g)
