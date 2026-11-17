@@ -119,6 +119,7 @@ fn fit_recovers_a_known_epsilon() {
     let e0 = 0.4;
     let (nu_target, data_flows) = known(&w, e0, &nu_group);
     let t = Targets {
+        theta_fit: false,
         nu_target: &nu_target,
         icio: &w.icio,
         theta_class: &w.class,
@@ -152,6 +153,7 @@ fn data_at_epsilon_zero_keeps_zero() {
     let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
     let (nu_target, data_flows) = known(&w, 0.0, &nu_group);
     let t = Targets {
+        theta_fit: false,
         nu_target: &nu_target,
         icio: &w.icio,
         theta_class: &w.class,
@@ -233,6 +235,7 @@ fn cached_fit_is_bit_identical() {
     let run = |nu: &[f64], cache: Option<&std::path::Path>| {
         let nu = targets(nu);
         let t = Targets {
+            theta_fit: false,
             nu_target: &nu,
             icio: &w.icio,
             theta_class: &w.class,
@@ -282,6 +285,7 @@ fn clamped_class_takes_an_epsilon_scale() {
     let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
     let (nu_target, data_flows) = known_scaled(&w, e0, &scale, &nu_group);
     let t = Targets {
+        theta_fit: false,
         nu_target: &nu_target,
         icio: &w.icio,
         theta_class: &w.class,
@@ -312,6 +316,7 @@ fn fit_at_a_given_epsilon_is_one_trial() {
     let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
     let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
     let t = Targets {
+        theta_fit: false,
         nu_target: &nu_target,
         icio: &w.icio,
         theta_class: &w.class,
@@ -327,4 +332,49 @@ fn fit_at_a_given_epsilon_is_one_trial() {
         (0.37, 1, false)
     );
     assert!(fit.json().compact().contains("\"scale\""));
+}
+
+/// RFC 0355 D3: with `theta_fit` on, the trial's theta of good 2 is the one whose cross-border
+/// share at nu 0 meets the target: targets made at theta 11 (good 2 at nu 0) on a world built at
+/// 9.27 return 11, and with the switch off the mismatch shows up as a good 2 border friction.
+#[test]
+fn good_2_theta_is_fitted_jointly_with_epsilon() {
+    let (truth, start) = (11.0, world());
+    assert_ne!(start.inp.theta[epsilon::THETA_GOOD], truth);
+    let mut w = world();
+    w.inp = epsilon::at_theta(&start.inp, epsilon::THETA_GOOD, truth).unwrap();
+    let nu_group = [0.15, 0.6, 0.35, 0.0, 0.5];
+    let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
+    let weight = trade_weight(&start.inp);
+    let targets = |theta_fit| Targets {
+        theta_fit,
+        nu_target: &nu_target,
+        icio: &start.icio,
+        theta_class: &start.class,
+        ln_d: &start.ln_d,
+        weight: &weight,
+        gravity: &start.gravity,
+        data_flows: &data_flows,
+    };
+    let on = epsilon::fit_at_epsilon(
+        &start.inp,
+        &targets(true),
+        0.4,
+        Limits::default(),
+        &mut quiet(),
+    )
+    .unwrap();
+    assert!((on.theta2 - truth).abs() <= 1e-3, "theta {}", on.theta2);
+    assert!(on.fit.nu[3] < 1e-4, "{:?}", on.fit.nu);
+    // off, the starting theta absorbs the mismatch in a border friction the targets never had
+    let off = epsilon::fit_at_epsilon(
+        &start.inp,
+        &targets(false),
+        0.4,
+        Limits::default(),
+        &mut quiet(),
+    )
+    .unwrap();
+    assert_eq!(off.theta2, start.inp.theta[epsilon::THETA_GOOD]);
+    assert!(off.fit.nu[3] > 1e-2, "{:?}", off.fit.nu);
 }

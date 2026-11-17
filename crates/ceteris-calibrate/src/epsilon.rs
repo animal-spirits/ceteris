@@ -34,6 +34,13 @@ pub const EPSILON_TOL: f64 = 1e-3;
 
 /// Brent's bracket on a class's epsilon scale ends this narrow, within this many rounds.
 const SCALE_TOL: f64 = 1e-6;
+/// Good fitted for its own theta jointly with epsilon (RFC 0355 D3): coal and other mining.
+pub const THETA_GOOD: usize = 2;
+/// The band theta of [`THETA_GOOD`] is searched in: the Mining estimate 13.53 plus or minus two
+/// s.e. (3.67, ADR 0023).
+pub const THETA_BAND: (f64, f64) = (6.2, 20.9);
+const THETA_TOL: f64 = 1e-6;
+const THETA_ROUNDS: usize = 100;
 const SCALE_ROUNDS: usize = 100;
 /// A residual at scale 1 this small counts as the target met there.
 const SCALE_FLAT: f64 = 1e-9;
@@ -245,6 +252,8 @@ pub struct ClassCheck {
 #[derive(Clone, Debug)]
 pub struct Trial {
     pub epsilon: f64,
+    /// theta of [`THETA_GOOD`] as used (fitted when `Targets::theta_fit`).
+    pub theta2: f64,
     pub fit: Fit,
     /// `ln d_0` per theta class as used.
     pub ln_d0: Vec<f64>,
@@ -271,6 +280,9 @@ pub struct EpsilonFit {
 
 /// What the epsilon fit reads besides the inputs.
 pub struct Targets<'a> {
+    /// Fit theta of [`THETA_GOOD`] at each epsilon trial so its cross-border share at nu 0 meets
+    /// its target (RFC 0355 D3).
+    pub theta_fit: bool,
     /// The ICIO cross-border share per friction group of [`border::friction_groups`].
     pub nu_target: &'a [f64],
     pub icio: &'a [bool],
@@ -351,6 +363,74 @@ fn solve_scale(
     Ok(brent.root())
 }
 
+/// `inp` with the kernel of good `g` rebuilt at theta `theta`: K to the power `theta / theta_g`
+/// (K is a power of the leg factor, so the legs are unchanged), the base prices and selection
+/// constants recomputed.
+pub fn at_theta(inp: &Inputs, g: usize, theta: f64) -> Result<Inputs, String> {
+    let mut out = inp.clone();
+    let ratio = theta / inp.theta[g];
+    for j in 0..out.crossing.good.len() {
+        if out.crossing.good[j] == g {
+            out.crossing.k[j] = out.crossing.k[j].powf(ratio);
+        }
+    }
+    out.theta[g] = theta;
+    border::reprice(&mut out)?;
+    Ok(out)
+}
+
+/// `inp` at the theta of [`THETA_GOOD`] whose group's cross-border share at nu 0, at `epsilon`
+/// with no scale and `ln_d0`, meets its target, found by Brent's method in [`THETA_BAND`]; the
+/// share falls as theta rises. A target the band cannot reach is an error, not a clamp.
+fn fit_theta(
+    inp: &Inputs,
+    t: &Targets,
+    epsilon: f64,
+    ln_d0: &[f64],
+    limits: Limits,
+) -> Result<Inputs, CalibrationError> {
+    let groups = border::friction_groups(t.theta_class);
+    let k = groups
+        .iter()
+        .position(|goods| goods.contains(&THETA_GOOD))
+        .ok_or("no friction group holds the good whose theta is fitted")?;
+    let target = t.nu_target[k];
+    if target.is_nan() {
+        return Ok(inp.clone());
+    }
+    let ones = vec![1.0; border::N_CLASSES];
+    let f = |theta: f64| -> Result<f64, CalibrationError> {
+        let at = at_epsilon(
+            &at_theta(inp, THETA_GOOD, theta)?,
+            t.theta_class,
+            t.ln_d,
+            ln_d0,
+            &ones,
+            epsilon,
+        )?;
+        let mut nu = at.border_nu.clone();
+        for &g in &groups[k] {
+            nu[g] = 0.0;
+        }
+        Ok(border::data_state_shares(&at, &nu, &groups, t.icio, limits)?[k] - target)
+    };
+    let (f_lo, f_hi) = (f(THETA_BAND.0)?, f(THETA_BAND.1)?);
+    if f_lo < 0.0 || f_hi > 0.0 {
+        return Err(format!(
+            "epsilon {epsilon}: good {THETA_GOOD}'s share at nu 0 misses its target {target} for every theta in {THETA_BAND:?} (residuals {f_lo} and {f_hi})"
+        )
+        .into());
+    }
+    let mut brent = Brent::new(THETA_BAND.0, f_lo, THETA_BAND.1, f_hi);
+    for _ in 0..THETA_ROUNDS {
+        let Some(x) = brent.next(THETA_TOL) else {
+            break;
+        };
+        brent.update(f(x)?);
+    }
+    Ok(at_theta(inp, THETA_GOOD, brent.root())?)
+}
+
 /// The fit at one `epsilon`: nu per group, `d_0` and the epsilon scale per class.
 pub fn fit_at_epsilon(
     inp: &Inputs,
@@ -371,6 +451,18 @@ fn trial(
 ) -> Result<Trial, CalibrationError> {
     let groups = border::friction_groups(t.theta_class);
     let (mean, min) = class_offsets(inp, t.theta_class, t.ln_d, t.weight);
+    let fitted;
+    let inp = if t.theta_fit && epsilon > 0.0 {
+        // good 2 is held at nu 0, where `(1 + nu) D >= 1` needs the class's d_0 at its smallest
+        // linked distance: the one the trial floors to
+        let mut at_floor = mean.clone();
+        at_floor[t.theta_class[THETA_GOOD]] = min[t.theta_class[THETA_GOOD]];
+        fitted = fit_theta(inp, t, epsilon, &at_floor, limits)?;
+        &fitted
+    } else {
+        inp
+    };
+    let theta2 = inp.theta[THETA_GOOD];
     let mut ln_d0 = mean;
     let mut floored: Vec<usize> = vec![];
     let mut scale = vec![1.0; border::N_CLASSES];
@@ -441,6 +533,7 @@ fn trial(
                 .collect::<Result<Vec<_>, String>>()?;
             return Ok(Trial {
                 epsilon,
+                theta2,
                 fit,
                 ln_d0,
                 floored,
@@ -711,6 +804,7 @@ impl EpsilonFit {
             ("epsilon", Json::Float(t.epsilon)),
             ("at_zero", Json::Int(i64::from(self.at_zero))),
             ("evaluations", Json::Int(self.evaluations as i64)),
+            ("theta2", Json::Float(t.theta2)),
             ("model_pooled", Json::Float(t.pooled)),
             ("data_pooled", Json::Float(self.data_pooled)),
             ("nu", floats(&t.fit.nu)),
