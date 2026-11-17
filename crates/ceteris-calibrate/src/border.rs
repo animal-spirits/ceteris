@@ -36,9 +36,12 @@ pub const NU_TOL: f64 = 1e-9;
 pub const MAX_HALVINGS: usize = 10;
 /// Rounds of Brent's method before the fit gives up.
 pub const MAX_ROUNDS: usize = 200;
-/// The fit's data state is settled when the shares at the fitted nu move by at most this once
-/// the spending is taken there: the share a bracket of [`NU_TOL`] spans, at most.
-pub const STATE_TOL: f64 = 1e-9;
+/// The fit's data state is settled when, from one round to the next, every group's nu moves by
+/// at most this (ten brackets of [`NU_TOL`], above the root's resolution of a flat share), or
+/// its share at the fitted nu moves by at most [`STATE_SHARE_TOL`] once the spending is taken
+/// there (the scaling's noise, below which nu cannot be told).
+pub const STATE_TOL: f64 = 1e-8;
+pub const STATE_SHARE_TOL: f64 = 1e-13;
 /// Rounds of fit and spending before the fit gives up.
 pub const STATE_ROUNDS: usize = 20;
 
@@ -519,10 +522,10 @@ pub fn fit_border_nu_seeded(
 ) -> Result<Fit, CalibrationError> {
     // The data state's rebates and balance follow the sourcing, so its spending is one per nu
     // ([`spending_at`]). Each round fits at a spending held fixed, where a group's share moves
-    // with its own nu alone, then takes the spending at the fitted nu, until the shares there
-    // are the fit's.
+    // with its own nu alone, then takes the spending at the fitted nu, until nu settles.
     let (mut spend, supply) = steady::data_state_spending(inp, limits)?;
     let mut evaluations = 0;
+    let mut last: Option<Vec<f64>> = None;
     for round in 1..=STATE_ROUNDS {
         let mut fit = fit_at_spending(
             inp, groups, target, icio, limits, seed, &spend, &supply, progress,
@@ -531,18 +534,22 @@ pub fn fit_border_nu_seeded(
         spend = spending_at(inp, &nu, limits)?.0;
         let (share, _) = shares_at(inp, &nu, groups, &spend, &supply, icio, None, limits)?;
         evaluations += fit.evaluations + 1;
-        let moved = share
-            .iter()
-            .zip(&fit.share)
-            .filter(|(a, b)| !(a.is_nan() && b.is_nan()))
-            .fold(0.0f64, |m, (a, b)| m.max((a - b).abs()));
+        let settled = (0..groups.len()).all(|k| {
+            fit.target[k].is_nan()
+                || (share[k] - fit.share[k]).abs() <= STATE_SHARE_TOL
+                || last
+                    .as_ref()
+                    .is_some_and(|l| (fit.nu[k] - l[k]).abs() <= STATE_TOL)
+        });
         progress(&format!(
-            "border friction: data state round {round}, shares moved by {moved:e} at the fitted nu"
+            "border friction: data state round {round}, nu {:?}",
+            fit.nu
         ));
-        if moved <= STATE_TOL {
+        if settled {
             (fit.share, fit.evaluations) = (share, evaluations);
             return Ok(fit);
         }
+        last = Some(fit.nu);
     }
     Err(format!("the data state of the border fit did not settle in {STATE_ROUNDS} rounds").into())
 }
