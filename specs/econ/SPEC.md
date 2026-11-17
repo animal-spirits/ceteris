@@ -591,7 +591,12 @@ the property below tells that defect apart). Where a jump does not apply, the fi
 passes outside the accounting (`Fills::uncovered`): a pass after which no jump moved and one did
 not apply (map undefined or singular, fall within rounding, budget spent); two for a pass that
 cuts a good by rounding alone while another falls resolvably (it changes the pieces where no
-kink lies, and ends the previous pass's jump); a pass a stop moves on from; at the stall rule
+kink lies, and ends the previous pass's jump); a pass on pieces the fall left at an earlier jump
+ahead (a binding fill switching back, beyond the one switch per pair that K counts: floors and
+goods starting to fall are crossed once, so only such a switch returns the fall to pieces it
+left; issue 621: 30 passes against 15 on a collapse to 0 alternating two sets of pieces in no
+cycle of up to 3 passes, 163 against 23 on another, 8 such provinces among 5,000,001 random
+ones, `chain_passes_back_on_left_pieces_are_uncovered`); a pass a stop moves on from; at the stall rule
 every pass since the last move, and every pass after a stall. Passes <= 2 + 3 + 2K + uncovered
 on random small provinces of five families (the first below, higher coefficients, no stocks, up
 to 10 enterprises, scarce stocks; `chain_passes_within_their_kinks`), and on all of 1,000,000

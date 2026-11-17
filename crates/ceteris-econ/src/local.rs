@@ -358,7 +358,7 @@ enum Role {
 
 /// The piece on which a step found its root: the role of each user and the good whose fill
 /// bounds the producer's output (None where it uses no local good).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 struct Piece {
     roles: Vec<(usize, Role)>,
     producer: Option<usize>,
@@ -899,6 +899,10 @@ pub fn fills(p: &Province) -> Fills {
     let mut uncovered = 0;
     // `uncovered` at the last move: a stall charges every pass since
     let mut mark = 0;
+    // the pieces of the passes since the last jump ahead, and of those before it: a pass back
+    // on pieces the fall had left is a switch the kink accounting does not count
+    let mut here: Vec<Vec<Option<Piece>>> = Vec::new();
+    let mut left: Vec<Vec<Option<Piece>>> = Vec::new();
     loop {
         passes += 1;
         since += 1;
@@ -940,10 +944,14 @@ pub fn fills(p: &Province) -> Fills {
         // what this pass adds to `uncovered`, None once counted: a good cut by rounding alone
         // while another falls changes the pieces where no kink lies, and costs two passes as a
         // kink does (this one and the one whose jump it ends)
+        let returned = left.contains(&last.pieces);
+        if !here.contains(&last.pieces) {
+            here.push(last.pieces.clone());
+        }
         let mut charge = if !rounding && lowered.iter().any(|&j| !resolvable(start[j], f[j])) {
             Some(2)
         } else {
-            Some(usize::from(stalled))
+            Some(usize::from(stalled || returned))
         };
         if rounding || (since >= STALL_PASSES && !stalled) {
             if !rounding {
@@ -1009,6 +1017,8 @@ pub fn fills(p: &Province) -> Fills {
                 .collect();
             if limit {
                 recent.clear();
+            } else {
+                left.append(&mut here);
             }
         }
     }
@@ -1130,7 +1140,8 @@ pub struct Fills {
     /// Production), which holds where every jump applies: a pass after which no jump moved and
     /// one did not apply (its cycle's map undefined or singular, its fall within rounding, or
     /// the jumps' budget spent); two for a pass that cuts a good by rounding alone while another
-    /// falls resolvably; a pass a stop moves on from; every pass since the last move when the
+    /// falls resolvably; a pass on pieces the fall left at an earlier jump ahead (a binding fill
+    /// switching back); a pass a stop moves on from; every pass since the last move when the
     /// stall rule acts, and every pass after a stall (a diagnostic).
     pub uncovered: usize,
 }
