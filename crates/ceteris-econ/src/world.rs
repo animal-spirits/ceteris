@@ -4147,6 +4147,16 @@ mod tests {
             ("state cells", base.clone().with_state_cells(cells.clone())),
             ("capital", base.clone().with_capital(capital.clone())),
             (
+                "capital in production",
+                base.clone().with_capital(crate::investment::Capital::new(
+                    vec![
+                        crate::investment::Pipeline::steady_state(2, 4.0, 0.01, 1, 5.0, &[]);
+                        n_ent
+                    ],
+                    vec![50.0; n_ent],
+                )),
+            ),
+            (
                 "all",
                 migration_sim(50)
                     .world()
