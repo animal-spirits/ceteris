@@ -7,12 +7,12 @@ estimates unless marked measured. Sources: RFC 0350, `reports/delivery-risk-2026
 
 ## 1. Flagship
 
-Proposed: **Brexit, hard and soft** (Dhingra et al. 2017). Reasons: it has two-sided welfare
+**Brexit, hard and soft** (Dhingra et al. 2017), with the guards of section 2. Decision: Antonio,
+2026-11-17 (question card, flagship plan thread). Reasons: it has two-sided welfare
 bands in RFC 0350; #560 is its open gap (-0.63% and -0.24% against -2.66% and -1.34%); it shares
 its suspected cause with H2 (#559), so one refit tests both; the benchmark already runs it.
 US-China 2018 is the alternative: its welfare band is narrow ([-0.1%, -0.02%]) and its last
-measured pass-through was on an unsettled baseline, so a miss there is harder to read. Antonio
-decides (card in the thread).
+measured pass-through was on an unsettled baseline, so a miss there is harder to read.
 
 ## 2. Pre-registered check
 
