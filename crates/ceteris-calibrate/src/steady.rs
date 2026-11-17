@@ -1156,6 +1156,83 @@ impl<'a> Setup<'a> {
         Err(format!("income and local output did not settle in {max_local} iterations").into())
     }
 
+    /// Stage 4 at households `hh` and input spending `spend_int` (P, G), with `duty` (P, G) the
+    /// tariff's part of a unit spent and buyer prices `q`: each country's traded final demand at
+    /// its data shares, balanced so that every good's world net spending meets its sales (ADR
+    /// 0318), and the PIGL weights inverted on those targets; the balance starts from `start`.
+    fn demand_weights(
+        &self,
+        hh: &Households,
+        spend_int: &Mat,
+        duty: &Mat,
+        q: &Mat,
+        start: Option<&[f64]>,
+    ) -> Result<(Weights, balance::Balanced), CalibrationError> {
+        let inp = self.inp;
+        let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
+        let (traded, c, kc) = (&inp.traded, &inp.province_country, &self.pop_country);
+        let omega_total = inp.omega.row_sums();
+        let om = Mat::from_fn(n_c, n_g, |k, g| inp.omega[(k, g)] / omega_total[k]);
+        let sales_data = self.sales_data();
+        let world_sales: Vec<f64> = (0..n_g)
+            .map(|g| (0..n_p).map(|p| sales_data[(p, g)]).sum())
+            .collect();
+        let absorbed = bincount(kc, hh.spending.iter().copied(), n_c);
+        let seed = Mat::from_fn(n_c, n_g, |k, g| {
+            if traded[g] {
+                om[(k, g)] * absorbed[k]
+            } else {
+                0.0
+            }
+        });
+        let (mut net_hh, mut gross_hh) = (Mat::zeros(n_c, n_g), Mat::zeros(n_c, n_g));
+        let mut column = vec![0.0; n_g];
+        for p in 0..n_p {
+            for g in (0..n_g).filter(|&g| traded[g]) {
+                let net = 1.0 - duty[(p, g)];
+                net_hh[(c[p], g)] += net * hh.spend_hh[(p, g)];
+                gross_hh[(c[p], g)] += hh.spend_hh[(p, g)];
+                column[g] += net * spend_int[(p, g)];
+            }
+        }
+        let net = Mat::from_fn(n_c, n_g, |k, g| {
+            divide_where(
+                net_hh[(k, g)],
+                gross_hh[(k, g)],
+                gross_hh[(k, g)] > 0.0,
+                1.0,
+            )
+        });
+        let target: Vec<f64> = (0..n_g).map(|g| world_sales[g] - column[g]).collect();
+        let ras = balance::balance(&seed, &net, &target, traded, start)?;
+        // the balance moves all final demand; PIGL is inverted on the households' part at their
+        // share of spending, government and investment keep their balanced shares (ADRs 0099,
+        // 0304)
+        let (omega_target, gov, inv) = inp.final_demand_split(&ras.factor);
+        let h = fixed_household_share(&gov, &inv, n_c);
+        let budget: Vec<f64> = (0..kc.len()).map(|k| h[kc[k]] * hh.spending[k]).collect();
+        let per_person: Vec<f64> = budget
+            .iter()
+            .zip(&inp.pop_population)
+            .map(|(&i, &n)| divide_where(i, n, n > 0.0, 0.0))
+            .collect();
+        let mut weights = demand::invert_pops(
+            &omega_target,
+            &demand::Pops {
+                country: kc,
+                price: &q.select_rows(&inp.pop_province),
+                income: &per_person,
+                spend: &budget,
+            },
+            &inp.within_sigma(),
+            &inp.category,
+            inp.sigma_demand,
+            &inp.pigl,
+        )?;
+        (weights.gov, weights.inv) = (gov, inv);
+        Ok((weights, ras))
+    }
+
     /// (P, G) traded input spending of every province's enterprises (all goods).
     fn input_spending(&self, v: &[f64]) -> Mat {
         let inp = self.inp;
@@ -1288,41 +1365,85 @@ impl State {
     }
 }
 
-/// Stage 1 at the data state: traded spending E (P, G) of households (transfers included, ADR
-/// 0100) and enterprises at the data's output values, no rebates, the data state's buyer prices
-/// (`Inputs::base_price`) and PIGL weights inverted at those prices (the calibrated ones if any),
-/// with income and local output settled; and the sales value V / (1 + delta s) (P, G) of traded
-/// origins, their output value less the spoilage it replaces (ADR 0091).
+/// Stages 1, 2 and 4 at the data state, which the border friction and distance cost fits evaluate
+/// at: the calibration's passes with the buyer prices held at the data state's
+/// (`Inputs::base_price`, posted prices 1). Traded spending E (P, G) of households (transfers
+/// included, ADR 0100) and enterprises at the data's output values, with the tariff rebates of
+/// that spending at stage 2's origin prices and the PIGL weights inverted at the buyer prices on
+/// the balanced final demand (ADR 0318), settled to [`PASS_TOL`] (the calibrated weights, if any,
+/// are kept); and the sales value V / (1 + delta s) (P, G) of traded origins, their output value
+/// less the spoilage it replaces (ADR 0091). The inputs' own border friction is the state's.
 pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), CalibrationError> {
     let setup = Setup::new(inp)?;
     let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
     let traded = &inp.traded;
     // traded goods at their base buyer prices, local goods at p_c (ADR 0098)
     let q = inp.base_price.clone();
-    let rebate = vec![0.0; n_c];
-    // stage 4 at q: weights inverted at prices 1 would let every cost in q, another class's
-    // distance cost included, move households off the data's final demand shares
-    let weights = match &inp.calibrated_weights {
+    let ones = Mat::filled(n_p, n_g, 1.0);
+    let m = Model::physical(inp)?;
+    let sales = setup.sales_data();
+    let mut lw: Option<Mat> = None;
+    let mut rebate = vec![0.0; n_c];
+    // weights inverted at prices 1 would let every cost in q, another class's distance cost
+    // included, move households off the data's final demand shares
+    let mut weights = match &inp.calibrated_weights {
         Some(w) => w.clone(),
         None => inp.pigl_weights_at(&q)?,
     };
-    let v = setup.settle(
-        &rebate,
-        &q,
-        &weights,
-        &setup.local_start()?,
-        limits.max_local,
-    )?;
-    let hh = setup.households(&v, &rebate, &q, &weights);
-    let spend_int = setup.input_spending(&v);
-    let spend = Mat::from_fn(n_p, n_g, |p, g| {
-        if traded[g] {
-            hh.spend_hh[(p, g)] + spend_int[(p, g)]
+    let mut y_local = setup.local_start()?;
+    let mut ras_start: Option<Vec<f64>> = None;
+    for _ in 0..limits.max_passes {
+        let v = setup.settle(&rebate, &q, &weights, &y_local, limits.max_local)?;
+        y_local = (0..v.len())
+            .map(|e| if setup.traded_e[e] { 0.0 } else { v[e] })
+            .collect();
+        let hh = setup.households(&v, &rebate, &q, &weights);
+        let spend_int = setup.input_spending(&v);
+        let spend = Mat::from_fn(n_p, n_g, |p, g| {
+            if traded[g] {
+                hh.spend_hh[(p, g)] + spend_int[(p, g)]
+            } else {
+                0.0
+            }
+        });
+        // stage 2 at this spending: who pays which tariff follows the solved origin prices, not
+        // posted prices 1, where imports and so duties are several times the calibrated ones
+        let scaling = sinkhorn_limited(&m, &spend, &sales, lw.as_ref(), limits.max_sweeps)?;
+        let l = &scaling.log_weight;
+        let price = Mat::from_fn(n_p, n_g, |p, g| {
+            if traded[g] && inp.active[p][g] {
+                (-l[(p, g)] / inp.theta[g]).exp()
+            } else {
+                1.0
+            }
+        });
+        let duty = m.flows(&price, &ones, &m.sourcing(&price)).tariff;
+        lw = Some(scaling.log_weight);
+        let duty_bill = Mat::from_fn(n_p, n_g, |p, g| duty[(p, g)] * spend[(p, g)]).row_sums();
+        let rebate_new = bincount(&inp.province_country, duty_bill, n_c);
+        let weights_new = if inp.calibrated_weights.is_some() {
+            weights.clone()
         } else {
-            0.0
+            let (w, ras) =
+                setup.demand_weights(&hh, &spend_int, &duty, &q, ras_start.as_deref())?;
+            ras_start = Some(ras.b);
+            w
+        };
+        let change = py_max([
+            relative(&rebate_new, &rebate),
+            relative(&weights_new.scale, &weights.scale),
+            relative(&weights_new.omega.data, &weights.omega.data),
+        ]);
+        if change <= PASS_TOL {
+            return Ok((spend, sales));
         }
-    });
-    Ok((spend, setup.sales_data()))
+        (rebate, weights) = (rebate_new, weights_new);
+    }
+    Err(format!(
+        "the data state's rebates and weights did not settle in {} passes",
+        limits.max_passes
+    )
+    .into())
 }
 
 /// The steady state of ADR 0089 (module documentation) at natural rates `u_star` (C,).
@@ -1410,15 +1531,10 @@ pub fn calibrate_from(
     let (a_e, a_va) = (setup.a_e.clone(), setup.a_va.clone());
     let c = &inp.province_country;
     let kp = &inp.pop_province;
-    let kc = setup.pop_country.clone();
-    let people = &inp.pop_population;
     let sigma_within = inp.within_sigma();
     let omega_total = inp.omega.row_sums();
     let om = Mat::from_fn(n_c, n_g, |k, g| inp.omega[(k, g)] / omega_total[k]);
     let sales_data = setup.sales_data();
-    let world_sales: Vec<f64> = (0..n_g)
-        .map(|g| (0..n_p).map(|p| sales_data[(p, g)]).sum())
-        .collect();
     let origin = |p: usize, g: usize| inp.active[p][g] && traded[g];
     let theta: Vec<f64> = (0..n_g)
         .map(|g| if traded[g] { inp.theta[g] } else { 1.0 })
@@ -1530,62 +1646,9 @@ pub fn calibrate_from(
         let duty = m.flows(&price, &ones, &src).tariff;
         let duty_bill = Mat::from_fn(n_p, n_g, |p, g| duty[(p, g)] * spend[(p, g)]).row_sums();
         let rebate_new = bincount(c, duty_bill, n_c);
-        // stage 4's targets: each country's traded final demand at its data shares, balanced so
-        // that every good's world net spending meets its sales (ADR 0318)
-        let absorbed = bincount(&kc, hh.spending.iter().copied(), n_c);
-        let seed = Mat::from_fn(n_c, n_g, |k, g| {
-            if traded[g] {
-                om[(k, g)] * absorbed[k]
-            } else {
-                0.0
-            }
-        });
-        let (mut net_hh, mut gross_hh) = (Mat::zeros(n_c, n_g), Mat::zeros(n_c, n_g));
-        let mut column = vec![0.0; n_g];
-        for p in 0..n_p {
-            for g in (0..n_g).filter(|&g| traded[g]) {
-                let net = 1.0 - duty[(p, g)];
-                net_hh[(c[p], g)] += net * hh.spend_hh[(p, g)];
-                gross_hh[(c[p], g)] += hh.spend_hh[(p, g)];
-                column[g] += net * spend_int[(p, g)];
-            }
-        }
-        let net = Mat::from_fn(n_c, n_g, |k, g| {
-            divide_where(
-                net_hh[(k, g)],
-                gross_hh[(k, g)],
-                gross_hh[(k, g)] > 0.0,
-                1.0,
-            )
-        });
-        let target: Vec<f64> = (0..n_g).map(|g| world_sales[g] - column[g]).collect();
-        let ras = balance::balance(&seed, &net, &target, traded, ras_start.as_deref())?;
-        // the balance moves all final demand; PIGL is inverted on the households' part at their
-        // share of spending, government and investment keep their balanced shares (ADRs 0099,
-        // 0304)
-        let (omega_target, gov, inv) = inp.final_demand_split(&ras.factor);
-        let h = fixed_household_share(&gov, &inv, n_c);
+        let (weights_new, ras) =
+            setup.demand_weights(&hh, &spend_int, &duty, &q, ras_start.as_deref())?;
         ras_start = Some(ras.b.clone());
-        let budget: Vec<f64> = (0..kc.len()).map(|k| h[kc[k]] * hh.spending[k]).collect();
-        let per_person: Vec<f64> = budget
-            .iter()
-            .zip(people)
-            .map(|(&i, &n)| divide_where(i, n, n > 0.0, 0.0))
-            .collect();
-        let mut weights_new = demand::invert_pops(
-            &omega_target,
-            &demand::Pops {
-                country: &kc,
-                price: &q.select_rows(kp),
-                income: &per_person,
-                spend: &budget,
-            },
-            &sigma_within,
-            &inp.category,
-            inp.sigma_demand,
-            &inp.pigl,
-        )?;
-        (weights_new.gov, weights_new.inv) = (gov, inv);
 
         change = py_max([
             relative(&rebate_new, &rebate),

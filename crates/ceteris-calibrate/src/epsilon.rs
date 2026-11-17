@@ -25,7 +25,7 @@ use crate::json::Json;
 use crate::write::Table;
 
 use crate::border::{self, Brent, Fit};
-use crate::steady::{self, CalibrationError, Limits};
+use crate::steady::{CalibrationError, Limits};
 
 /// The bracket of epsilon searched; ADR 0272 expects about 0.35.
 pub const EPSILON_MAX: f64 = 2.0;
@@ -509,7 +509,7 @@ fn trial(
                 }
                 continue;
             }
-            let (spend, supply) = steady::data_state_spending(&at, limits)?;
+            let (spend, supply) = border::spending_at(&at, &nu, limits)?;
             let pairs = border::data_state_pair_values(&at, &nu, &spend, &supply, limits)?;
             let (n_c, n_g) = (at.n_countries(), at.n_goods());
             let traded: Vec<usize> = (0..t.theta_class.len()).collect();

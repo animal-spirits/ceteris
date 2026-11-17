@@ -12,6 +12,24 @@
   1e-10, H2 skips classes under eight crossings.
 - `calibrate` fits theta_2 jointly with epsilon, good 2's class held at scale 0.
 
+### BEHAVIOUR: the fits' data state carries stage 1's rebates and final demand balance (#622)
+
+- `steady::data_state_spending`, where the border friction, the epsilon scale and the epsilon fit
+  read their moments, had no tariff rebate and no final demand balance (ADR 0318), which the
+  calibrated state has. It is now the calibration's passes with the buyer prices held: rebates at
+  stage 2's origin prices and PIGL weights on the balanced shares. Small CI pack: good 2's
+  cross-border share at the fit's state was 0.08823 against 0.09079 calibrated and is now within
+  2e-6 of it; fixture: pooled distance coefficient off by 2.5e-2, now 1.1e-4 (what is left is the
+  buyer prices held at posted prices 1).
+- The spending now depends on nu, so `border::fit_border_nu` alternates the fit and the spending at
+  the fitted nu until nu settles (`STATE_TOL`; a group whose target is out of reach in a round is
+  held at its bracket end and fails only once settled), and `data_state_shares`, `data_state_parts`
+  and the epsilon trial take the spending at their nu (`border::spending_at`). A class at nu 0 and
+  scale 0 no longer keeps its epsilon-0 share under the other classes' cost: rebates and the
+  balance move with it, as in the calibrated state.
+- Fitted nu, s_c, epsilon and theta_2 move on the pack (owner-side refit). Fixture goldens do not
+  move. A fit costs several times more (one data state per round and per scale evaluation).
+
 ### BEHAVIOUR: data-state spending inverts the PIGL weights at its buyer prices (#619)
 
 - `steady::data_state_spending`, which the border friction and epsilon fits evaluate at, inverted
