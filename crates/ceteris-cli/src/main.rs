@@ -1264,7 +1264,7 @@ fn run_epsilon_fit(
     let (nu_target, icio) = border::target_shares(pack, &groups)?;
     let data = pack_data(pack, &sources::workspace_root().join(fetch::CACHE_DIR))?;
     let t = Targets {
-        theta_fit: false,
+        theta_fit: true,
         nu_target: &nu_target,
         icio: &icio,
         theta_class,

@@ -335,7 +335,7 @@ fn fit_at_a_given_epsilon_is_one_trial() {
 }
 
 /// RFC 0355 D3: with `theta_fit` on, the trial's theta of good 2 is the one whose cross-border
-/// share at nu 0 meets the target: targets made at theta 11 (good 2 at nu 0) on a world built at
+/// share at nu 0 meets the target: targets made at theta 11 (good 2 at nu 0 and no distance cost of its own) on a world built at
 /// 9.27 return 11, and with the switch off the mismatch shows up as a good 2 border friction.
 #[test]
 fn good_2_theta_is_fitted_jointly_with_epsilon() {
@@ -344,7 +344,7 @@ fn good_2_theta_is_fitted_jointly_with_epsilon() {
     let mut w = world();
     w.inp = epsilon::at_theta(&start.inp, epsilon::THETA_GOOD, truth).unwrap();
     let nu_group = [0.15, 0.6, 0.35, 0.0, 0.5];
-    let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
+    let (nu_target, data_flows) = known_scaled(&w, 0.4, &[1.0, 1.0, 1.0, 0.0, 1.0], &nu_group);
     let weight = trade_weight(&start.inp);
     let targets = |theta_fit| Targets {
         theta_fit,

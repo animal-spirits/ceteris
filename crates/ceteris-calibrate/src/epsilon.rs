@@ -380,7 +380,7 @@ pub fn at_theta(inp: &Inputs, g: usize, theta: f64) -> Result<Inputs, String> {
 }
 
 /// `inp` at the theta of [`THETA_GOOD`] whose group's cross-border share at nu 0, at `epsilon`
-/// with no scale and `ln_d0`, meets its target, found by Brent's method in [`THETA_BAND`]; the
+/// with the good's class at scale 0 (no distance cost of its own; the other classes still move its prices) and `ln_d0`, meets its target, found by Brent's method in [`THETA_BAND`]; the
 /// share falls as theta rises. A target the band cannot reach is an error, not a clamp.
 fn fit_theta(
     inp: &Inputs,
@@ -398,14 +398,15 @@ fn fit_theta(
     if target.is_nan() {
         return Ok(inp.clone());
     }
-    let ones = vec![1.0; border::N_CLASSES];
+    let mut scale = vec![1.0; border::N_CLASSES];
+    scale[t.theta_class[THETA_GOOD]] = 0.0;
     let f = |theta: f64| -> Result<f64, CalibrationError> {
         let at = at_epsilon(
             &at_theta(inp, THETA_GOOD, theta)?,
             t.theta_class,
             t.ln_d,
             ln_d0,
-            &ones,
+            &scale,
             epsilon,
         )?;
         let mut nu = at.border_nu.clone();
