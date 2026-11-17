@@ -75,8 +75,8 @@ and the scaling runs its 100,000-sweep cap and errors (Mac, 1893 s, 2026-11-17).
 
 - A. Stagnation-aware stop, fits only: the evaluation the fits use (`steady::sinkhorn_plateau`,
   `data_state_spending`, `border` evaluations) ends the scaling when the residual is within
-  `PLATEAU_TOL` 1e-11 and the smallest residual has not fallen by 1% in `PLATEAU_SWEEPS` 5,000
-  sweeps; the residual is returned, not hidden. The calibration proper keeps the strict rule.
+  `PLATEAU_TOL` 1e-11 and its smallest value in a window of `PLATEAU_SWEEPS` 5,000 sweeps is not
+  under half the previous window's (the slow mode contracts 0.01 a window); the residual is returned, not hidden. The calibration proper keeps the strict rule.
   Recommended: it fixes the cause for every theta, and a share to 1e-9 needs no more than 1e-11.
 - B. Narrow the theta band to where calibrate settles: no tolerance change, but theta 9.27 sits
   next to the unstable range.

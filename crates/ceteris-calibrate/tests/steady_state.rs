@@ -482,33 +482,23 @@ fn a_plateaued_scaling_stops_where_the_strict_rule_runs_out() {
         };
     }
     let spend = Mat::from_fn(n_p, n_g, |p, g| s.spend_hh[(p, g)] + s.spend_int[(p, g)]);
-    let mut rng = Rng(3);
-    let mut start = Mat::zeros(n_p, n_g);
-    for p in 0..n_p {
-        for g in (0..n_g).filter(|&g| inp.active[p][g] && inp.traded[g]) {
-            start[(p, g)] = rng.normal(0.0, 3.0);
-        }
-    }
+    // from the solution a residual at the rounding floor is a plateau; a tolerance under it
+    // never stops the strict rule
+    let solved = steady::sinkhorn(&m, &spend, &v, None).unwrap();
     let run = |plateau| {
         steady::sinkhorn_with(
             &m,
             &spend,
             &v,
-            Some(&start),
-            4,
-            steady::Stop {
-                tol: steady::SINKHORN_TOL,
-                plateau,
-            },
+            Some(&solved.log_weight),
+            8,
+            steady::Stop { tol: 0.0, plateau },
             steady::Accel::Joint,
         )
     };
     assert!(run(None).is_err());
-    let at = run(Some((f64::INFINITY, 0))).unwrap();
-    assert!(
-        at.residual > steady::SINKHORN_TOL && at.sweeps <= 4,
-        "{at:?}"
-    );
+    let at = run(Some((1e-9, 2))).unwrap();
+    assert!(at.residual > 0.0 && at.sweeps <= 8, "{at:?}");
 }
 
 /// Stage 2: from two starts the scaling reaches the same weights up to one scale per good.

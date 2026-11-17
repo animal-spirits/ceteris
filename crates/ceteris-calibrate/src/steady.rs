@@ -79,8 +79,11 @@ pub const MAX_SWEEPS: usize = 100_000;
 /// more, and good 2's Brazil block plateaus at about 4e-13 (RFC 0355). The calibration proper
 /// keeps the strict rule.
 pub const PLATEAU_TOL: f64 = 1e-11;
-/// Sweeps without the smallest residual so far falling by 1% that make it a plateau.
+/// The window, in sweeps, over which a residual must at least halve to not be a plateau: the
+/// plain sweep contracts good 2's slowest mode by 0.99908 a sweep (a factor 0.01 a window), a
+/// plateau of rounding noise does not move.
 pub const PLATEAU_SWEEPS: usize = 5_000;
+pub const PLATEAU_FALL: f64 = 0.5;
 /// The scaling stops at this fraction of the last pass's change, within [`SINKHORN_TOL`] and
 /// [`INNER_TOL_MAX`].
 pub const INNER_PER_OUTER: f64 = 1e-2;
@@ -471,8 +474,8 @@ pub fn sinkhorn_to(
 }
 
 /// When a scaling stops: its residual within `tol`, or, for a fit, on a plateau (see
-/// [`PLATEAU_TOL`]): `(bound, sweeps)` of a residual within `bound` whose smallest value has not
-/// fallen by 1% in that many sweeps.
+/// [`PLATEAU_TOL`]): `(bound, window)` of a residual within `bound` whose smallest value in a
+/// window of that many sweeps is not under [`PLATEAU_FALL`] of the previous window's.
 #[derive(Clone, Copy, Debug)]
 pub struct Stop {
     pub tol: f64,
@@ -603,7 +606,7 @@ pub fn sinkhorn_with(
     let mut gbest = vec![f64::INFINITY; n_g];
     let mut gsince = vec![0usize; n_g];
     let mut err = f64::NAN;
-    let (mut floor, mut flat) = (f64::INFINITY, 0usize);
+    let (mut prev_min, mut window_min) = (f64::INFINITY, f64::INFINITY);
     let mut last_by_good = Vec::new();
     // the plain sweep from the last finite point, where a mixed step leaves f64
     let mut plain: Option<Vec<f64>> = None;
@@ -612,12 +615,14 @@ pub fn sinkhorn_with(
         (err, last_by_good) = (e, by_good);
         // Stalled within the gap's own rounding (`summation_depth`): no sweep can do better.
         // 1.6e-13 on the full pack with storage on, where one gateway's sums are 858 deep.
-        if err < 0.99 * floor {
-            (floor, flat) = (err, 0);
-        } else {
-            flat += 1;
+        window_min = window_min.min(err);
+        let mut plateaued = false;
+        if let Some((bound, window)) = stop.plateau {
+            if window > 0 && sweep % window == 0 {
+                plateaued = window_min <= bound && window_min >= PLATEAU_FALL * prev_min;
+                (prev_min, window_min) = (window_min, f64::INFINITY);
+            }
         }
-        let plateaued = stop.plateau.is_some_and(|(p, n)| err <= p && flat >= n);
         if err <= stop.tol || (within && since >= ANDERSON_STALL) || plateaued {
             let r = (0..n_g)
                 .map(|g| if inp.traded[g] { r[g] } else { 1.0 })
@@ -724,10 +729,13 @@ pub fn sinkhorn_with(
         .enumerate()
         .fold((0, 0.0), |m, (g, &w)| if w > m.1 { (g, w) } else { m });
     Err(format!(
-        "Sinkhorn did not converge in {max_sweeps} sweeps, residual {}, largest in good {} ({})",
+        "Sinkhorn did not converge in {max_sweeps} sweeps, residual {}, largest in good {} ({}); plateau {:?}, last windows {} {}",
         sci(err),
         at.0,
-        sci(at.1)
+        sci(at.1),
+        stop.plateau,
+        sci(prev_min),
+        sci(window_min)
     )
     .into())
 }
