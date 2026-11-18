@@ -1,10 +1,10 @@
 {
   "format": "1",
-  "static_digest": "3343f351a3970b587d879d2bfd199816bd693721df764961ffa1d959490196a9",
-  "price_index": 0.9999999999942869,
+  "static_digest": "58f9025e731af2f36fc777eeec51dd1d04b835eec34a53641b5dc66e104f4ea9",
+  "price_index": 0.9999999999942343,
   "method": "newton_krylov",
   "iterations": 6,
-  "residual": 5.421552096005061e-11,
+  "residual": 5.492184484827859e-11,
   "dropped_province": 10,
-  "dropped_residual": -1.0313058599780747e-10
+  "dropped_residual": -1.048123573331025e-10
 }
