@@ -22,6 +22,7 @@ use ceteris_reference::ppml;
 use crate::fit_cache::TrialCache;
 use crate::gravity::baci_flows;
 use crate::json::Json;
+use crate::run_log::{RunLog, trial_json};
 use crate::write::Table;
 
 use crate::border::{self, Brent, Fit};
@@ -612,7 +613,7 @@ pub fn fit_epsilon_cached(
     cache: Option<&Path>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<EpsilonFit, CalibrationError> {
-    fit_epsilon_inner(inp, t, limits, cache, None, progress)
+    fit_epsilon_inner(inp, t, limits, cache, None, None, progress)
 }
 
 /// One trial at the given `epsilon`, no search: nu, `d_0` and s_c fitted there, the pooled and
@@ -626,7 +627,27 @@ pub fn fit_epsilon_at(
     cache: Option<&Path>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<EpsilonFit, CalibrationError> {
-    fit_epsilon_inner(inp, t, limits, cache, Some(epsilon), progress)
+    fit_epsilon_inner(inp, t, limits, cache, Some(epsilon), None, progress)
+}
+
+/// [`fit_epsilon_cached`], or [`fit_epsilon_at`] with `fixed`, writing a checkpoint per trial to
+/// `log`; the result is bit-identical.
+pub fn fit_epsilon_logged(
+    inp: &Inputs,
+    t: &Targets,
+    limits: Limits,
+    cache: Option<&Path>,
+    fixed: Option<f64>,
+    log: &RunLog,
+    progress: &mut dyn FnMut(&str),
+) -> Result<EpsilonFit, CalibrationError> {
+    fit_epsilon_inner(inp, t, limits, cache, fixed, Some(log), progress)
+}
+
+struct Computed {
+    lines: Vec<String>,
+    result: Result<Option<Trial>, CalibrationError>,
+    cached: bool,
 }
 
 fn fit_epsilon_inner(
@@ -635,6 +656,7 @@ fn fit_epsilon_inner(
     limits: Limits,
     cache: Option<&Path>,
     fixed: Option<f64>,
+    log: Option<&RunLog>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<EpsilonFit, CalibrationError> {
     let cache = cache.map(|dir| TrialCache::new(dir, inp, t, limits));
@@ -648,30 +670,58 @@ fn fit_epsilon_inner(
     let mut evaluations = 0;
     // A trial where no nu reaches a group's target share (its share at NU_MAX is still above
     // it) has too little distance cost: None, and f counts as the data's magnitude above.
-    let mut run = |eps: f64| -> Result<Option<Trial>, CalibrationError> {
-        evaluations += 1;
+    // Computing a trial touches nothing shared, so two can run at once; `commit` then applies
+    // their progress lines, cache store and log checkpoint in the sequential order.
+    let compute = |eps: f64| -> Computed {
         if let Some(hit) = cache.as_ref().and_then(|c| c.load(eps)) {
-            progress(&format!("epsilon {eps}: trial from the cache"));
-            return Ok(hit);
+            return Computed {
+                lines: vec![format!("epsilon {eps}: trial from the cache")],
+                result: Ok(hit),
+                cached: true,
+            };
         }
-        let result = match trial(inp, t, eps, limits, progress) {
+        let mut lines = vec![];
+        let result = match trial(inp, t, eps, limits, &mut |l| lines.push(l.to_string())) {
             Ok(r) => {
-                progress(&format!(
+                lines.push(format!(
                     "epsilon {eps}: pooled distance coefficient {} against the data's {data_pooled}",
                     r.pooled
                 ));
                 Ok(Some(r))
             }
             Err(CalibrationError::Failed(e)) if e.contains("outside the model's") => {
-                progress(&format!(
+                lines.push(format!(
                     "epsilon {eps}: no nu reaches the target shares: {e}"
                 ));
                 Ok(None)
             }
             Err(e) => Err(e),
-        }?;
+        };
+        Computed {
+            lines,
+            result,
+            cached: false,
+        }
+    };
+    let mut commit = |eps: f64, c: Computed| -> Result<Option<Trial>, CalibrationError> {
+        evaluations += 1;
+        for l in &c.lines {
+            progress(l);
+        }
+        let result = c.result?;
+        if c.cached {
+            return Ok(result);
+        }
         if let Some(c) = &cache {
             c.store(eps, &result)?;
+        }
+        if let Some(l) = log {
+            l.checkpoint(
+                "trial",
+                result
+                    .as_ref()
+                    .map_or(Json::Null, |r| trial_json(r, data_pooled)),
+            );
         }
         Ok(result)
     };
@@ -679,10 +729,18 @@ fn fit_epsilon_inner(
         r.as_ref()
             .map_or(data_pooled.abs(), |r| r.pooled - data_pooled)
     };
-    let zero = if fixed.is_some() { None } else { run(0.0)? };
+    // The two ends of the bracket are independent; the top is committed only if the search
+    // reaches it, so a wasted top trial leaves no trace.
+    let (zero, mut top_ahead) = match fixed {
+        Some(_) => (None, None),
+        None => {
+            let (z, h) = rayon::join(|| compute(0.0), || compute(EPSILON_MAX));
+            (commit(0.0, z)?, Some(h))
+        }
+    };
     let f_lo = f_of(&zero);
     let (best, at_zero) = if let Some(eps) = fixed {
-        let r = run(eps)?;
+        let r = commit(eps, compute(eps))?;
         (
             r.ok_or_else(|| format!("no nu reaches the target shares at epsilon {eps}"))?,
             false,
@@ -690,7 +748,10 @@ fn fit_epsilon_inner(
     } else if f_lo <= 0.0 {
         (zero.expect("a trial at f <= 0"), true)
     } else {
-        let top = run(EPSILON_MAX)?;
+        let top = commit(
+            EPSILON_MAX,
+            top_ahead.take().expect("computed with the zero"),
+        )?;
         let f_hi = f_of(&top);
         if f_hi > 0.0 {
             return Err(format!(
@@ -701,7 +762,7 @@ fn fit_epsilon_inner(
         let mut brent = Brent::new(0.0, f_lo, EPSILON_MAX, f_hi);
         let mut last = top;
         while let Some(x) = brent.next(EPSILON_TOL) {
-            let r = run(x)?;
+            let r = commit(x, compute(x))?;
             brent.update(f_of(&r));
             if r.is_some() {
                 last = r;
@@ -709,7 +770,7 @@ fn fit_epsilon_inner(
         }
         let root = brent.root();
         if last.as_ref().map(|r| r.epsilon) != Some(root) {
-            last = run(root)?;
+            last = commit(root, compute(root))?;
         }
         (
             last.ok_or_else(|| format!("no nu reaches the target shares at epsilon {root}"))?,

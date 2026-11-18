@@ -131,23 +131,26 @@ gate item 3 compares impulse responses given matched intertemporal MPCs (P37).
 
 ## System order
 
-System IDs 230 to 249 are proposed for money (econ 201 to 210, pop 220 to 229); Branch A confirms
-them against the registry. Cadence is monthly unless noted; finance runs after the real economy of
-the tick (E4) and population, and before the next tick's E1.
+System IDs 230 to 249 are money's block (econ 201 to 210, pop 220 to 229). An ID is part of every
+RNG stream address and a hash domain: once a system runs under an ID it keeps it (ADR 0383).
+Schedule order is the order of the `schedule()` list, not ID order. Cadence is monthly unless
+noted; finance runs after the real economy of the tick (E4) and population, and before the next tick's E1.
 
 | System ID | Name | Cadence | Reads | Writes | Position |
 |---|---|---|---|---|---|
 | 230 | policy and regimes | monthly | pi, y, reserves, r* | policy rate, regime | after 228 |
-| 231 | r* filter (B3) | yearly | pi, y, i | filter state | after 230 |
+| 231 | (unassigned; the r* filter (B3) runs inside 230, ADR 0383) | | | | |
 | 232 | fiscal collection and spending | monthly | Base, kappa, rules, pop accounts | government ledger account, pop accounts, kappa, K_g (corporate tax: E4 writes the profit pools and the government account) | after 230 |
-| 233 | investment financing | monthly | orders, credit | pipeline, loans | after 232 |
-| 234 | demand-system clearing | monthly | holdings, eta, expectations | P, Q, FX | after 233 |
-| 235 | banks and contagion | monthly, inside 234's loop | B, P | bank books, runs | with 234 |
-| 236 | housing | monthly | income, credit | prices, mortgages | after 234 |
-| 237 | sovereign debt | monthly | fiscal, spreads | debt, default, restructuring | after 234 |
+| 233 | energy policy (C3, ADR 0278) | monthly | prices, wedges | government account, pop accounts | after 232 |
+| 234 | investment (D1, capital pipeline) | monthly | orders | pipeline, K | after 233 |
+| 235 | banks and contagion | monthly, inside 242's loop | B, P | bank books, runs | with 242 |
+| 236 | housing | monthly | income, credit | prices, mortgages | after 242 |
+| 237 | sovereign debt | monthly | fiscal, spreads | debt, default, restructuring | after 242 |
 | 238 | flows and risk appetite | monthly | all | positions, risk state | after 237 |
 | 239 | services trade | monthly | incomes | traded services | after 238 |
 | 240 | SFC assert | monthly | all | | last |
+| 241 | investment financing | monthly | orders, credit | pipeline, loans | after 234 |
+| 242 | demand-system clearing | monthly | holdings, eta, expectations | P, Q, FX | after 241 |
 
 RNG: only risk-appetite innovations, run thresholds and hazards; each draws from the stream of
 its system ID and logs to the event log, with the thinning primitive of P3 so branches share
@@ -227,4 +230,4 @@ demand system collapses to Koijen and Yogo (2019, 2020).
 - Build order inside P5a (plan O2): default balance sheets first, Branch E before any re-bless.
 - Whether the 19.2 finance budget fits next to the 45-goods tick (about 200 ms against 160 ms
   budget in the last measurement); unmeasured, so Branch A reports it first.
-- The system ID block 230 to 249 is a proposal until Branch A checks the registry.
+- The system ID block 230 to 249 is confirmed against the registry (ADR 0383).

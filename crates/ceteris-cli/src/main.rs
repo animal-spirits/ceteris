@@ -1178,6 +1178,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
                         fit_cache.as_deref(),
                         None,
                         limits,
+                        None,
                         &mut progress,
                     )?
                     else {
@@ -1265,9 +1266,12 @@ fn run_epsilon_fit(
     cache: Option<&Path>,
     fixed: Option<f64>,
     limits: Limits,
+    log: Option<&ceteris_calibrate::run_log::RunLog>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<Option<(ceteris_calibrate::epsilon::EpsilonFit, Vec<f64>)>, String> {
-    use ceteris_calibrate::epsilon::{Targets, fit_epsilon_at, fit_epsilon_cached, pack_data};
+    use ceteris_calibrate::epsilon::{
+        Targets, fit_epsilon_at, fit_epsilon_cached, fit_epsilon_logged, pack_data,
+    };
     let n_traded = inp.traded.iter().filter(|&&t| t).count();
     let theta_class = &inp.theta_class[..n_traded];
     let groups = border::friction_groups(theta_class);
@@ -1283,14 +1287,22 @@ fn run_epsilon_fit(
         gravity: &data.gravity,
         data_flows: &data.data_flows,
     };
-    let fit = match fixed {
-        Some(e) => fit_epsilon_at(inp, &t, e, limits, cache, progress),
-        None => fit_epsilon_cached(inp, &t, limits, cache, progress),
+    let fit = match (log, fixed) {
+        (Some(l), _) => fit_epsilon_logged(inp, &t, limits, cache, fixed, l, progress),
+        (None, Some(e)) => fit_epsilon_at(inp, &t, e, limits, cache, progress),
+        (None, None) => fit_epsilon_cached(inp, &t, limits, cache, progress),
     };
     match fit {
         Ok(fit) => Ok(Some((fit, data.ln_d))),
         Err(e) => {
             eprintln!("no epsilon fit: {e}");
+            if let Some(l) = log {
+                l.finish(
+                    false,
+                    ceteris_calibrate::json::Json::Null,
+                    &[format!("no epsilon fit: {e}")],
+                );
+            }
             Ok(None)
         }
     }
@@ -1306,14 +1318,29 @@ fn fit_epsilon_driver(
     fixed: Option<f64>,
 ) -> Result<ExitCode, String> {
     let mut progress = |line: &str| println!("{line}");
-    let Some((fit, _)) =
-        run_epsilon_fit(inp, pack, cache, fixed, Limits::default(), &mut progress)?
+    let log = ceteris_calibrate::run_log::RunLog::new(out)?;
+    let Some((fit, _)) = run_epsilon_fit(
+        inp,
+        pack,
+        cache,
+        fixed,
+        Limits::default(),
+        Some(&log),
+        &mut progress,
+    )
+    .inspect_err(|e| {
+        log.finish(
+            false,
+            ceteris_calibrate::json::Json::Null,
+            std::slice::from_ref(e),
+        )
+    })?
     else {
         return Ok(ExitCode::FAILURE);
     };
     let json = fit.json().pretty();
     println!("{json}");
-    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    log.finish(true, fit.json(), &[]);
     let file = out.join("epsilon.json");
     std::fs::write(&file, json).map_err(|e| format!("{}: {e}", file.display()))?;
     println!("wrote {}", file.display());

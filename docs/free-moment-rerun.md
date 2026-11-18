@@ -2,7 +2,7 @@
 
 The pack runs behind the 12 November retrospective's first action and specs/p5/PLAN.md tasks E1
 to E3. Every command runs from the repository root in release, detached under `caffeinate -imsu`,
-logs in `~/ceteris-logs/`. Each column of the result table is one setting of
+logs in `~/ceteris-logs/`. To be told when a run ends, call `scripts/notify.sh` on exit (`docs/dev-tooling.md`). Each column of the result table is one setting of
 `CETERIS_PRICE_ANCHOR`: `off` (status quo), `e1` (anchored rule, ADRs 0338, 0340) and `e3`
 (ADR 0343's package). `ceteris run --price-anchor` takes the same names.
 

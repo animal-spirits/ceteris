@@ -370,4 +370,5 @@ Generated from [rows.toml](rows.toml); edit the registry, not this table.
 | 0380 | [The 1.0 Steam app ships on macOS and Linux (x86_64 and aarch64); Windows runs only the cross-platform golden test](../rfcs/0334-linux-app-for-the-steam-release.md) | 19.1 |
 | 0381 | [A scenario edit carries an optional op, set (the default) or mul; with mul the value is a factor on the target's value at the edit's tick, and op enters the run hash only when it is mul](../rfcs/0358-relative-edits.md) | 14.2 |
 | 0382 | [Multiply edits are accepted for parameters (econ.*, trade.*, trade.border_nu.<good>) and non-tariff barriers (ntb.*); tariff, state and switch edits reject them](../rfcs/0358-relative-edits.md) | 14.2 |
+| 0383 | [Money system IDs follow the code: 233 is energy policy and 234 is investment, the r* filter runs inside 230 and 231 stays unassigned, and investment financing and demand-system clearing take 241 and 242; a system ID is a hash domain and changes only by RFC](../rfcs/0359-money-system-ids.md) | 9 |
 <!-- rows:end -->
