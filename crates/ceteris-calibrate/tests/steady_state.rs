@@ -1430,7 +1430,9 @@ fn per_good_fit_clamps_one_good_of_class_3() {
     let icio = vec![true; inp.n_countries()];
     let groups = border::friction_groups(&traded_classes(&inp));
     let at_zero = shares_at(&inp, &groups, &[0.0; 5], &icio);
-    let mut target = shares_at(&inp, &groups, &[0.3; 5], &icio);
+    // the others' targets are read with the clamped group at nu 0 too: spending depends on every
+    // group's nu (#623), so targets made with it at 0.3 would not be the fit's fixed point
+    let mut target = shares_at(&inp, &groups, &[0.3, 0.3, 0.3, 0.3, 0.0], &icio);
     target[4] = 0.5 * (1.0 + at_zero[4]);
 
     let fit = border::fit_border_nu(
@@ -1452,7 +1454,6 @@ fn per_good_fit_clamps_one_good_of_class_3() {
     );
     for (k, t) in target.iter().enumerate().take(4) {
         assert!((fit.share[k] / t - 1.0).abs() <= 1e-6, "group {k}: {fit:?}");
-        // good 2 at nu 0, not the targets' 0.3, moves the spending the others are fitted at
         assert!((fit.nu[k] - 0.3).abs() <= 1e-5 * 0.3, "group {k}: {fit:?}");
     }
 }
