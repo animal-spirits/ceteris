@@ -535,6 +535,7 @@ fn concurrent_end_trials_match_sequential() {
     let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
     let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
     let t = Targets {
+        theta_fit: false,
         nu_target: &nu_target,
         icio: &w.icio,
         theta_class: &w.class,
