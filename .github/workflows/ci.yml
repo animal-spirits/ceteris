@@ -43,6 +43,13 @@ jobs:
           echo "CARGO_INCREMENTAL=0" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@v2
         if: runner.environment == 'github-hosted'
+      - uses: mozilla-actions/sccache-action@v0.0.9
+        if: runner.environment == 'github-hosted'
+      - name: Compile through sccache (hosted)
+        if: runner.environment == 'github-hosted'
+        run: |
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
       # Golden drift fails here, before the slower lint and test steps; the later nextest run skips it.
       - uses: taiki-e/install-action@v2
         with:
@@ -56,7 +63,7 @@ jobs:
       - name: Determinism bans still fire (ADR 0097)
         run: scripts/check_clippy_bans.sh
       - run: cargo deny check licenses
-      - run: cargo nextest run --workspace --no-fail-fast -E 'not binary(golden)'
+      - run: cargo nextest run --profile ci --workspace -E 'not binary(golden)'
       - run: cargo test --workspace --doc
       - name: Determinism gate in optimized builds
         if: github.event_name == 'push'
