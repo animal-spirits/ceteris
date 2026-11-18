@@ -1,6 +1,6 @@
 # RFC 0360. Epsilon search by a fixed parallel grid, with typed infeasibility
 
-Status: proposed
+Status: accepted
 Date: 2026-11-18
 Design sections: 15 (calibration), 17.1; ADRs 0092, 0272, 0353, 0373, 0376
 Release: 1.0 (P4)
@@ -53,8 +53,8 @@ Options:
 Recommendation: A, because it is the only option that turns idle cores into wall-clock, and a
 grid also exposes non-monotone f (D4), which Brent hides.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-18 (question card, epsilon grid RFC thread).
+Row: ADR 0384.
 
 ### D2. How many points per round?
 
@@ -73,8 +73,8 @@ Options:
 Recommendation: A, because the target host is 16+ vCPU and three waves is the minimum for
 1e-3 at any practical size; on a smaller host A is still correct, just two batches per wave.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-18 (question card, epsilon grid RFC thread).
+Row: ADR 0385.
 
 ### D3. Which epsilon is reported?
 
@@ -89,8 +89,8 @@ Options:
 Recommendation: A, because the reported epsilon is always a computed trial and the tolerance
 is met without a fourth wave.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-18 (question card, epsilon grid RFC thread).
+Row: ADR 0386.
 
 ### D4. What do sign changes and infeasible points do?
 
@@ -109,8 +109,8 @@ is a model-structure question for RFC 0355, and B would hide it behind a fitted 
 silent clamp under the calibration rule (2026-11-16). B also brackets across a dropped point
 whose f is unknown.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-18 (question card, epsilon grid RFC thread).
+Row: ADR 0387.
 
 ### D5. How is the work sequenced?
 
@@ -126,8 +126,8 @@ Recommendation: A, because the development laws put Right before Fast, the bug f
 the search outcome today with Brent, and the grid is not bit-identical so it needs its own
 measurement.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-18 (question card, epsilon grid RFC thread).
+Row: none (sequencing; no spec row).
 
 ## Determinism
 
@@ -199,13 +199,12 @@ PR 2 (grid):
 
 ## Spec changes
 
-Once accepted, in the PR that takes the rows:
+Written in this PR (ADRs 0384 to 0387):
 
-- ADR 0272 Decision 3: "epsilon by Brent" becomes "epsilon by a fixed k-section grid (RFC 0360)".
-- Section 15 / econ SPEC calibration: the epsilon search, grid size, reported point, and the
-  typed infeasibility and non-monotone errors.
-- Section 17: the grid size and `EPSILON_TOL` as calibration constants, with codes from
-  `next-code P`.
+- 17: new register entry P180, the epsilon search grid, its size, `EPSILON_TOL`, the reported
+  point and the infeasibility and non-monotone errors.
+- ADR 0272 Decision 3 ("epsilon by Brent") is amended by ADR 0384; the RFC 0272 file stays as
+  a record.
 
 ## Effects
 
