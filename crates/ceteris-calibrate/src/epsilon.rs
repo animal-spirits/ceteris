@@ -39,6 +39,8 @@ pub const THETA_GOOD: usize = 2;
 /// The band theta of [`THETA_GOOD`] is searched in: the Mining estimate 13.53 plus or minus two
 /// s.e. (3.67, ADR 0023).
 pub const THETA_BAND: (f64, f64) = (6.2, 20.9);
+/// theta_2 moves less than this between refits: settled.
+const THETA_SETTLE: f64 = 1e-4;
 const THETA_TOL: f64 = 1e-6;
 const THETA_ROUNDS: usize = 100;
 const SCALE_ROUNDS: usize = 100;
@@ -380,13 +382,18 @@ pub fn at_theta(inp: &Inputs, g: usize, theta: f64) -> Result<Inputs, String> {
 }
 
 /// `inp` at the theta of [`THETA_GOOD`] whose group's cross-border share at nu 0, at `epsilon`
-/// with the good's class at scale 0 (no distance cost of its own; the other classes still move its prices) and `ln_d0`, meets its target, found by Brent's method in [`THETA_BAND`]; the
-/// share falls as theta rises. A target the band cannot reach is an error, not a clamp.
+/// with the good's class at scale 0 (no distance cost of its own; the other classes still move its
+/// prices at their `scale` and `nu`) and `ln_d0`, meets its target, found by Brent's method in
+/// [`THETA_BAND`]; the share falls as theta rises. A target the band cannot reach is an error, not
+/// a clamp.
+#[allow(clippy::too_many_arguments)]
 fn fit_theta(
     inp: &Inputs,
     t: &Targets,
     epsilon: f64,
     ln_d0: &[f64],
+    scale: &[f64],
+    nu_of: &[f64],
     limits: Limits,
 ) -> Result<Inputs, CalibrationError> {
     let groups = border::friction_groups(t.theta_class);
@@ -398,7 +405,7 @@ fn fit_theta(
     if target.is_nan() {
         return Ok(inp.clone());
     }
-    let mut scale = vec![1.0; border::N_CLASSES];
+    let mut scale = scale.to_vec();
     scale[t.theta_class[THETA_GOOD]] = 0.0;
     let f = |theta: f64| -> Result<f64, CalibrationError> {
         let at = at_epsilon(
@@ -409,7 +416,7 @@ fn fit_theta(
             &scale,
             epsilon,
         )?;
-        let mut nu = at.border_nu.clone();
+        let mut nu = nu_of.to_vec();
         for &g in &groups[k] {
             nu[g] = 0.0;
         }
@@ -452,18 +459,25 @@ fn trial(
 ) -> Result<Trial, CalibrationError> {
     let groups = border::friction_groups(t.theta_class);
     let (mean, min) = class_offsets(inp, t.theta_class, t.ln_d, t.weight);
-    let fitted;
-    let inp = if t.theta_fit && epsilon > 0.0 {
-        // good 2 is held at nu 0, where `(1 + nu) D >= 1` needs the class's d_0 at its smallest
-        // linked distance: the one the trial floors to
-        let mut at_floor = mean.clone();
-        at_floor[t.theta_class[THETA_GOOD]] = min[t.theta_class[THETA_GOOD]];
-        fitted = fit_theta(inp, t, epsilon, &at_floor, limits)?;
-        &fitted
+    // good 2 is held at nu 0, where `(1 + nu) D >= 1` needs the class's d_0 at its smallest
+    // linked distance: the one the trial floors to
+    let mut at_floor = mean.clone();
+    at_floor[t.theta_class[THETA_GOOD]] = min[t.theta_class[THETA_GOOD]];
+    let refit_theta = t.theta_fit && epsilon > 0.0;
+    let mut inp = if refit_theta {
+        fit_theta(
+            inp,
+            t,
+            epsilon,
+            &at_floor,
+            &[1.0; border::N_CLASSES],
+            &inp.border_nu,
+            limits,
+        )?
     } else {
-        inp
+        inp.clone()
     };
-    let theta2 = inp.theta[THETA_GOOD];
+    let inp = &mut inp;
     let mut ln_d0 = mean;
     let mut floored: Vec<usize> = vec![];
     let mut scale = vec![1.0; border::N_CLASSES];
@@ -475,6 +489,24 @@ fn trial(
         let nu = fit.nu_of_goods(&at.border_nu);
         let bad = product_misses(inp, t.theta_class, t.ln_d, &ln_d0, &scale, epsilon, &nu);
         if bad.is_empty() {
+            // theta_2 was fitted before the other classes' s_c and nu were known; refit it at
+            // the current state so its share at nu 0 meets the target there too
+            if refit_theta {
+                let refit = fit_theta(inp, t, epsilon, &at_floor, &scale, &nu, limits)?;
+                let moved = (refit.theta[THETA_GOOD] - inp.theta[THETA_GOOD]).abs() > THETA_SETTLE;
+                progress(&format!(
+                    "epsilon {epsilon}: theta_2 {} at the current scales",
+                    refit.theta[THETA_GOOD]
+                ));
+                if moved {
+                    *inp = refit;
+                    passes += 1;
+                    if passes > SCALE_PASSES {
+                        return Err("theta_2 and the epsilon scales did not settle".into());
+                    }
+                    continue;
+                }
+            }
             // A class with groups pinned at nu 0 takes its own s_c (ADR 0376), solved on the
             // pinned groups pooled, so a per-good class has one s_c too. s_c is re-solved at the
             // refitted nu of the other groups until it settles.
@@ -534,7 +566,7 @@ fn trial(
                 .collect::<Result<Vec<_>, String>>()?;
             return Ok(Trial {
                 epsilon,
-                theta2,
+                theta2: inp.theta[THETA_GOOD],
                 fit,
                 ln_d0,
                 floored,

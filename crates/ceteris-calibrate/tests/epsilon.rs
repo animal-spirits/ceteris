@@ -374,10 +374,7 @@ fn good_2_theta_is_fitted_jointly_with_epsilon() {
         &mut quiet(),
     )
     .unwrap();
-    // theta is fitted with the other classes at the inputs' border frictions, and spending
-    // depends on nu (#623): the targets' frictions leave 3e-3 of theta, which the Mac fit shows
-    // whether it matters (owner: this thread's follow-up if it does)
-    assert!((on.theta2 - truth).abs() <= 1e-2, "theta {}", on.theta2);
+    assert!((on.theta2 - truth).abs() <= 1e-3, "theta {}", on.theta2);
     assert!(on.fit.nu[3] < 1e-4, "{:?}", on.fit.nu);
     // off, the starting theta absorbs the mismatch in a border friction the targets never had
     let off = epsilon::fit_at_epsilon(
@@ -390,6 +387,32 @@ fn good_2_theta_is_fitted_jointly_with_epsilon() {
     .unwrap();
     assert_eq!(off.theta2, start.inp.theta[epsilon::THETA_GOOD]);
     assert!(off.fit.nu[3] > 1e-2, "{:?}", off.fit.nu);
+}
+
+/// theta_2 is fitted at the other classes' settled s_c and nu, not at s_c = 1: targets made at
+/// theta 11 with class 1 clamped (s_c 0.5) return 11, and class 3 meets its share at nu 0.
+#[test]
+fn good_2_theta_is_refitted_at_the_settled_epsilon_scales() {
+    let (truth, start) = (11.0, world());
+    let mut w = world();
+    w.inp = epsilon::at_theta(&start.inp, epsilon::THETA_GOOD, truth).unwrap();
+    let nu_group = [0.15, 0.0, 0.35, 0.0, 0.5];
+    let (nu_target, data_flows) = known_scaled(&w, 0.4, &[1.0, 0.5, 1.0, 0.0, 1.0], &nu_group);
+    let weight = trade_weight(&start.inp);
+    let t = Targets {
+        theta_fit: true,
+        nu_target: &nu_target,
+        icio: &start.icio,
+        theta_class: &start.class,
+        ln_d: &start.ln_d,
+        weight: &weight,
+        gravity: &start.gravity,
+        data_flows: &data_flows,
+    };
+    let tr = epsilon::fit_at_epsilon(&start.inp, &t, 0.4, Limits::default(), &mut quiet()).unwrap();
+    assert!(tr.scale[1] < 1.0, "{:?}", tr.scale);
+    assert!((tr.theta2 - truth).abs() <= 1e-3, "theta {}", tr.theta2);
+    assert!(tr.fit.nu[3] < 1e-4, "{:?}", tr.fit.nu);
 }
 
 /// Issues #619, #622: with the other classes' distance cost on (their buyer prices move), good 2

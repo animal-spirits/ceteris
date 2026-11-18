@@ -85,6 +85,15 @@ and the scaling runs its 100,000-sweep cap and errors (Mac, 1893 s, 2026-11-17).
   next to the unstable range.
 - C. Stop and treat it as a structure issue.
 
+### D5. At which state is theta_2 fitted? (decided: refit inside the scale loop, Antonio 2026-11-18)
+
+The first joint fit evaluated good 2's share with the other classes at s_c 1 and their starting nu.
+The trial then refits those, which moves good 2's prices, and the Mac refit on 6f4b048 (9 h 11 min)
+ended with class 3 0.00093 short of its target at scale 0, theta_2 strictly inside the band.
+theta_2 is now refitted, in every pass of the trial's scale loop, at the current s_c and nu of the
+other classes, until it moves less than 1e-4. Test: targets made with class 1 clamped return theta_2
+to 1e-3 and class 3 meets its share at nu 0.
+
 ## Consequences
 
 - N_CLASSES 5; `theta_class` [2, 4, 3, 0, 2, 0, 1, ...]; bulk freight rates apply to classes 3 and 4.
