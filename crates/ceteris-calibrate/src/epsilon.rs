@@ -22,6 +22,7 @@ use ceteris_reference::ppml;
 use crate::fit_cache::TrialCache;
 use crate::gravity::baci_flows;
 use crate::json::Json;
+use crate::run_log::{RunLog, trial_json};
 use crate::write::Table;
 
 use crate::border::{self, Brent, Fit};
@@ -486,7 +487,7 @@ pub fn fit_epsilon_cached(
     cache: Option<&Path>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<EpsilonFit, CalibrationError> {
-    fit_epsilon_inner(inp, t, limits, cache, None, progress)
+    fit_epsilon_inner(inp, t, limits, cache, None, None, progress)
 }
 
 /// One trial at the given `epsilon`, no search: nu, `d_0` and s_c fitted there, the pooled and
@@ -500,7 +501,21 @@ pub fn fit_epsilon_at(
     cache: Option<&Path>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<EpsilonFit, CalibrationError> {
-    fit_epsilon_inner(inp, t, limits, cache, Some(epsilon), progress)
+    fit_epsilon_inner(inp, t, limits, cache, Some(epsilon), None, progress)
+}
+
+/// [`fit_epsilon_cached`], or [`fit_epsilon_at`] with `fixed`, writing a checkpoint per trial to
+/// `log`; the result is bit-identical.
+pub fn fit_epsilon_logged(
+    inp: &Inputs,
+    t: &Targets,
+    limits: Limits,
+    cache: Option<&Path>,
+    fixed: Option<f64>,
+    log: &RunLog,
+    progress: &mut dyn FnMut(&str),
+) -> Result<EpsilonFit, CalibrationError> {
+    fit_epsilon_inner(inp, t, limits, cache, fixed, Some(log), progress)
 }
 
 fn fit_epsilon_inner(
@@ -509,6 +524,7 @@ fn fit_epsilon_inner(
     limits: Limits,
     cache: Option<&Path>,
     fixed: Option<f64>,
+    log: Option<&RunLog>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<EpsilonFit, CalibrationError> {
     let cache = cache.map(|dir| TrialCache::new(dir, inp, t, limits));
@@ -546,6 +562,14 @@ fn fit_epsilon_inner(
         }?;
         if let Some(c) = &cache {
             c.store(eps, &result)?;
+        }
+        if let Some(l) = log {
+            l.checkpoint(
+                "trial",
+                result
+                    .as_ref()
+                    .map_or(Json::Null, |r| trial_json(r, data_pooled)),
+            );
         }
         Ok(result)
     };
