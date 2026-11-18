@@ -1830,3 +1830,23 @@ sections = "14.2"
 rows = "0383"
 topic = "[Money system IDs follow the code: 233 is energy policy and 234 is investment, the r* filter runs inside 230 and 231 stays unassigned, and investment financing and demand-system clearing take 241 and 242; a system ID is a hash domain and changes only by RFC](../rfcs/0359-money-system-ids.md)"
 sections = "9"
+
+[[entry]]
+rows = "0384"
+topic = "[epsilon is fitted by a k-section grid instead of Brent: each round evaluates points fixed by the bracket alone, in parallel, and keeps the sub-interval where f changes sign; trials are committed in ascending epsilon so the fit is bit-identical across thread counts (amends ADR 0272 Decision 3)](../rfcs/0360-epsilon-grid-search.md)"
+sections = "17"
+
+[[entry]]
+rows = "0385"
+topic = "[The epsilon grid has 15 interior points per round (P180), a constant never derived from the host; round 1 is 16 points 2i/15 with both ends, and three rounds reach EPSILON_TOL](../rfcs/0360-epsilon-grid-search.md)"
+sections = "17"
+
+[[entry]]
+rows = "0386"
+topic = "[The fitted epsilon is the grid point bracketing the last round's sign change with the smaller |f|, ties to the lower epsilon; no extra trial](../rfcs/0360-epsilon-grid-search.md)"
+sections = "17"
+
+[[entry]]
+rows = "0387"
+topic = "[In the epsilon fit a share above target at nu's upper end scores as too little cost; a share short of target at zero friction (nu 0 or scale 0) is a typed error naming the class or group and epsilon, never a sign; more than one sign change in a round is a non-monotone error](../rfcs/0360-epsilon-grid-search.md)"
+sections = "17"
