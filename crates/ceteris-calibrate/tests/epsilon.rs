@@ -464,3 +464,39 @@ fn the_fits_data_state_is_the_calibrated_state() {
         "pooled {a} at the fit's state, {b} calibrated"
     );
 }
+
+/// The bracket's two end trials run concurrently; the fit, its progress lines and its journal
+/// are bit-identical to one run on a single thread, where they run in sequence.
+#[test]
+fn concurrent_end_trials_match_sequential() {
+    let w = world();
+    let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
+    let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
+    let t = Targets {
+        nu_target: &nu_target,
+        icio: &w.icio,
+        theta_class: &w.class,
+        ln_d: &w.ln_d,
+        weight: &trade_weight(&w.inp),
+        gravity: &w.gravity,
+        data_flows: &data_flows,
+    };
+    let run = |threads: usize| {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        let mut lines = vec![];
+        let fit = pool
+            .install(|| {
+                epsilon::fit_epsilon(&w.inp, &t, Limits::default(), &mut |l| {
+                    lines.push(l.to_string());
+                })
+            })
+            .unwrap();
+        (fit.json().compact(), fit.evaluations, lines)
+    };
+    let sequential = run(1);
+    assert_eq!(run(4), sequential);
+    assert_eq!(run(2), sequential);
+}
