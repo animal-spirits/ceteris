@@ -1,0 +1,13 @@
+# Local runs: `cargo nextest run` (default profile, no retries, so flakes show up).
+# CI runs: `cargo nextest run --profile ci`; a test that passes on retry is reported FLAKY.
+
+[profile.ci]
+retries = 2
+fail-fast = false
+status-level = "retry"
+final-status-level = "flaky"
+
+# Golden and acceptance results are deterministic; a retry would only hide a real drift.
+[[profile.ci.overrides]]
+filter = "binary(golden) | binary(p0_acceptance) | binary(p2_acceptance)"
+retries = 0
