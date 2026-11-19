@@ -94,6 +94,12 @@ theta_2 is now refitted, in every pass of the trial's scale loop, at the current
 other classes, until it moves less than 1e-4. Test: targets made with class 1 clamped return theta_2
 to 1e-3 and class 3 meets its share at nu 0.
 
+The refit with D5 as first written (8f16633) still missed class 3 by 0.0019 (Mac, 11 h 7 min). A
+single trial at epsilon 2 printed the miss by both routes: +2e-9 with the d_0 the theta fit used,
+-1.87e-3 with the d_0 the trial holds. The theta fit left the other classes' d_0 at their mean
+where the trial had floored them. The refit now uses the trial's d_0 (class 3 is at scale 0, so its
+own d_0 does not enter).
+
 ## Consequences
 
 - N_CLASSES 5; `theta_class` [2, 4, 3, 0, 2, 0, 1, ...]; bulk freight rates apply to classes 3 and 4.

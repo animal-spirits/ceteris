@@ -389,15 +389,17 @@ fn good_2_theta_is_fitted_jointly_with_epsilon() {
     assert!(off.fit.nu[3] > 1e-2, "{:?}", off.fit.nu);
 }
 
-/// theta_2 is fitted at the other classes' settled s_c and nu, not at s_c = 1: targets made at
-/// theta 11 with class 1 clamped (s_c 0.5) return 11, and class 3 meets its share at nu 0.
+/// theta_2 is fitted at the other classes' settled s_c, nu and d_0, not at s_c = 1 and the mean
+/// d_0: targets made at theta 11 with classes 0 and 1 clamped (s_c 0.5, d_0 floored) return 11, and
+/// class 3 meets its share at nu 0 (the Mac refit missed it by 0.0019 with the other classes'
+/// floors unseen by the theta fit).
 #[test]
 fn good_2_theta_is_refitted_at_the_settled_epsilon_scales() {
     let (truth, start) = (11.0, world());
     let mut w = world();
     w.inp = epsilon::at_theta(&start.inp, epsilon::THETA_GOOD, truth).unwrap();
-    let nu_group = [0.15, 0.0, 0.35, 0.0, 0.5];
-    let (nu_target, data_flows) = known_scaled(&w, 0.4, &[1.0, 0.5, 1.0, 0.0, 1.0], &nu_group);
+    let nu_group = [0.0, 0.0, 0.35, 0.0, 0.5];
+    let (nu_target, data_flows) = known_scaled(&w, 0.4, &[0.5, 0.5, 1.0, 0.0, 1.0], &nu_group);
     let weight = trade_weight(&start.inp);
     let t = Targets {
         theta_fit: true,
@@ -410,7 +412,7 @@ fn good_2_theta_is_refitted_at_the_settled_epsilon_scales() {
         data_flows: &data_flows,
     };
     let tr = epsilon::fit_at_epsilon(&start.inp, &t, 0.4, Limits::default(), &mut quiet()).unwrap();
-    assert!(tr.scale[1] < 1.0, "{:?}", tr.scale);
+    assert!(tr.scale[0] < 1.0 && tr.scale[1] < 1.0, "{:?}", tr.scale);
     assert!((tr.theta2 - truth).abs() <= 1e-3, "theta {}", tr.theta2);
     assert!(tr.fit.nu[3] < 1e-4, "{:?}", tr.fit.nu);
 }

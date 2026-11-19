@@ -440,53 +440,6 @@ fn fit_theta(
     Ok(at_theta(inp, THETA_GOOD, brent.root())?)
 }
 
-/// Diagnostic (#595): the target miss of good 2's group at nu 0 and class scale 0, by the two
-/// routes the fit takes: `fit_theta`'s (shares, `d_0` floored) and `solve_scale`'s (parts, `d_0`
-/// as the trial holds it).
-#[allow(clippy::too_many_arguments)]
-fn diagnose_gap(
-    inp: &Inputs,
-    t: &Targets,
-    ln_d0: &[f64],
-    at_floor: &[f64],
-    scale: &[f64],
-    nu: &[f64],
-    epsilon: f64,
-    limits: Limits,
-    progress: &mut dyn FnMut(&str),
-) -> Result<(), CalibrationError> {
-    let groups = border::friction_groups(t.theta_class);
-    let Some(k) = groups.iter().position(|g| g.contains(&THETA_GOOD)) else {
-        return Ok(());
-    };
-    let c = t.theta_class[THETA_GOOD];
-    let mut sc = scale.to_vec();
-    sc[c] = 0.0;
-    let mut nu_k = nu.to_vec();
-    for &g in &groups[k] {
-        nu_k[g] = 0.0;
-    }
-    let target = t.nu_target[k];
-    let mut out = vec![];
-    for (name, d0) in [("floored", at_floor), ("held", ln_d0)] {
-        let at = at_epsilon(inp, t.theta_class, t.ln_d, d0, &sc, epsilon)?;
-        let shares = border::data_state_shares(&at, &nu_k, &groups, t.icio, limits)?[k];
-        let (abroad, total) = border::data_state_parts(&at, &nu_k, &groups, t.icio, limits)?;
-        let parts = abroad[k] / total[k];
-        out.push(format!(
-            "d_0 {name}: shares {:e} parts {:e}",
-            shares - target,
-            parts - target
-        ));
-    }
-    progress(&format!(
-        "epsilon {epsilon}: good 2 group {k} miss at nu 0 and scale 0, theta_2 {}: {}",
-        inp.theta[THETA_GOOD],
-        out.join("; ")
-    ));
-    Ok(())
-}
-
 /// The fit at one `epsilon`: nu per group, `d_0` and the epsilon scale per class.
 pub fn fit_at_epsilon(
     inp: &Inputs,
@@ -507,17 +460,13 @@ fn trial(
 ) -> Result<Trial, CalibrationError> {
     let groups = border::friction_groups(t.theta_class);
     let (mean, min) = class_offsets(inp, t.theta_class, t.ln_d, t.weight);
-    // good 2 is held at nu 0, where `(1 + nu) D >= 1` needs the class's d_0 at its smallest
-    // linked distance: the one the trial floors to
-    let mut at_floor = mean.clone();
-    at_floor[t.theta_class[THETA_GOOD]] = min[t.theta_class[THETA_GOOD]];
     let refit_theta = t.theta_fit && epsilon > 0.0;
     let mut inp = if refit_theta {
         fit_theta(
             inp,
             t,
             epsilon,
-            &at_floor,
+            &mean,
             &[1.0; border::N_CLASSES],
             &inp.border_nu,
             limits,
@@ -526,6 +475,8 @@ fn trial(
         inp.clone()
     };
     let inp = &mut inp;
+    // class 3 is at scale 0 in the theta fits: its d_0 does not enter, the other classes' (floored
+    // ones included) do
     let mut ln_d0 = mean;
     let mut floored: Vec<usize> = vec![];
     let mut scale = vec![1.0; border::N_CLASSES];
@@ -540,15 +491,12 @@ fn trial(
             // theta_2 was fitted before the other classes' s_c and nu were known; refit it at
             // the current state so its share at nu 0 meets the target there too
             if refit_theta {
-                let refit = fit_theta(inp, t, epsilon, &at_floor, &scale, &nu, limits)?;
+                let refit = fit_theta(inp, t, epsilon, &ln_d0, &scale, &nu, limits)?;
                 let moved = (refit.theta[THETA_GOOD] - inp.theta[THETA_GOOD]).abs() > THETA_SETTLE;
                 progress(&format!(
                     "epsilon {epsilon}: theta_2 {} at the current scales",
                     refit.theta[THETA_GOOD]
                 ));
-                diagnose_gap(
-                    &refit, t, &ln_d0, &at_floor, &scale, &nu, epsilon, limits, progress,
-                )?;
                 if moved {
                     *inp = refit;
                     passes += 1;
