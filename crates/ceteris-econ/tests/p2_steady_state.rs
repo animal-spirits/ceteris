@@ -738,3 +738,31 @@ fn pack_calibrated_state_holds_to_2e_6_and_4_minor_units() {
     let records = run(inputs, &codes, PACK_TICKS, PACK, "full pack");
     assert_fixed(&records, PACK_TICKS, "full pack");
 }
+
+/// An interactive start over a stale calibration falls back to the data state and runs.
+#[test]
+fn stale_calibration_falls_back_to_the_data_state() {
+    let mut inputs = Arc::unwrap_or_clone(fixture_at_other_nu());
+    let params = EconParams::default();
+    let default_trade = TradeParams::default();
+    assert!(ceteris_econ::world::drop_stale_calibration(
+        &mut inputs,
+        &params,
+        &default_trade
+    ));
+    assert!(inputs.steady.is_none() && inputs.market_elasticity.is_none());
+    EconWorld::new(Arc::new(inputs), params, default_trade);
+}
+
+/// A matching calibration is kept.
+#[test]
+fn matching_calibration_is_kept() {
+    let mut inputs = Arc::unwrap_or_clone(fixture_at_other_nu());
+    let trade = inputs.trade_params();
+    assert!(!ceteris_econ::world::drop_stale_calibration(
+        &mut inputs,
+        &EconParams::default(),
+        &trade
+    ));
+    assert!(inputs.steady.is_some());
+}

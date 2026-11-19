@@ -28,7 +28,6 @@ use ceteris_core::sim::Sim;
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
 use ceteris_run::store::ChunkStore;
 use ceteris_run::{Scenario, Workbench};
-use ceteris_trade::TradeParams;
 use slint::platform::Key;
 use slint::{Color, Model, ModelRc, VecModel};
 
@@ -45,13 +44,21 @@ fn pack_dir() -> PathBuf {
 fn inputs(dir: &Path) -> Result<Arc<EconInputs>, String> {
     let pack = ceteris_geo::pack::Pack::load(dir, &ceteris_geo::graph::TransportParams::default())
         .map_err(|e| format!("the economy did not load: {e}"))?;
-    EconInputs::from_pack(&pack, dir)
-        .map(Arc::new)
-        .map_err(|e| format!("the economy did not load: {e}"))
+    let mut inputs =
+        EconInputs::from_pack(&pack, dir).map_err(|e| format!("the economy did not load: {e}"))?;
+    let trade = inputs.trade_params();
+    if ceteris_econ::world::drop_stale_calibration(&mut inputs, &EconParams::default(), &trade) {
+        eprintln!(
+            "the pack's calibrated steady state does not match this build; starting from the \
+             data state (recalibrate the pack to use it)"
+        );
+    }
+    Ok(Arc::new(inputs))
 }
 
 fn world(inputs: Arc<EconInputs>) -> Sim<EconWorld> {
-    EconWorld::sim(inputs, EconParams::default(), TradeParams::default())
+    let trade = inputs.trade_params();
+    EconWorld::sim(inputs, EconParams::default(), trade)
 }
 
 /// The econ world of the pack.
