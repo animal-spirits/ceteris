@@ -5,11 +5,14 @@
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
+use ceteris_core::sim::Sim;
+use ceteris_econ::EconWorld;
+
 use crate::branches::Row;
 use crate::commands::BranchCommand;
+use crate::econ::View;
 use crate::session::Session;
 
-#[derive(Clone, Debug, PartialEq)]
 pub struct Snapshot {
     pub branch: String,
     pub cursor: u32,
@@ -17,6 +20,8 @@ pub struct Snapshot {
     pub log: Vec<String>,
     /// Lower-case hex of the state hash at the cursor; empty if the view did not build.
     pub hash: String,
+    /// The world at the cursor, for the map to follow it.
+    pub view: Option<View>,
     /// Why the last command failed, or the session could not start.
     pub error: Option<String>,
 }
@@ -44,10 +49,14 @@ fn hex(hash: [u8; 32]) -> String {
     hash.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn snapshot(session: &mut Session, error: Option<String>) -> Snapshot {
-    let (hash, view_error) = match session.view() {
-        Ok(sim) => (hex(sim.state_hash()), None),
-        Err(e) => (String::new(), Some(e.to_string())),
+fn snapshot(
+    session: &mut Session,
+    viewer: &dyn Fn(&Sim<EconWorld>) -> View,
+    error: Option<String>,
+) -> Snapshot {
+    let (hash, view, view_error) = match session.view() {
+        Ok(sim) => (hex(sim.state_hash()), Some(viewer(&sim)), None),
+        Err(e) => (String::new(), None, Some(e.to_string())),
     };
     Snapshot {
         branch: session.branch().to_owned(),
@@ -55,6 +64,7 @@ fn snapshot(session: &mut Session, error: Option<String>) -> Snapshot {
         rows: session.rows(),
         log: session.log(),
         hash,
+        view,
         error: error.or(view_error),
     }
 }
@@ -64,6 +74,7 @@ impl Host {
     /// each publish. The thread ends when the host is dropped.
     pub fn spawn(
         build: impl FnOnce() -> Result<Session, String> + Send + 'static,
+        viewer: impl Fn(&Sim<EconWorld>) -> View + Send + 'static,
         wake: impl Fn() + Send + 'static,
     ) -> Self {
         let (lines, input) = channel::<String>();
@@ -78,13 +89,14 @@ impl Host {
                         rows: vec![],
                         log: vec![],
                         hash: String::new(),
+                        view: None,
                         error: Some(e),
                     });
                     wake();
                     return;
                 }
             };
-            if output.send(snapshot(&mut session, None)).is_err() {
+            if output.send(snapshot(&mut session, &viewer, None)).is_err() {
                 return;
             }
             wake();
@@ -93,7 +105,7 @@ impl Host {
                     Some(cmd) => session.execute(cmd).err(),
                     None => Some(format!("not a branch command: {line}")),
                 };
-                if output.send(snapshot(&mut session, error)).is_err() {
+                if output.send(snapshot(&mut session, &viewer, error)).is_err() {
                     return;
                 }
                 wake();

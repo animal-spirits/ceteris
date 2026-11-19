@@ -4,9 +4,11 @@
 
 use std::sync::Arc;
 
+use ceteris_app::econ::{Layout, View};
 use ceteris_app::session::Session;
 use ceteris_app::workbench::Host;
 use ceteris_core::rng::Seed;
+use ceteris_core::sim::Sim;
 use ceteris_econ::edit::apply_edit;
 use ceteris_econ::fixture::small_world;
 use ceteris_econ::{EconParams, EconWorld};
@@ -47,6 +49,10 @@ fn bench(s: Scenario) -> Workbench<EconWorld> {
     )
 }
 
+fn view(sim: &Sim<EconWorld>) -> View {
+    View::new(sim, &Arc::new(Layout::new(sim.world())))
+}
+
 fn headless(branch: &str, tick: u32) -> String {
     let hash = bench(scenario()).at(branch, tick).unwrap().state_hash();
     hash.iter().map(|b| format!("{b:02x}")).collect()
@@ -54,7 +60,7 @@ fn headless(branch: &str, tick: u32) -> String {
 
 #[test]
 fn registry_lines_give_the_headless_hashes_and_the_edit_log() {
-    let host = Host::spawn(|| Ok(Session::new(scenario(), bench)), || {});
+    let host = Host::spawn(|| Ok(Session::new(scenario(), bench)), view, || {});
     let next = |line: Option<&str>| {
         line.inspect(|l| host.send(l));
         host.wait().expect("host alive")
@@ -73,6 +79,11 @@ fn registry_lines_give_the_headless_hashes_and_the_edit_log() {
 
     let s = next(Some("time.run-to 12"));
     assert_eq!(s.hash, headless("main", 12));
+    assert_eq!(
+        s.view.as_ref().map(|v| v.tick),
+        Some(12),
+        "the map view follows the cursor"
+    );
 
     let s = next(Some("branch.switch tariff"));
     assert_eq!((s.branch.as_str(), s.cursor), ("tariff", 12));
@@ -105,7 +116,7 @@ fn registry_lines_give_the_headless_hashes_and_the_edit_log() {
 
 #[test]
 fn a_session_that_cannot_build_reports_it() {
-    let host = Host::spawn(|| Err("the economy did not load".into()), || {});
+    let host = Host::spawn(|| Err("the economy did not load".into()), view, || {});
     let s = host.wait().unwrap();
     assert_eq!(s.error.as_deref(), Some("the economy did not load"));
     assert!(s.rows.is_empty());
