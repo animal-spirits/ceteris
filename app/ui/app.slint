@@ -29,6 +29,13 @@ export struct Row {
     heading: bool,
 }
 
+export struct BranchRow {
+    id: string,
+    label: string,
+    depth: int,
+    current: bool,
+}
+
 component Panel inherits Rectangle {
     background: Tokens.paper;
     border-color: Tokens.rule;
@@ -117,6 +124,156 @@ component Inspector inherits Panel {
     }
 }
 
+// W1: the tree of branches, the cursor, the registry command line and the edit log. Every
+// button sends a registry line (ADR 0188); the field takes a branch id or a tick for them, or a whole line on Enter.
+component Branches inherits Panel {
+    in property <[BranchRow]> rows;
+    in property <[string]> log;
+    in property <string> branch;
+    in property <int> cursor;
+    in property <string> hash;
+    in property <string> error;
+    callback command(string);
+    callback close();
+    callback done();
+    VerticalLayout {
+        padding: Tokens.pad;
+        spacing: Tokens.pad / 2;
+        HorizontalLayout {
+            spacing: Tokens.pad;
+            Heading {
+                text: "Branches";
+                vertical-alignment: center;
+            }
+            Action {
+                text: "Close";
+                clicked => { root.close(); }
+            }
+        }
+        Text {
+            text: root.branch == "" ? "no branch session" : root.branch + " at tick " + root.cursor;
+            font-family: Tokens.mono;
+            color: Tokens.ink;
+            overflow: elide;
+        }
+        Text {
+            text: root.hash;
+            font-family: Tokens.mono;
+            color: Tokens.ink;
+            opacity: 0.7;
+            overflow: elide;
+        }
+        if root.error != "": Text {
+            text: root.error;
+            color: Tokens.edit;
+            font-weight: 600;
+            wrap: word-wrap;
+        }
+        ScrollView {
+            min-height: Tokens.body-size * 1.8 * 4;
+            VerticalLayout {
+                for row in root.rows: Rectangle {
+                    height: Tokens.body-size * 1.8;
+                    background: row.current ? Tokens.fork : touch.has-hover ? Tokens.rule : transparent;
+                    accessible-role: button;
+                    accessible-label: row.id;
+                    accessible-action-default => { touch.clicked(); }
+                    HorizontalLayout {
+                        padding-left: Tokens.pad / 2 + row.depth * Tokens.pad * 1.5;
+                        spacing: Tokens.pad;
+                        Text {
+                            text: row.id;
+                            font-weight: 600;
+                            color: row.current ? Tokens.paper : Tokens.ink;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: row.label;
+                            font-family: Tokens.mono;
+                            color: row.current ? Tokens.paper : Tokens.ink;
+                            opacity: 0.8;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                    touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.command("branch.switch " + row.id); }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            height: Tokens.body-size * 1.9;
+            border-color: Tokens.rule;
+            border-width: Tokens.hairline;
+            Text {
+                x: Tokens.pad / 2;
+                text: "id or tick; Enter sends a registry line";
+                color: Tokens.ink;
+                opacity: 0.45;
+                vertical-alignment: center;
+                visible: field.text == "";
+            }
+            field := TextInput {
+                x: Tokens.pad / 2;
+                width: parent.width - Tokens.pad;
+                font-family: Tokens.mono;
+                color: Tokens.ink;
+                vertical-alignment: center;
+                accessible-label: "Branch command";
+                accepted => {
+                    root.command(self.text);
+                    self.text = "";
+                    root.done();
+                }
+                key-pressed(e) => {
+                    if e.text == Key.Escape {
+                        root.done();
+                        return accept;
+                    }
+                    reject
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: Tokens.pad / 2;
+            alignment: start;
+            Action {
+                text: "Fork here";
+                clicked => { root.command("branch.fork " + field.text); }
+            }
+            Action {
+                text: "Seek";
+                clicked => { root.command("time.seek " + field.text); }
+            }
+            Action {
+                text: "Run to";
+                clicked => { root.command("time.run-to " + field.text); }
+            }
+        }
+        Heading {
+            text: "Edit log";
+        }
+        ScrollView {
+            VerticalLayout {
+                padding-right: Tokens.pad * 2;
+                for line in root.log: Text {
+                    text: line;
+                    font-family: Tokens.mono;
+                    color: Tokens.ink;
+                    wrap: word-wrap;
+                }
+                if root.log.length == 0: Text {
+                    text: "no edits on this branch";
+                    color: Tokens.ink;
+                    opacity: 0.7;
+                }
+            }
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     title: "Ceteris Paribus";
     icon: @image-url("../assets/identity/icons/icon-carved-night-256.png");
@@ -142,6 +299,14 @@ export component AppWindow inherits Window {
     in property <string> halt-detail;
     in property <string> halt-folder;
     in-out property <bool> about-open;
+    in-out property <bool> branches-open;
+    in property <[BranchRow]> branch-rows;
+    in property <[string]> branch-log;
+    in property <string> branch-name;
+    in property <int> branch-cursor;
+    in property <string> branch-hash;
+    in property <string> branch-error;
+    callback branch-command(string);
     // Index into the mode buttons; resource group 0 is all groups.
     in-out property <int> mode;
     in-out property <int> resource-group;
@@ -196,6 +361,10 @@ export component AppWindow inherits Window {
         }
         Menu {
             title: "View";
+            MenuItem {
+                title: "Branches";
+                activated => { root.command("view.branches"); }
+            }
             for scale in [85, 100, 125, 150, 175, 200]: MenuItem {
                 title: "UI scale " + scale + "%";
                 activated => { root.ui-scale(scale / 100); }
@@ -230,6 +399,7 @@ export component AppWindow inherits Window {
             mouse-cursor: self.pressed && dragged ? grabbing : default;
             pointer-event(e) => {
                 if e.kind == PointerEventKind.down {
+                    keys.focus();
                     last-x = self.mouse-x;
                     last-y = self.mouse-y;
                     dragged = false;
@@ -439,9 +609,28 @@ export component AppWindow inherits Window {
         }
     }
 
-    if root.inspector-open: Inspector {
+    // Right column: the branch manager under the time controls, the inspector under it.
+    property <length> branches-top: max(picker-panel.y + picker-panel.height, time-panel.y + time-panel.height) + Tokens.pad;
+    property <length> branches-height: min(Tokens.body-size * 28, (root.height - branches-top - 2 * Tokens.pad) * (root.inspector-open ? 0.55 : 1));
+    if root.branches-open: Branches {
         x: parent.width - self.width - Tokens.pad;
         y: max(picker-panel.y + picker-panel.height, time-panel.y + time-panel.height) + Tokens.pad;
+        width: min(Tokens.body-size * 26, (parent.width - 3 * Tokens.pad) / 2);
+        height: root.branches-height;
+        rows: root.branch-rows;
+        log: root.branch-log;
+        branch: root.branch-name;
+        cursor: root.branch-cursor;
+        hash: root.branch-hash;
+        error: root.branch-error;
+        command(line) => { root.branch-command(line); }
+        close => { root.branches-open = false; }
+        done => { keys.focus(); }
+    }
+
+    if root.inspector-open: Inspector {
+        x: parent.width - self.width - Tokens.pad;
+        y: max(picker-panel.y + picker-panel.height, time-panel.y + time-panel.height) + (root.branches-open ? root.branches-height + Tokens.pad : 0px) + Tokens.pad;
         width: min(Tokens.body-size * 26, (parent.width - 3 * Tokens.pad) / 2);
         height: parent.height - self.y - Tokens.pad;
         title: root.inspector-title;
