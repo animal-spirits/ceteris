@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### feat(app): branch manager panel (W1, #204)
+
+- View > Branches (key B) opens the branch manager: the tree of branches, the cursor and its state
+  hash, fork at the cursor, seek, run to tick, switch branch, and the edit log with source and god
+  flag. Every button sends a registry line (`branch.fork`, `branch.switch`, `time.seek`,
+  `time.run-to`); the field takes a registry line on Enter. The session runs on its own thread
+  (`workbench::Host`) over `CETERIS_SCENARIO` if set, else a new scenario with pack hash
+  `unpinned`. The map does not follow the cursor yet, and edits are not yet added from the UI.
+  Test: registry lines through the host give the hashes of a headless workbench.
+
 ### BEHAVIOUR: the fits' data state carries stage 1's rebates and final demand balance (#622)
 
 - `steady::data_state_spending`, where the border friction, the epsilon scale and the epsilon fit
