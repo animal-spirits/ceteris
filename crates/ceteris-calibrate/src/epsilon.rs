@@ -326,10 +326,9 @@ fn solve_scale(
     // groups, not yet refitted: s = 0, and the next refit says. Once refitted it is infeasible.
     if f_lo < -SCALE_FLAT {
         if settled {
-            return Err(format!(
+            return Err(CalibrationError::Infeasible(format!(
                 "class {c}: target cross-border share outside the model's even at scale 0 (residual {f_lo})"
-            )
-            .into());
+            )));
         }
         return Ok(0.0);
     }
@@ -563,11 +562,14 @@ fn fit_epsilon_inner(
                 ));
                 Ok(Some(r))
             }
-            Err(CalibrationError::Failed(e)) if e.contains("outside the model's") => {
+            Err(CalibrationError::TooLittleCost(e)) => {
                 lines.push(format!(
                     "epsilon {eps}: no nu reaches the target shares: {e}"
                 ));
                 Ok(None)
+            }
+            Err(CalibrationError::Infeasible(e)) => {
+                Err(CalibrationError::Infeasible(format!("epsilon {eps}: {e}")))
             }
             Err(e) => Err(e),
         };

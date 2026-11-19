@@ -1451,8 +1451,9 @@ fn nu_fit_is_monotone_and_bracketed() {
         Limits::default(),
         &mut quiet(),
     )
-    .unwrap_err()
-    .to_string();
+    .unwrap_err();
+    assert!(matches!(err, CalibrationError::TooLittleCost(_)), "{err:?}");
+    let err = err.to_string();
     assert!(
         err.starts_with("group 2 (goods [0, 4]):") && err.contains("outside"),
         "{err}"

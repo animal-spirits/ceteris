@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use ceteris_calibrate::border;
 use ceteris_calibrate::epsilon::{self, Gravity, Targets};
-use ceteris_calibrate::steady::{self, Limits};
+use ceteris_calibrate::steady::{self, CalibrationError, Limits};
 use ceteris_reference::io::{self, Inputs};
 
 fn fixture() -> PathBuf {
@@ -499,4 +499,31 @@ fn concurrent_end_trials_match_sequential() {
     let sequential = run(1);
     assert_eq!(run(4), sequential);
     assert_eq!(run(2), sequential);
+}
+
+/// A class short at zero friction is infeasible at every epsilon: the fit returns the typed
+/// error naming the epsilon, not "too little cost" scored as a positive sign (RFC 0360 D4).
+#[test]
+fn a_target_above_the_zero_friction_share_is_infeasible_not_too_little_cost() {
+    let w = world();
+    let (e0, c, s0) = (0.4, 1, 0.5);
+    let mut scale = [1.0; border::N_CLASSES];
+    scale[c] = s0;
+    let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
+    let (mut nu_target, data_flows) = known_scaled(&w, e0, &scale, &nu_group);
+    nu_target[c] = 0.5 + 0.5 * nu_target[c];
+    let t = Targets {
+        nu_target: &nu_target,
+        icio: &w.icio,
+        theta_class: &w.class,
+        ln_d: &w.ln_d,
+        weight: &trade_weight(&w.inp),
+        gravity: &w.gravity,
+        data_flows: &data_flows,
+    };
+    let err = epsilon::fit_epsilon(&w.inp, &t, Limits::default(), &mut quiet()).unwrap_err();
+    let CalibrationError::Infeasible(e) = err else {
+        panic!("{err}");
+    };
+    assert!(e.starts_with("epsilon "), "{e}");
 }
