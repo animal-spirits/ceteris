@@ -880,6 +880,26 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
 /// which leave the steady state but enter the calibration's block map and market elasticities
 /// (ADRs 0091, 0267): a run under other storage parameters would keep stale price-gain limits.
 /// The adjustment speeds and the frictionless and rationing switches are free.
+/// Drops the calibrated steady state and market elasticities of `inputs` when they were built
+/// under other structural parameters than `params` and `trade`, so a world over them starts from
+/// the data state instead of failing [`EconWorld::new`]'s guard. Returns whether it dropped them.
+/// For interactive starts only; runs keep the guard.
+pub fn drop_stale_calibration(
+    inputs: &mut EconInputs,
+    params: &EconParams,
+    trade: &TradeParams,
+) -> bool {
+    let calibrated = inputs.steady.is_some() || inputs.market_elasticity.is_some();
+    let stale = calibrated
+        && structural_digest(inputs, params, trade)
+            != structural_digest(inputs, &EconParams::default(), &inputs.trade_params());
+    if stale {
+        inputs.steady = None;
+        inputs.market_elasticity = None;
+    }
+    stale
+}
+
 pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &TradeParams) -> Hash {
     static_digest(
         inputs,

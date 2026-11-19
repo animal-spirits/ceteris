@@ -23,7 +23,6 @@ use ceteris_app::web::{Counties, Provinces};
 use ceteris_app::zone;
 use ceteris_core::sim::Sim;
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
-use ceteris_trade::TradeParams;
 use slint::platform::Key;
 use slint::{Color, Model, ModelRc, VecModel};
 
@@ -40,13 +39,17 @@ fn pack_dir() -> PathBuf {
 fn econ(dir: &Path) -> Result<Sim<EconWorld>, String> {
     let pack = ceteris_geo::pack::Pack::load(dir, &ceteris_geo::graph::TransportParams::default())
         .map_err(|e| format!("the economy did not load: {e}"))?;
-    let inputs =
+    let mut inputs =
         EconInputs::from_pack(&pack, dir).map_err(|e| format!("the economy did not load: {e}"))?;
-    Ok(EconWorld::sim(
-        Arc::new(inputs),
-        EconParams::default(),
-        TradeParams::default(),
-    ))
+    let params = EconParams::default();
+    let trade = inputs.trade_params();
+    if ceteris_econ::world::drop_stale_calibration(&mut inputs, &params, &trade) {
+        eprintln!(
+            "the pack's calibrated steady state does not match this build; starting from the \
+             data state (recalibrate the pack to use it)"
+        );
+    }
+    Ok(EconWorld::sim(Arc::new(inputs), params, trade))
 }
 
 /// Requests a redraw from any thread.
