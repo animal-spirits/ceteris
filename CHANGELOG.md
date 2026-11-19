@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### fix(calibrate): an epsilon scale left at 0 is re-solved (#622 findings)
+
+- `epsilon::trial`: a class left at s_c = 0 by an unsettled solve stays in the s_c solve after its
+  nu refits above zero, instead of ending with s_c = 0 and nu > 0. Test: `is_pinned` selection.
+  The trial's selection could not be provoked on the fixture, so the pin is on the selection rule.
+- Test: d_0 is the trade-weighted mean of ln d (`d0_is_the_trade_weighted_mean_of_ln_distance`).
+- The infeasibility message is typed and pinned by #643.
+
 ### feat(app): branch manager panel (W1, #204)
 
 - View > Branches (key B) opens the branch manager: the tree of branches, the cursor and its state
