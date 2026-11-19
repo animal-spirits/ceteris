@@ -121,3 +121,34 @@ fn a_session_that_cannot_build_reports_it() {
     assert_eq!(s.error.as_deref(), Some("the economy did not load"));
     assert!(s.rows.is_empty());
 }
+
+#[test]
+fn edit_lines_write_the_branch_log_and_match_a_headless_edit() {
+    let host = Host::spawn(|| Ok(Session::new(scenario(), bench)), view, || {});
+    host.wait().unwrap();
+    let send = |line: &str| {
+        host.send(line);
+        host.wait().unwrap()
+    };
+
+    send("time.run-to 6");
+    let s = send("branch.edit policy tariff.0.1.0 0.2");
+    assert!(s.error.is_none(), "{:?}", s.error);
+    assert_eq!(s.log.len(), 1);
+    assert!(s.log[0].starts_with("t6 [cli] tariff.0.1.0 = 0.2"));
+
+    let mut want = scenario();
+    want.branches[0]
+        .edits
+        .push(user_edit(6, EditKind::Policy, "tariff.0.1.0", 0.2, None));
+    let headless = bench(want).at("main", 12).unwrap().state_hash();
+    let s = send("time.run-to 12");
+    let hex: String = headless.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(s.hash, hex, "UI edit gives the headless hash");
+
+    let s = send("branch.edit state pop.0 1.0");
+    assert!(s.error.is_none(), "{:?}", s.error);
+    assert!(s.log[1].contains("GOD"), "state edits carry the god flag");
+    let s = send("branch.edit bogus x 1");
+    assert!(s.error.is_some_and(|e| e.contains("not a branch command")));
+}

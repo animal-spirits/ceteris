@@ -114,6 +114,13 @@ impl Session {
                     .fork_tick;
                 self.cursor = branches::clamp_seek(t, fork, self.last_tick.max(self.cursor));
             }
+            BranchCommand::Edit(kind, target, value) => {
+                let edit = ceteris_run::commands::user_edit(self.cursor, kind, target, value, None);
+                self.scenario = ceteris_run::commands::add_edit(&self.scenario, &self.branch, edit)
+                    .map_err(|e| e.to_string())?;
+                self.bench = (self.make)(self.scenario.clone());
+                self.last_tick = self.last_tick.min(self.cursor);
+            }
             BranchCommand::RunTo(t) => {
                 self.bench.at(&self.branch, t).map_err(|e| e.to_string())?;
                 self.cursor = t;

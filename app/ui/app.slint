@@ -125,7 +125,7 @@ component Inspector inherits Panel {
 }
 
 // W1: the tree of branches, the cursor, the registry command line and the edit log. Every
-// button sends a registry line (ADR 0188); the field takes a branch id or a tick for them, or a whole line on Enter.
+// button sends a registry line (ADR 0188); the field takes a branch id or a tick for them, or a whole line on Enter. Edit takes `state|param|policy target value` and applies it at the cursor.
 component Branches inherits Panel {
     in property <[BranchRow]> rows;
     in property <[string]> log;
@@ -246,6 +246,10 @@ component Branches inherits Panel {
             Action {
                 text: "Seek";
                 clicked => { root.command("time.seek " + field.text); }
+            }
+            Action {
+                text: "Edit";
+                clicked => { root.command("branch.edit " + field.text); }
             }
             Action {
                 text: "Run to";
