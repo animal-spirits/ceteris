@@ -145,6 +145,11 @@ pub enum CalibrationError {
         passes: usize,
         change: f64,
     },
+    /// The target's share is above the model's at the largest friction: too little cost, which a
+    /// higher epsilon can fix.
+    TooLittleCost(String),
+    /// The target is above the model's share at zero friction: no epsilon can fix it.
+    Infeasible(String),
     Failed(String),
 }
 
@@ -156,7 +161,9 @@ impl fmt::Display for CalibrationError {
                 "passes did not settle in {passes}, last change {}",
                 sci(*change)
             ),
-            CalibrationError::Failed(s) => f.write_str(s),
+            CalibrationError::TooLittleCost(s)
+            | CalibrationError::Infeasible(s)
+            | CalibrationError::Failed(s) => f.write_str(s),
         }
     }
 }

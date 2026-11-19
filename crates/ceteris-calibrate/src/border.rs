@@ -548,7 +548,7 @@ pub fn fit_border_nu_seeded(
         if settled {
             // a target still outside a group's shares at the settled spending has no root
             if let Some(e) = held.into_iter().next() {
-                return Err(e.into());
+                return Err(e);
             }
             (fit.share, fit.evaluations) = (share, evaluations);
             return Ok(fit);
@@ -573,7 +573,7 @@ fn fit_at_spending(
     spend: &Mat,
     supply: &Mat,
     progress: &mut dyn FnMut(&str),
-) -> Result<(Fit, Vec<String>), CalibrationError> {
+) -> Result<(Fit, Vec<CalibrationError>), CalibrationError> {
     let n = groups.len();
     if target.len() != n || inp.border_nu.len() != inp.n_goods() {
         return Err(format!(
@@ -699,7 +699,7 @@ fn fit_at_spending(
             "border friction: warm brackets for groups {warm:?}"
         ));
     }
-    let mut held: Vec<(usize, String)> = Vec::new();
+    let mut held: Vec<(usize, CalibrationError)> = Vec::new();
     for &k in fitted.iter().filter(|&&k| !warm[k]) {
         let mut halvings = 0;
         let f_hi = loop {
@@ -740,7 +740,14 @@ fn fit_at_spending(
                 hi[k]
             );
             progress(&format!("border friction: {e}; held at nu {}", hi[k]));
-            held.push((k, e));
+            held.push((
+                k,
+                if f_lo < 0.0 {
+                    CalibrationError::Infeasible(e)
+                } else {
+                    CalibrationError::TooLittleCost(e)
+                },
+            ));
             continue;
         }
         brent[k] = Some(Brent::new(0.0, f_lo, hi[k], f_hi));
