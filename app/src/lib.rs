@@ -22,6 +22,7 @@ pub mod sim;
 pub mod tokens;
 pub mod web;
 pub mod why;
+pub mod workbench;
 
 /// A Tracy zone over the rest of the enclosing scope with the `profile` feature; nothing
 /// without it.

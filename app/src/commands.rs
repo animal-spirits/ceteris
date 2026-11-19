@@ -16,6 +16,8 @@ pub enum Command {
     ZoomIn,
     ZoomOut,
     ZoomReset,
+    /// Show or hide the branch manager.
+    ToggleBranches,
 }
 
 impl Command {
@@ -32,6 +34,7 @@ impl Command {
             Self::ZoomIn => "map.zoom-in".into(),
             Self::ZoomOut => "map.zoom-out".into(),
             Self::ZoomReset => "map.zoom-reset".into(),
+            Self::ToggleBranches => "view.branches".into(),
         }
     }
 }
@@ -83,6 +86,7 @@ pub const STANDARD: &[(&str, Command)] = &[
     ("Ctrl++", Command::ZoomIn),
     ("Ctrl+-", Command::ZoomOut),
     ("Ctrl+0", Command::ZoomReset),
+    ("B", Command::ToggleBranches),
 ];
 
 /// A chord as the keymap names it: modifiers in Ctrl, Alt, Shift order, then the key, with
