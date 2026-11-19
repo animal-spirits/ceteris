@@ -18,6 +18,7 @@ pub mod map;
 pub mod modes;
 pub mod ramps;
 pub mod session;
+pub mod setup;
 pub mod sim;
 pub mod tokens;
 pub mod web;

@@ -19,6 +19,7 @@ use ceteris_app::labels::Anchors;
 use ceteris_app::map::{Layer, Map, Picked, Style};
 use ceteris_app::modes::{self, Mode};
 use ceteris_app::session::Session;
+use ceteris_app::setup;
 use ceteris_app::sim::{Halt, Runner};
 use ceteris_app::web::{Counties, Provinces};
 use ceteris_app::workbench::{self, Host, Snapshot};
@@ -524,10 +525,61 @@ fn mode(app: &AppWindow) -> Mode {
     }
 }
 
+/// Shows the first-run screen. The sources are the fixture until the fetch and build back end
+/// lands (#228); `CETERIS_SETUP=fixture` shows it over a built pack.
+fn run_setup() -> Result<(), Box<dyn std::error::Error>> {
+    let win = SetupWindow::new()?;
+    let state = Rc::new(RefCell::new(setup::fixture()));
+    let paint = {
+        let (state, weak) = (state.clone(), win.as_weak());
+        move || {
+            let (s, Some(win)) = (state.borrow(), weak.upgrade()) else {
+                return;
+            };
+            win.set_disk(s.disk_line().into());
+            win.set_disk_ok(s.disk_ok());
+            win.set_notice(s.rebuild_notice().unwrap_or_default().into());
+            win.set_can_build(s.can_build());
+            win.set_rows(model(
+                s.sources
+                    .iter()
+                    .map(|r| SetupRow {
+                        name: r.name.clone().into(),
+                        licence: r.licence.clone().into(),
+                        size: setup::size(r.bytes).into(),
+                        status: r.status().into(),
+                        manual_page: r.manual.as_ref().map_or("", |m| &m.page).into(),
+                        ready: r.state == setup::State::Verified,
+                        optional: r.optional,
+                    })
+                    .collect(),
+            ));
+        }
+    };
+    paint();
+    let (s, p, weak) = (state.clone(), paint.clone(), win.as_weak());
+    win.on_accept_file(move |path| {
+        let result = setup::digest(std::path::Path::new(path.trim()))
+            .map_err(|e| format!("{path}: {e}"))
+            .and_then(|(hash, bytes)| s.borrow_mut().accept(&hash, bytes));
+        let message = result.err().unwrap_or_default();
+        weak.upgrade().inspect(|w| w.set_message(message.into()));
+        p();
+    });
+    win.on_open_page(|url| {
+        let _ = halt::open(&url);
+    });
+    win.run()?;
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "profile")]
     tracy_client::Client::start();
     let pack = pack_dir();
+    if std::env::var_os("CETERIS_SETUP").is_some() || !pack.join("web/provinces.fill").exists() {
+        return run_setup();
+    }
     let dir = pack.join("web");
     let fill = Arc::new(Fill::read(&dir.join("provinces.fill"))?);
     let provinces = Provinces::read(&dir.join("provinces.json"))?;
