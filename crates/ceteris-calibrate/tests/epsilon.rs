@@ -66,7 +66,17 @@ fn known(w: &World, epsilon: f64, nu_group: &[f64]) -> (Vec<f64>, Vec<f64>) {
 }
 
 fn known_scaled(w: &World, epsilon: f64, scale: &[f64], nu_group: &[f64]) -> (Vec<f64>, Vec<f64>) {
-    let (mut mean, min) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &trade_weight(&w.inp));
+    known_weighted(w, epsilon, scale, nu_group, &trade_weight(&w.inp))
+}
+
+fn known_weighted(
+    w: &World,
+    epsilon: f64,
+    scale: &[f64],
+    nu_group: &[f64],
+    weight: &[f64],
+) -> (Vec<f64>, Vec<f64>) {
+    let (mut mean, min) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, weight);
     // a scaled class is a floored one: d_0 at its smallest linked distance
     // the per-good class at nu 0 is floored likewise
     for c in (0..scale.len()).filter(|&c| scale[c] < 1.0 || c == border::PER_GOOD_CLASS) {
@@ -526,4 +536,50 @@ fn a_target_above_the_zero_friction_share_is_infeasible_not_too_little_cost() {
         panic!("{err}");
     };
     assert!(e.starts_with("epsilon "), "{e}");
+}
+
+/// d_0 is the trade-weighted mean of ln d (ADR 0272, Decision 2): targets made with uneven pair
+/// weights come back from a trial given those weights, and the weights move d_0 off the
+/// unit-weight mean.
+#[test]
+fn d0_is_the_trade_weighted_mean_of_ln_distance() {
+    let w = world();
+    let n = w.inp.n_countries();
+    let uneven: Vec<f64> = (0..n * n)
+        .map(|k| 1.0 + ((k / n) * 7 + (k % n) * 3 % 5) as f64)
+        .collect();
+    let (e0, nu_group) = (0.4, [0.15, 0.6, 0.35, 0.0, 0.0]);
+    let (nu_target, data_flows) =
+        known_weighted(&w, e0, &[1.0; border::N_CLASSES], &nu_group, &uneven);
+    let trial = |weight: &[f64]| {
+        let t = Targets {
+            nu_target: &nu_target,
+            icio: &w.icio,
+            theta_class: &w.class,
+            ln_d: &w.ln_d,
+            weight,
+            gravity: &w.gravity,
+            data_flows: &data_flows,
+        };
+        epsilon::fit_at_epsilon(&w.inp, &t, e0, Limits::default(), &mut quiet()).unwrap()
+    };
+    let (weighted, unit) = (trial(&uneven), trial(&trade_weight(&w.inp)));
+    let (mean, _) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &uneven);
+    for c in (0..border::N_CLASSES).filter(|&c| mean[c].is_finite()) {
+        if !weighted.floored.contains(&c) {
+            assert_eq!(weighted.ln_d0[c], mean[c], "class {c}");
+        }
+    }
+    assert!(
+        (0..border::N_CLASSES).any(|c| (weighted.ln_d0[c] - unit.ln_d0[c]).abs() > 1e-6),
+        "uneven weights left d_0 at the unit-weight mean: {:?}",
+        weighted.ln_d0
+    );
+    for (k, nu) in nu_group.iter().enumerate() {
+        assert!(
+            (weighted.fit.nu[k] - nu).abs() <= 1e-4,
+            "{:?}",
+            weighted.fit.nu
+        );
+    }
 }

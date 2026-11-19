@@ -351,6 +351,13 @@ fn solve_scale(
     Ok(brent.root())
 }
 
+/// Whether a group takes part in its class's s_c solve. `scale` is the class's s_c once solved. A
+/// class left at s_c = 0 by an unsettled solve stays in it whatever nu the refit gave: s_c = 0
+/// with nu > 0 would drop the class's distance cost although an s_c in (0, 1) at nu 0 may exist.
+fn is_pinned(clamped: bool, nu: f64, scale: Option<f64>) -> bool {
+    clamped || scale.is_some_and(|s| nu <= PIN_NU || s == 0.0)
+}
+
 /// The fit at one `epsilon`: nu per group, `d_0` and the epsilon scale per class.
 pub fn fit_at_epsilon(
     inp: &Inputs,
@@ -390,7 +397,9 @@ fn trial(
             for c in (0..border::N_CLASSES).filter(|_| epsilon > 0.0) {
                 let pinned: Vec<usize> = (0..groups.len())
                     .filter(|&k| t.theta_class[groups[k][0]] == c && !fit.target[k].is_nan())
-                    .filter(|&k| fit.clamped[k] || (scaled[c] && fit.nu[k] <= PIN_NU))
+                    .filter(|&k| {
+                        is_pinned(fit.clamped[k], fit.nu[k], scaled[c].then_some(scale[c]))
+                    })
                     .collect();
                 if pinned.is_empty() {
                     continue;
@@ -909,5 +918,21 @@ mod row_members_tests {
     fn a_pack_without_the_table_has_no_members() {
         let dir = tempfile::tempdir().unwrap();
         assert!(read_members(dir.path()).unwrap().is_none());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_class_at_scale_zero_is_resolved_whatever_its_nu() {
+        // first pass, unsettled: only a clamped group is in the solve
+        assert!(is_pinned(true, 0.0, None));
+        assert!(!is_pinned(false, 0.3, None));
+        // settled: pinned by nu, or by s_c = 0 even at nu above PIN_NU (was dropped)
+        assert!(is_pinned(false, 0.0, Some(0.5)));
+        assert!(!is_pinned(false, 0.3, Some(0.5)));
+        assert!(is_pinned(false, 0.3, Some(0.0)));
     }
 }
