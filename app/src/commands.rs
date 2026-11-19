@@ -2,6 +2,8 @@
 //! reach it through the registry. The shell carries the Time and Map groups of the standard
 //! keymap; the palette, vim mode and the rest arrive with P3, whose registry this becomes.
 
+use ceteris_run::EditKind;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
     TogglePause,
@@ -48,12 +50,30 @@ pub enum BranchCommand<'a> {
     Switch(&'a str),
     Seek(u32),
     RunTo(u32),
+    /// Edit a state variable, parameter or policy of the current branch at the cursor tick:
+    /// before any run when the cursor is 0 (ex ante), mid-run otherwise (ex post).
+    Edit(EditKind, &'a str, f64),
 }
 
 impl<'a> BranchCommand<'a> {
     pub fn parse(line: &'a str) -> Option<Self> {
         let (verb, arg) = line.split_once(' ')?;
         let arg = arg.trim();
+        if verb == "branch.edit" {
+            let mut parts = arg.split_whitespace();
+            let kind = match parts.next()? {
+                "state" => EditKind::State,
+                "param" => EditKind::Param,
+                "policy" => EditKind::Policy,
+                _ => return None,
+            };
+            let target = parts.next()?;
+            let value = parts.next()?.parse().ok()?;
+            return parts
+                .next()
+                .is_none()
+                .then_some(Self::Edit(kind, target, value));
+        }
         match verb {
             "branch.fork" if !arg.is_empty() => Some(Self::Fork(arg)),
             "branch.switch" if !arg.is_empty() => Some(Self::Switch(arg)),

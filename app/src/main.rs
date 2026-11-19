@@ -188,6 +188,8 @@ struct State {
     /// A step waiting for the next view.
     stepping: bool,
     last_frame: Option<Instant>,
+    /// The branch and cursor the map last followed.
+    followed: Option<(String, u32)>,
 }
 
 impl State {
@@ -372,13 +374,14 @@ impl State {
     }
 
     /// Shows the newest branch snapshot, if one arrived.
-    fn show_branches(&self, app: &AppWindow) {
+    fn show_branches(&mut self, app: &AppWindow) {
         let Some(Snapshot {
             branch,
             cursor,
             rows,
             log,
             hash,
+            view,
             error,
         }) = self.branches.latest()
         else {
@@ -403,6 +406,22 @@ impl State {
         app.set_branch_name(branch.into());
         app.set_branch_hash(hash.into());
         app.set_branch_error(error.unwrap_or_default().into());
+        // A seek, run-to, switch or fork moves the cursor; the map shows the world there and
+        // the free-running clock stops, so the two never fight over the map.
+        let at = (app.get_branch_name().to_string(), cursor);
+        if let Some(view) = view
+            && self.followed.as_ref() != Some(&at)
+        {
+            self.followed = Some(at);
+            self.clock.playing = false;
+            self.stepping = false;
+            self.current = Some(view);
+            self.next = None;
+            self.paint(app);
+            if self.selected.is_some() {
+                self.inspect(app);
+            }
+        }
     }
 
     /// Takes the next view from the ring if there is room for it; true if one came.
@@ -567,6 +586,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let pack = pack.clone();
             move || branch_session(&pack)
         },
+        {
+            let layout = OnceLock::new();
+            move |sim| {
+                let layout = layout.get_or_init(|| Arc::new(econ::Layout::new(sim.world())));
+                View::new(sim, layout)
+            }
+        },
         waker(&app),
     );
     let labels = Rc::new(VecModel::default());
@@ -609,6 +635,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         next: None,
         stepping: false,
         last_frame: None,
+        followed: None,
     }));
     state.borrow_mut().paint(&app);
 
