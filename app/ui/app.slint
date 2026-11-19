@@ -36,6 +36,16 @@ export struct BranchRow {
     current: bool,
 }
 
+export struct SetupRow {
+    name: string,
+    licence: string,
+    size: string,
+    status: string,
+    manual-page: string,
+    ready: bool,
+    optional: bool,
+}
+
 component Panel inherits Rectangle {
     background: Tokens.paper;
     border-color: Tokens.rule;
@@ -721,5 +731,126 @@ export component AppWindow inherits Window {
 
     if root.about-open: About {
         close => { root.about-open = false; }
+    }
+}
+
+// First-run setup (ADR 0215, RFC 0333).
+export component SetupWindow inherits Window {
+    title: "Ceteris Paribus: setup";
+    preferred-width: 760px;
+    preferred-height: 640px;
+    background: Tokens.paper;
+    default-font-family: Tokens.sans;
+    default-font-size: Tokens.body-size;
+
+    in property <[SetupRow]> rows;
+    in property <string> disk;
+    in property <bool> disk-ok;
+    in property <string> notice;
+    in property <string> message;
+    in property <bool> can-build;
+    callback accept-file(string);
+    callback build();
+    callback open-page(string);
+
+    VerticalLayout {
+        padding: Tokens.pad * 2;
+        spacing: Tokens.pad;
+        Heading {
+            text: "Setting up Ceteris Paribus";
+        }
+        Text {
+            text: root.disk;
+            color: root.disk-ok ? Tokens.ink : Tokens.edit;
+            font-weight: root.disk-ok ? 400 : 600;
+            wrap: word-wrap;
+        }
+        if root.notice != "": Text {
+            text: root.notice;
+            color: Tokens.fork;
+            wrap: word-wrap;
+        }
+        ScrollView {
+            VerticalLayout {
+                for row in root.rows: Rectangle {
+                    height: Tokens.body-size * 2.6;
+                    border-color: Tokens.rule;
+                    border-width: Tokens.hairline;
+                    accessible-role: list-item;
+                    accessible-label: row.name + ", " + row.status;
+                    HorizontalLayout {
+                        padding: Tokens.pad / 2;
+                        spacing: Tokens.pad;
+                        VerticalLayout {
+                            Text {
+                                text: row.name;
+                                font-family: Tokens.mono;
+                                color: Tokens.ink;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: row.licence + (row.optional ? ", optional upgrade" : "");
+                                color: Tokens.ink;
+                                opacity: 0.7;
+                                overflow: elide;
+                            }
+                        }
+                        Text {
+                            text: row.size;
+                            color: Tokens.ink;
+                            vertical-alignment: center;
+                            horizontal-stretch: 0;
+                        }
+                        Text {
+                            text: row.status;
+                            color: row.ready ? Tokens.fork : Tokens.ink;
+                            font-weight: row.ready ? 600 : 400;
+                            vertical-alignment: center;
+                            min-width: Tokens.body-size * 12;
+                            horizontal-stretch: 0;
+                        }
+                        if row.manual-page != "": Action {
+                            text: "Open page";
+                            clicked => { root.open-page(row.manual-page); }
+                        }
+                    }
+                }
+            }
+        }
+        Text {
+            text: "Files downloaded by hand: type or paste the file's path and press Enter. It is accepted when it matches the expected checksum.";
+            color: Tokens.ink;
+            wrap: word-wrap;
+        }
+        Rectangle {
+            height: Tokens.body-size * 2;
+            border-color: Tokens.rule;
+            border-width: Tokens.hairline;
+            path := TextInput {
+                x: Tokens.pad / 2;
+                width: parent.width - Tokens.pad;
+                font-family: Tokens.mono;
+                color: Tokens.ink;
+                vertical-alignment: center;
+                accessible-label: "Path of a downloaded file";
+                accepted => {
+                    root.accept-file(self.text);
+                    self.text = "";
+                }
+            }
+        }
+        if root.message != "": Text {
+            text: root.message;
+            color: Tokens.edit;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            alignment: end;
+            Action {
+                text: "Build the pack";
+                opacity: root.can-build ? 1 : 0.4;
+                clicked => { if root.can-build { root.build(); } }
+            }
+        }
     }
 }

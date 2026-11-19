@@ -23,6 +23,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 libm = "0.2.16"
 tracy-client = { version = "0.18", optional = true }
+sha2 = "0.10"
 
 [features]
 # Tracy zones on the UI and sim threads, frame marks, and plots of the map passes' GPU time;
