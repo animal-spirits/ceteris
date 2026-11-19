@@ -440,6 +440,53 @@ fn fit_theta(
     Ok(at_theta(inp, THETA_GOOD, brent.root())?)
 }
 
+/// Diagnostic (#595): the target miss of good 2's group at nu 0 and class scale 0, by the two
+/// routes the fit takes: `fit_theta`'s (shares, `d_0` floored) and `solve_scale`'s (parts, `d_0`
+/// as the trial holds it).
+#[allow(clippy::too_many_arguments)]
+fn diagnose_gap(
+    inp: &Inputs,
+    t: &Targets,
+    ln_d0: &[f64],
+    at_floor: &[f64],
+    scale: &[f64],
+    nu: &[f64],
+    epsilon: f64,
+    limits: Limits,
+    progress: &mut dyn FnMut(&str),
+) -> Result<(), CalibrationError> {
+    let groups = border::friction_groups(t.theta_class);
+    let Some(k) = groups.iter().position(|g| g.contains(&THETA_GOOD)) else {
+        return Ok(());
+    };
+    let c = t.theta_class[THETA_GOOD];
+    let mut sc = scale.to_vec();
+    sc[c] = 0.0;
+    let mut nu_k = nu.to_vec();
+    for &g in &groups[k] {
+        nu_k[g] = 0.0;
+    }
+    let target = t.nu_target[k];
+    let mut out = vec![];
+    for (name, d0) in [("floored", at_floor), ("held", ln_d0)] {
+        let at = at_epsilon(inp, t.theta_class, t.ln_d, d0, &sc, epsilon)?;
+        let shares = border::data_state_shares(&at, &nu_k, &groups, t.icio, limits)?[k];
+        let (abroad, total) = border::data_state_parts(&at, &nu_k, &groups, t.icio, limits)?;
+        let parts = abroad[k] / total[k];
+        out.push(format!(
+            "d_0 {name}: shares {:e} parts {:e}",
+            shares - target,
+            parts - target
+        ));
+    }
+    progress(&format!(
+        "epsilon {epsilon}: good 2 group {k} miss at nu 0 and scale 0, theta_2 {}: {}",
+        inp.theta[THETA_GOOD],
+        out.join("; ")
+    ));
+    Ok(())
+}
+
 /// The fit at one `epsilon`: nu per group, `d_0` and the epsilon scale per class.
 pub fn fit_at_epsilon(
     inp: &Inputs,
@@ -499,6 +546,9 @@ fn trial(
                     "epsilon {epsilon}: theta_2 {} at the current scales",
                     refit.theta[THETA_GOOD]
                 ));
+                diagnose_gap(
+                    &refit, t, &ln_d0, &at_floor, &scale, &nu, epsilon, limits, progress,
+                )?;
                 if moved {
                     *inp = refit;
                     passes += 1;
