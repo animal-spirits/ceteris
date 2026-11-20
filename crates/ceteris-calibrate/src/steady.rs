@@ -606,7 +606,8 @@ pub fn sinkhorn_with(
     let mut gbest = vec![f64::INFINITY; n_g];
     let mut gsince = vec![0usize; n_g];
     let mut err = f64::NAN;
-    let (mut prev_min, mut window_min) = (f64::INFINITY, f64::INFINITY);
+    let (mut before_min, mut prev_min, mut window_min) =
+        (f64::INFINITY, f64::INFINITY, f64::INFINITY);
     let mut last_by_good = Vec::new();
     // the plain sweep from the last finite point, where a mixed step leaves f64
     let mut plain: Option<Vec<f64>> = None;
@@ -619,7 +620,7 @@ pub fn sinkhorn_with(
         let mut plateaued = false;
         if let Some((bound, _)) = stop.plateau.filter(|&(_, w)| w > 0 && sweep % w == 0) {
             plateaued = window_min <= bound && window_min >= PLATEAU_FALL * prev_min;
-            (prev_min, window_min) = (window_min, f64::INFINITY);
+            (before_min, prev_min, window_min) = (prev_min, window_min, f64::INFINITY);
         }
         if err <= stop.tol || (within && since >= ANDERSON_STALL) || plateaued {
             let r = (0..n_g)
@@ -727,13 +728,20 @@ pub fn sinkhorn_with(
         .enumerate()
         .fold((0, 0.0), |m, (g, &w)| if w > m.1 { (g, w) } else { m });
     Err(format!(
-        "Sinkhorn did not converge in {max_sweeps} sweeps, residual {}, largest in good {} ({}); plateau {:?}, last windows {} {}",
+        "Sinkhorn did not converge in {max_sweeps} sweeps, residual {}, largest in good {} ({}); plateau {:?}, last two windows {} {}{}",
         sci(err),
         at.0,
         sci(at.1),
         stop.plateau,
+        sci(before_min),
         sci(prev_min),
-        sci(window_min)
+        if !before_min.is_finite() {
+            " (fewer than two windows)"
+        } else if prev_min >= 0.99 * before_min {
+            " (flat: no balanced scaling at these inputs)"
+        } else {
+            " (still falling: slow, not infeasible)"
+        }
     )
     .into())
 }

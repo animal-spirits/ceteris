@@ -614,6 +614,16 @@ fn fit_at_spending(
             limits,
         )
         .map(|s| s.0)
+        .map_err(|f| {
+            let at_nu = |e: CalibrationError| match e {
+                CalibrationError::Failed(m) => format!("nu probed at {nu:?}: {m}").into(),
+                other => other,
+            };
+            match f {
+                Failure::Scaling(e) => Failure::Scaling(at_nu(e)),
+                Failure::Other(e) => Failure::Other(at_nu(e)),
+            }
+        })
     };
     let name = |k: usize| format!("group {k} (goods {:?})", groups[k]);
     // f = share - target, falling in nu

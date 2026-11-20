@@ -1253,6 +1253,11 @@ fn nonconverging_calibration_reports_and_writes_nothing() {
             .starts_with("Sinkhorn did not converge in 2 sweeps, residual "),
         "{err}"
     );
+    // a failure after hours says whether the residual stopped falling (infeasible) or not (slow)
+    assert!(
+        err.to_string().ends_with("(fewer than two windows)"),
+        "{err}"
+    );
     let (err, _) = run(Limits {
         max_local: 1,
         ..Limits::default()

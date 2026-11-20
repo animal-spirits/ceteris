@@ -301,6 +301,17 @@ pub struct Targets<'a> {
     pub data_flows: &'a [f64],
 }
 
+/// `r` with `what` prefixed to its error: a fit that fails after hours says which probe it was on.
+fn within<T>(
+    r: Result<T, CalibrationError>,
+    what: impl FnOnce() -> String,
+) -> Result<T, CalibrationError> {
+    r.map_err(|e| match e {
+        CalibrationError::Failed(m) => format!("{}: {m}", what()).into(),
+        other => other,
+    })
+}
+
 fn sums(values: &[f64], n_pairs: usize, stride: usize, goods: &[usize]) -> Vec<f64> {
     (0..n_pairs)
         .map(|k| goods.iter().map(|&g| values[k * stride + g]).sum())
@@ -329,7 +340,10 @@ fn solve_scale(
         let mut sc = scale.to_vec();
         sc[c] = s;
         let at = at_epsilon(inp, t.theta_class, t.ln_d, ln_d0, &sc, epsilon)?;
-        let (abroad, total) = border::data_state_parts(&at, nu, &groups, t.icio, limits)?;
+        let (abroad, total) = within(
+            border::data_state_parts(&at, nu, &groups, t.icio, limits),
+            || format!("epsilon {epsilon}: s_c of class {c} probed at {s}, scales {sc:?}"),
+        )?;
         let (miss, all) = ks.iter().fold((0.0, 0.0), |(m, a), &k| {
             (m + abroad[k] - t.nu_target[k] * total[k], a + total[k])
         });
@@ -421,7 +435,11 @@ fn fit_theta(
         for &g in &groups[k] {
             nu[g] = 0.0;
         }
-        Ok(border::data_state_shares(&at, &nu, &groups, t.icio, limits)?[k] - target)
+        let shares = within(
+            border::data_state_shares(&at, &nu, &groups, t.icio, limits),
+            || format!("epsilon {epsilon}: theta_2 probed at {theta}, scales {scale:?}"),
+        )?;
+        Ok(shares[k] - target)
     };
     let (f_lo, f_hi) = (f(THETA_BAND.0)?, f(THETA_BAND.1)?);
     if f_lo < 0.0 || f_hi > 0.0 {
@@ -484,7 +502,15 @@ fn trial(
     let mut passes = 0;
     loop {
         let at = at_epsilon(inp, t.theta_class, t.ln_d, &ln_d0, &scale, epsilon)?;
-        let fit = border::fit_border_nu(&at, &groups, t.nu_target, t.icio, limits, progress)?;
+        let fit = within(
+            border::fit_border_nu(&at, &groups, t.nu_target, t.icio, limits, progress),
+            || {
+                format!(
+                    "epsilon {epsilon}: border fit at scales {scale:?}, theta_2 {}, pass {passes}",
+                    inp.theta[THETA_GOOD]
+                )
+            },
+        )?;
         let nu = fit.nu_of_goods(&at.border_nu);
         let bad = product_misses(inp, t.theta_class, t.ln_d, &ln_d0, &scale, epsilon, &nu);
         if bad.is_empty() {
@@ -541,7 +567,10 @@ fn trial(
                 continue;
             }
             let (spend, supply) = border::spending_at(&at, &nu, limits)?;
-            let pairs = border::data_state_pair_values(&at, &nu, &spend, &supply, limits)?;
+            let pairs = within(
+                border::data_state_pair_values(&at, &nu, &spend, &supply, limits),
+                || format!("epsilon {epsilon}: pair values at the settled state, scales {scale:?}"),
+            )?;
             let (n_c, n_g) = (at.n_countries(), at.n_goods());
             let traded: Vec<usize> = (0..t.theta_class.len()).collect();
             let pooled = t
