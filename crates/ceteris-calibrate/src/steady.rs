@@ -57,7 +57,9 @@ use ceteris_reference::io::{Inputs, Mat, fixed_household_share};
 use ceteris_reference::linalg::lstsq;
 use ceteris_reference::model::{self, Factors, Model, Sourcing, max_abs};
 use ceteris_trade::TradeParams;
+use rayon::prelude::*;
 
+use crate::newton::{self, NEWTON_AFTER};
 use crate::{balance, block, elasticity};
 
 /// P149, the order rule's cover (`systems::COVER`): stage 5's stocks and the block gain's
@@ -134,6 +136,9 @@ pub struct Limits {
     /// smallest change so far: the mixing has overshot and its secants are stale (a cycle at
     /// class 3 with epsilon on). `None` never restarts.
     pub outer_restart: Option<f64>,
+    /// Run the scaling's Newton phase after [`crate::newton::NEWTON_AFTER`] sweeps (RFC 0361,
+    /// ADR 0388). Off runs the sweep alone, which is the oracle of the phase.
+    pub newton: bool,
 }
 
 impl Default for Limits {
@@ -144,6 +149,7 @@ impl Default for Limits {
             max_local: MAX_LOCAL,
             accel: Accel::default(),
             outer_restart: None,
+            newton: true,
         }
     }
 }
@@ -155,6 +161,11 @@ pub enum CalibrationError {
         passes: usize,
         change: f64,
     },
+    /// The target's share is above the model's at the largest friction: too little cost, which a
+    /// higher epsilon can fix.
+    TooLittleCost(String),
+    /// The target is above the model's share at zero friction: no epsilon can fix it.
+    Infeasible(String),
     Failed(String),
     /// Sinkhorn found no balanced scaling at these inputs: the residual is flat, not falling.
     Unbalanced(String),
@@ -168,7 +179,10 @@ impl fmt::Display for CalibrationError {
                 "passes did not settle in {passes}, last change {}",
                 sci(*change)
             ),
-            CalibrationError::Failed(s) | CalibrationError::Unbalanced(s) => f.write_str(s),
+            CalibrationError::TooLittleCost(s)
+            | CalibrationError::Infeasible(s)
+            | CalibrationError::Unbalanced(s)
+            | CalibrationError::Failed(s) => f.write_str(s),
         }
     }
 }
@@ -211,6 +225,31 @@ pub struct Scaling {
     pub sweeps: usize,
     /// max |ln(received / (r V))|.
     pub residual: f64,
+    pub newton: NewtonStats,
+}
+
+/// What the Newton phase of one scaling did (RFC 0361, D4).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct NewtonStats {
+    pub outcome: NewtonOutcome,
+    /// Goods that entered the phase.
+    pub goods: usize,
+    /// Newton steps summed over goods, and the most any one good took.
+    pub steps: usize,
+    pub max_steps: usize,
+    /// Operator products (one good-sweep each) summed over goods.
+    pub products: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum NewtonOutcome {
+    /// Switched off, or the sweep stopped within [`crate::newton::NEWTON_AFTER`] sweeps.
+    #[default]
+    NotRun,
+    /// The returned scaling is Newton's.
+    Solved,
+    /// The first failure (lowest good); the sweep resumed and the result is the sweep's.
+    Failed(String),
 }
 
 /// One pass of the fixed point.
@@ -420,6 +459,40 @@ fn mix(f: &[f64], dx: &[Vec<f64>], dg: &[Vec<f64>], gamma: &[f64]) -> Vec<f64> {
         .collect()
 }
 
+/// One good at a point: the sums of the sweep and the gap F of the stop rule.
+struct GoodEval {
+    w: Vec<f64>,
+    phi: Vec<f64>,
+    b: Vec<f64>,
+    reach: Vec<f64>,
+    got: Vec<f64>,
+    received: f64,
+    r: f64,
+    target: Vec<f64>,
+    gap: Vec<f64>,
+    /// max |F| over origins, NaN if any is not finite.
+    worst: f64,
+    /// 2-norm of F, the Newton merit.
+    norm: f64,
+    within: bool,
+}
+
+/// One good's Newton solve: its weights, or why it failed, and the work spent.
+struct NewtonGood {
+    x: Result<Vec<f64>, String>,
+    steps: usize,
+    products: usize,
+}
+
+/// What one good contributes to a sweep of [`sinkhorn_with`].
+struct GoodSweep {
+    new: Vec<f64>,
+    r: f64,
+    gap: f64,
+    worst: f64,
+    within: bool,
+}
+
 /// Stage 2 for every traded good at once: ln w of the active origins with
 /// w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o, from `spend` E (P, G) and `supply` V
 /// (P, G). Log domain: the weights of each good are shifted by their largest before each pass
@@ -443,7 +516,7 @@ pub fn sinkhorn_limited(
     start: Option<&Mat>,
     max_sweeps: usize,
 ) -> Result<Scaling, CalibrationError> {
-    sinkhorn_to(m, spend, supply, start, max_sweeps, SINKHORN_TOL)
+    sinkhorn_to(m, spend, supply, start, max_sweeps, SINKHORN_TOL, true)
 }
 
 /// [`sinkhorn_limited`] for a fit's evaluation: a residual within [`PLATEAU_TOL`] that has
@@ -454,12 +527,22 @@ pub fn sinkhorn_plateau(
     supply: &Mat,
     start: Option<&Mat>,
     max_sweeps: usize,
+    newton: bool,
 ) -> Result<Scaling, CalibrationError> {
     let stop = Stop {
         tol: SINKHORN_TOL,
         plateau: Some((PLATEAU_TOL, PLATEAU_SWEEPS)),
     };
-    sinkhorn_with(m, spend, supply, start, max_sweeps, stop, Accel::Joint)
+    sinkhorn_with(
+        m,
+        spend,
+        supply,
+        start,
+        max_sweeps,
+        stop,
+        Accel::Joint,
+        newton,
+    )
 }
 
 /// [`sinkhorn_limited`] stopping at `tol` (at least [`SINKHORN_TOL`]).
@@ -470,9 +553,19 @@ pub fn sinkhorn_to(
     start: Option<&Mat>,
     max_sweeps: usize,
     tol: f64,
+    newton: bool,
 ) -> Result<Scaling, CalibrationError> {
     let stop = Stop { tol, plateau: None };
-    sinkhorn_with(m, spend, supply, start, max_sweeps, stop, Accel::Joint)
+    sinkhorn_with(
+        m,
+        spend,
+        supply,
+        start,
+        max_sweeps,
+        stop,
+        Accel::Joint,
+        newton,
+    )
 }
 
 /// When a scaling stops: its residual within `tol`, or, for a fit, on a plateau (see
@@ -484,7 +577,13 @@ pub struct Stop {
     pub plateau: Option<(f64, usize)>,
 }
 
-/// [`sinkhorn_to`] with the mixing `accel`.
+/// [`sinkhorn_to`] with the mixing `accel`. The goods of each sweep run on the current rayon pool
+/// (`RAYON_NUM_THREADS`, default every core); a pool of one thread runs them in a loop. Results
+/// are bit-identical at any thread count: the Anderson mixing stays serial, and the sweep's
+/// operations per good are the same either way. With `newton`, goods still out of the stop rule
+/// after [`NEWTON_AFTER`] sweeps are solved by Newton's method (RFC 0361); any failure resumes
+/// the sweep from where it stood, so the result is the sweep's own.
+#[allow(clippy::too_many_arguments)]
 pub fn sinkhorn_with(
     m: &Model,
     spend: &Mat,
@@ -493,6 +592,41 @@ pub fn sinkhorn_with(
     max_sweeps: usize,
     stop: Stop,
     accel: Accel,
+    newton: bool,
+) -> Result<Scaling, CalibrationError> {
+    sinkhorn_traced(m, spend, supply, start, max_sweeps, stop, accel, newton).0
+}
+
+/// [`sinkhorn_with`] and what its Newton phase did, which an error return would otherwise lose.
+#[allow(clippy::too_many_arguments)]
+pub fn sinkhorn_traced(
+    m: &Model,
+    spend: &Mat,
+    supply: &Mat,
+    start: Option<&Mat>,
+    max_sweeps: usize,
+    stop: Stop,
+    accel: Accel,
+    newton: bool,
+) -> (Result<Scaling, CalibrationError>, NewtonStats) {
+    let mut stats = NewtonStats::default();
+    let out = sinkhorn_run(
+        m, spend, supply, start, max_sweeps, stop, accel, newton, &mut stats,
+    );
+    (out, stats)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sinkhorn_run(
+    m: &Model,
+    spend: &Mat,
+    supply: &Mat,
+    start: Option<&Mat>,
+    max_sweeps: usize,
+    stop: Stop,
+    accel: Accel,
+    newton: bool,
+    stats: &mut NewtonStats,
 ) -> Result<Scaling, CalibrationError> {
     let inp = m.inp;
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
@@ -538,64 +672,227 @@ pub fn sinkhorn_with(
         cro: &net,
     };
     let depth: Vec<f64> = (0..n_g).map(|g| summation_depth(inp, g)).collect();
+    // One good at `lw`: the weights, the two kernel sums, the gap F and r. Goods share no state, so
+    // goods may run on any number of threads: each good's operations and their order are the same
+    // either way, and the results are combined in good order.
+    let good_eval = |g: usize, lw: &[f64]| -> GoodEval {
+        let cells = g * n_p..(g + 1) * n_p;
+        let (origin, v, e) = (&origin[cells.clone()], &v[cells.clone()], &e[cells]);
+        let mut top = f64::NEG_INFINITY;
+        for k in (0..n_p).filter(|&k| origin[k]) {
+            top = np_max(top, lw[k]);
+        }
+        let w: Vec<f64> = (0..n_p)
+            .map(|k| if origin[k] { (lw[k] - top).exp() } else { 0.0 })
+            .collect();
+        let phi = m.origin_sums_good(g, &w, gross);
+        let b: Vec<f64> = (0..n_p)
+            .map(|k| divide_where(e[k], phi[k], phi[k] > 0.0, 0.0))
+            .collect();
+        let reach = m.destination_sums_good(g, &b, net_factors);
+        let got: Vec<f64> = w.iter().zip(&reach).map(|(w, r)| w * r).collect();
+        let mut received = 0.0;
+        for x in &got {
+            received += x;
+        }
+        let r = divide_where(received, total[g], total[g] > 0.0, 1.0);
+        let target: Vec<f64> = (0..n_p).map(|k| (r * v[k]).ln()).collect();
+        let gap: Vec<f64> = (0..n_p)
+            .map(|k| {
+                if origin[k] {
+                    got[k].ln() - target[k]
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let (mut worst, mut big, mut sq) = (0.0f64, 0.0f64, 0.0f64);
+        for k in (0..n_p).filter(|&k| origin[k]) {
+            worst = worst.max(gap[k].abs());
+            sq += gap[k] * gap[k];
+            big = big.max(2.0 * (lw[k] - top).abs() + 2.0 * target[k].abs());
+        }
+        GoodEval {
+            w,
+            phi,
+            b,
+            reach,
+            got,
+            received,
+            r,
+            target,
+            gap,
+            worst,
+            norm: sq.sqrt(),
+            within: worst <= SINKHORN_TOL + f64::EPSILON * (big + depth[g] + 4.5),
+        }
+    };
+    // One good's sweep: the map at its `lw`, its r, the largest |gap|, the worst gap within
+    // origins and whether that gap is within its rounding.
+    let good_step = |g: usize, lw: &[f64]| -> GoodSweep {
+        let ev = good_eval(g, lw);
+        // the map at the shifted weights, not shifted back: ln w of a good is free up to
+        // a common level, which would otherwise drift with the mixing until a unit in
+        // the last place of ln w passes SINKHORN_TOL (532 for coal and mining on the
+        // pack at nu 0.3, a residual stuck at 1.208e-13)
+        let new: Vec<f64> = (0..n_p)
+            .map(|k| {
+                if origin[g * n_p + k] {
+                    ev.target[k] - ev.reach[k].ln()
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        GoodSweep {
+            new,
+            r: ev.r,
+            gap: max_abs(&ev.gap),
+            worst: ev.worst,
+            within: ev.within,
+        }
+    };
+    // J v of one good's gap F at `ev`, v zero off the origins: analytic, one good-sweep.
+    let jacobian_product = |g: usize, ev: &GoodEval, v: &[f64]| -> Vec<f64> {
+        let origin = &origin[g * n_p..(g + 1) * n_p];
+        let wv: Vec<f64> = (0..n_p).map(|k| ev.w[k] * v[k]).collect();
+        let dphi = m.origin_sums_good(g, &wv, gross);
+        let bu: Vec<f64> = (0..n_p)
+            .map(|k| divide_where(ev.b[k] * dphi[k], ev.phi[k], ev.phi[k] > 0.0, 0.0))
+            .collect();
+        let dr = m.destination_sums_good(g, &bu, net_factors);
+        let rel: Vec<f64> = (0..n_p)
+            .map(|k| if origin[k] { -dr[k] / ev.reach[k] } else { 0.0 })
+            .collect();
+        let mut dreceived = 0.0;
+        for k in (0..n_p).filter(|&k| origin[k]) {
+            dreceived += ev.got[k] * (v[k] + rel[k]);
+        }
+        let dlnr = dreceived / ev.received;
+        (0..n_p)
+            .map(|k| if origin[k] { v[k] + rel[k] - dlnr } else { 0.0 })
+            .collect()
+    };
+    // Newton's method on one good's F from `x0`, the origin pinned at its largest weight.
+    let newton_good = |g: usize, x0: &[f64]| -> NewtonGood {
+        let org: Vec<usize> = (0..n_p).filter(|&k| origin[g * n_p + k]).collect();
+        let mut x = x0.to_vec();
+        let top = org.iter().fold(f64::NEG_INFINITY, |t, &k| t.max(x[k]));
+        let pin = *org
+            .iter()
+            .find(|&&k| x[k] == top)
+            .expect("a good with origins");
+        let free: Vec<usize> = org.iter().copied().filter(|&k| k != pin).collect();
+        let (mut steps, mut products) = (0, 0);
+        let embed = |d: &[f64]| -> Vec<f64> {
+            let mut v = vec![0.0; n_p];
+            for (&k, d) in free.iter().zip(d) {
+                v[k] = *d;
+            }
+            v
+        };
+        let mut ev = good_eval(g, &x);
+        let solved = loop {
+            if !ev.norm.is_finite() {
+                break Err("non-finite".to_string());
+            }
+            if ev.worst <= stop.tol {
+                break Ok(());
+            }
+            if steps == newton::NEWTON_MAX {
+                break Err(format!("max steps, gap {}", sci(ev.worst)));
+            }
+            let eta = ev.worst.clamp(newton::ETA_MIN, newton::ETA_MAX);
+            let rhs: Vec<f64> = free.iter().map(|&k| -ev.gap[k]).collect();
+            let mut matvec = |d: &[f64]| -> Vec<f64> {
+                let jv = jacobian_product(g, &ev, &embed(d));
+                free.iter().map(|&k| jv[k]).collect()
+            };
+            let delta = match newton::gmres(
+                &mut matvec,
+                &rhs,
+                eta,
+                newton::RESTART,
+                newton::MAX_RESTARTS,
+            ) {
+                Ok((d, used)) => {
+                    // the Krylov residual can understate the true one on a near-singular J
+                    products += used + 1;
+                    let jd = jacobian_product(g, &ev, &embed(&d));
+                    let res = free
+                        .iter()
+                        .map(|&k| (jd[k] + ev.gap[k]).powi(2))
+                        .sum::<f64>()
+                        .sqrt();
+                    let rhs_norm = rhs.iter().map(|r| r * r).sum::<f64>().sqrt();
+                    if res.is_nan() || res > 2.0 * eta * rhs_norm {
+                        break Err(format!(
+                            "gmres true residual {} of {}, gap {}",
+                            sci(res),
+                            sci(rhs_norm),
+                            sci(ev.worst)
+                        ));
+                    }
+                    d
+                }
+                Err(used) => {
+                    products += used;
+                    break Err(format!("gmres, gap {}", sci(ev.worst)));
+                }
+            };
+            let longest = delta.iter().fold(0.0f64, |a, d| a.max(d.abs()));
+            let mut alpha = (newton::STEP_CAP / longest).min(1.0);
+            let mut accepted = None;
+            for _ in 0..=newton::BACKTRACK {
+                let mut trial = x.clone();
+                for (&k, d) in free.iter().zip(&delta) {
+                    trial[k] += alpha * d;
+                }
+                let t = good_eval(g, &trial);
+                if t.norm.is_finite() && t.norm <= (1.0 - newton::ARMIJO * alpha) * ev.norm {
+                    accepted = Some((trial, t));
+                    break;
+                }
+                alpha *= 0.5;
+            }
+            match accepted {
+                Some((trial, t)) => {
+                    (x, ev) = (trial, t);
+                    steps += 1;
+                }
+                None if ev.within => break Ok(()),
+                None => break Err(format!("line search, gap {}", sci(ev.worst))),
+            }
+        };
+        NewtonGood {
+            x: solved.map(|()| x),
+            steps,
+            products,
+        }
+    };
     // the map at lw, r, the largest |gap| and whether every good's gap is within its rounding
     let step = |lw: &[f64]| -> (Vec<f64>, Vec<f64>, f64, bool, Vec<f64>) {
-        let mut top = vec![f64::NEG_INFINITY; n_g];
-        for i in (0..n).filter(|&i| origin[i]) {
-            top[good[i]] = np_max(top[good[i]], lw[i]);
-        }
-        let w: Vec<f64> = (0..n)
-            .map(|i| {
-                if origin[i] {
-                    (lw[i] - top[good[i]]).exp()
-                } else {
-                    0.0
-                }
-            })
-            .collect();
-        let phi = m.origin_sums(&w, gross);
-        let b: Vec<f64> = (0..n)
-            .map(|i| divide_where(e[i], phi[i], phi[i] > 0.0, 0.0))
-            .collect();
-        let reach = m.destination_sums(&b, net_factors);
-        let got: Vec<f64> = w.iter().zip(&reach).map(|(w, r)| w * r).collect();
-        let received = bincount(&good, got.iter().copied(), n_g);
-        let r: Vec<f64> = (0..n_g)
-            .map(|g| divide_where(received[g], total[g], total[g] > 0.0, 1.0))
-            .collect();
-        let target: Vec<f64> = (0..n).map(|i| (r[good[i]] * v[i]).ln()).collect();
-        let new = (0..n)
-            .map(|i| {
-                // the map at the shifted weights, not shifted back: ln w of a good is free up to
-                // a common level, which would otherwise drift with the mixing until a unit in
-                // the last place of ln w passes SINKHORN_TOL (532 for coal and mining on the
-                // pack at nu 0.3, a residual stuck at 1.208e-13)
-                if origin[i] {
-                    target[i] - reach[i].ln()
-                } else {
-                    0.0
-                }
-            })
-            .collect();
-        let gap: Vec<f64> = (0..n)
-            .map(|i| {
-                if origin[i] {
-                    got[i].ln() - target[i]
-                } else {
-                    0.0
-                }
-            })
-            .collect();
-        let mut worst = vec![0.0f64; n_g];
-        let mut big = vec![0.0f64; n_g];
-        for i in (0..n).filter(|&i| origin[i]) {
-            worst[good[i]] = worst[good[i]].max(gap[i].abs());
-            big[good[i]] =
-                big[good[i]].max(2.0 * (lw[i] - top[good[i]]).abs() + 2.0 * target[i].abs());
-        }
-        let within =
-            (0..n_g).all(|g| worst[g] <= SINKHORN_TOL + f64::EPSILON * (big[g] + depth[g] + 4.5));
-        (new, r, max_abs(&gap), within, worst)
+        let sweeps: Vec<GoodSweep> = if rayon::current_num_threads() > 1 {
+            (0..n_g)
+                .into_par_iter()
+                .map(|g| good_step(g, &lw[g * n_p..(g + 1) * n_p]))
+                .collect()
+        } else {
+            (0..n_g)
+                .map(|g| good_step(g, &lw[g * n_p..(g + 1) * n_p]))
+                .collect()
+        };
+        let new = sweeps.iter().flat_map(|s| s.new.iter().copied()).collect();
+        let r = sweeps.iter().map(|s| s.r).collect();
+        let err = max_abs(&sweeps.iter().map(|s| s.gap).collect::<Vec<_>>());
+        let within = sweeps.iter().all(|s| s.within);
+        (
+            new,
+            r,
+            err,
+            within,
+            sweeps.iter().map(|s| s.worst).collect(),
+        )
     };
 
     let (mut xs, mut gs): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (Vec::new(), Vec::new());
@@ -641,6 +938,7 @@ pub fn sinkhorn_with(
                 r,
                 sweeps: sweep,
                 residual: err,
+                newton: stats.clone(),
             });
         }
         if !err.is_finite() {
@@ -659,6 +957,59 @@ pub fn sinkhorn_with(
             (gbest, gsince) = (vec![f64::INFINITY; n_g], vec![0; n_g]);
             lw = p;
             continue;
+        }
+        if newton && sweep == NEWTON_AFTER {
+            // Each good still out solves its own F by Newton from the sweep's point. Any failure
+            // leaves lw, the mixing histories and the counters untouched, and the sweep resumes.
+            let out: Vec<usize> = (0..n_g)
+                .filter(|&g| !cells[g].is_empty() && last_by_good[g] > stop.tol)
+                .collect();
+            let run = |&g: &usize| newton_good(g, &lw[g * n_p..(g + 1) * n_p]);
+            let solves: Vec<NewtonGood> = if rayon::current_num_threads() > 1 {
+                out.par_iter().map(run).collect()
+            } else {
+                out.iter().map(run).collect()
+            };
+            stats.goods = out.len();
+            stats.steps = solves.iter().map(|s| s.steps).sum();
+            stats.max_steps = solves.iter().map(|s| s.steps).max().unwrap_or(0);
+            stats.products = solves.iter().map(|s| s.products).sum();
+            let failure = out
+                .iter()
+                .zip(&solves)
+                .find_map(|(g, s)| s.x.as_ref().err().map(|e| format!("good {g}: {e}")));
+            stats.outcome = match failure {
+                Some(f) => NewtonOutcome::Failed(f),
+                None => NewtonOutcome::Solved,
+            };
+            if stats.outcome == NewtonOutcome::Solved {
+                let mut solved = lw.clone();
+                for (&g, s) in out.iter().zip(&solves) {
+                    let x = s.x.as_ref().expect("no failure");
+                    solved[g * n_p..(g + 1) * n_p].copy_from_slice(x);
+                }
+                let (_, r, final_err, within, _) = step(&solved);
+                if final_err.is_finite() && (final_err <= stop.tol || within) {
+                    let r = (0..n_g)
+                        .map(|g| if inp.traded[g] { r[g] } else { 1.0 })
+                        .collect();
+                    let mut top = vec![f64::NEG_INFINITY; n_g];
+                    for i in (0..n).filter(|&i| origin[i]) {
+                        top[good[i]] = np_max(top[good[i]], solved[i]);
+                    }
+                    for i in (0..n).filter(|&i| origin[i]) {
+                        solved[i] -= top[good[i]];
+                    }
+                    return Ok(Scaling {
+                        log_weight: model::cells(&solved, n_p, n_g),
+                        r,
+                        sweeps: sweep + 1,
+                        residual: final_err,
+                        newton: stats.clone(),
+                    });
+                }
+                stats.outcome = NewtonOutcome::Failed(format!("final gap {}", sci(final_err)));
+            }
         }
         if accel == Accel::PerGood {
             let mut mixed = fx.clone();
@@ -1483,7 +1834,14 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
         });
         // stage 2 at this spending: who pays which tariff follows the solved origin prices, not
         // posted prices 1, where imports and so duties are several times the calibrated ones
-        let scaling = sinkhorn_plateau(&m, &spend, &sales, lw.as_ref(), limits.max_sweeps)?;
+        let scaling = sinkhorn_plateau(
+            &m,
+            &spend,
+            &sales,
+            lw.as_ref(),
+            limits.max_sweeps,
+            limits.newton,
+        )?;
         let l = &scaling.log_weight;
         let price = Mat::from_fn(n_p, n_g, |p, g| {
             if traded[g] && inp.active[p][g] {
@@ -1703,6 +2061,7 @@ pub fn calibrate_from(
             limits.max_sweeps,
             Stop { tol, plateau: None },
             limits.accel,
+            limits.newton,
         )?;
         let log_weight = scaling.log_weight.clone();
         let mut top = vec![f64::NEG_INFINITY; n_g];

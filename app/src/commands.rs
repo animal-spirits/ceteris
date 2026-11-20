@@ -2,6 +2,8 @@
 //! reach it through the registry. The shell carries the Time and Map groups of the standard
 //! keymap; the palette, vim mode and the rest arrive with P3, whose registry this becomes.
 
+use ceteris_run::EditKind;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
     TogglePause,
@@ -16,6 +18,8 @@ pub enum Command {
     ZoomIn,
     ZoomOut,
     ZoomReset,
+    /// Show or hide the branch manager.
+    ToggleBranches,
 }
 
 impl Command {
@@ -32,6 +36,7 @@ impl Command {
             Self::ZoomIn => "map.zoom-in".into(),
             Self::ZoomOut => "map.zoom-out".into(),
             Self::ZoomReset => "map.zoom-reset".into(),
+            Self::ToggleBranches => "view.branches".into(),
         }
     }
 }
@@ -45,12 +50,30 @@ pub enum BranchCommand<'a> {
     Switch(&'a str),
     Seek(u32),
     RunTo(u32),
+    /// Edit a state variable, parameter or policy of the current branch at the cursor tick:
+    /// before any run when the cursor is 0 (ex ante), mid-run otherwise (ex post).
+    Edit(EditKind, &'a str, f64),
 }
 
 impl<'a> BranchCommand<'a> {
     pub fn parse(line: &'a str) -> Option<Self> {
         let (verb, arg) = line.split_once(' ')?;
         let arg = arg.trim();
+        if verb == "branch.edit" {
+            let mut parts = arg.split_whitespace();
+            let kind = match parts.next()? {
+                "state" => EditKind::State,
+                "param" => EditKind::Param,
+                "policy" => EditKind::Policy,
+                _ => return None,
+            };
+            let target = parts.next()?;
+            let value = parts.next()?.parse().ok()?;
+            return parts
+                .next()
+                .is_none()
+                .then_some(Self::Edit(kind, target, value));
+        }
         match verb {
             "branch.fork" if !arg.is_empty() => Some(Self::Fork(arg)),
             "branch.switch" if !arg.is_empty() => Some(Self::Switch(arg)),
@@ -83,6 +106,7 @@ pub const STANDARD: &[(&str, Command)] = &[
     ("Ctrl++", Command::ZoomIn),
     ("Ctrl+-", Command::ZoomOut),
     ("Ctrl+0", Command::ZoomReset),
+    ("B", Command::ToggleBranches),
 ];
 
 /// A chord as the keymap names it: modifiers in Ctrl, Alt, Shift order, then the key, with

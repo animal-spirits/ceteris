@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use ceteris_calibrate::border;
 use ceteris_calibrate::epsilon::{self, Gravity, Targets};
-use ceteris_calibrate::steady::{self, Limits};
+use ceteris_calibrate::steady::{self, CalibrationError, Limits};
 use ceteris_reference::io::{self, Inputs};
 
 fn fixture() -> PathBuf {
@@ -66,9 +66,19 @@ fn known(w: &World, epsilon: f64, nu_group: &[f64]) -> (Vec<f64>, Vec<f64>) {
 }
 
 fn known_scaled(w: &World, epsilon: f64, scale: &[f64], nu_group: &[f64]) -> (Vec<f64>, Vec<f64>) {
-    let (mut mean, min) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &trade_weight(&w.inp));
+    known_weighted(w, epsilon, scale, nu_group, &trade_weight(&w.inp))
+}
+
+fn known_weighted(
+    w: &World,
+    epsilon: f64,
+    scale: &[f64],
+    nu_group: &[f64],
+    weight: &[f64],
+) -> (Vec<f64>, Vec<f64>) {
     // a scaled class is a floored one: d_0 at its smallest linked distance
     // the per-good class at nu 0 is floored likewise
+    let (mut mean, min) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, weight);
     for c in (0..scale.len()).filter(|&c| scale[c] < 1.0 || c >= 3) {
         mean[c] = min[c];
     }
@@ -319,6 +329,67 @@ fn clamped_class_takes_an_epsilon_scale() {
     }
 }
 
+/// The Newton phase moves a trial within the scalings' tolerance (RFC 0362 D2): nu and s_c agree
+/// with the sweep-only trial to 1e-13, and the trial is bit-identical at any thread count.
+#[test]
+fn newton_trial_agrees_with_the_sweep_and_threads() {
+    let w = world();
+    let (e0, c, s0) = (0.4, 1, 0.5);
+    let mut scale = [1.0; border::N_CLASSES];
+    scale[c] = s0;
+    let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
+    let (nu_target, data_flows) = known_scaled(&w, e0, &scale, &nu_group);
+    let t = Targets {
+        nu_target: &nu_target,
+        icio: &w.icio,
+        theta_class: &w.class,
+        ln_d: &w.ln_d,
+        weight: &trade_weight(&w.inp),
+        gravity: &w.gravity,
+        data_flows: &data_flows,
+        theta_fit: false,
+    };
+    let trial = |newton| {
+        let limits = Limits {
+            newton,
+            ..Limits::default()
+        };
+        epsilon::fit_at_epsilon(&w.inp, &t, e0, limits, &mut quiet()).unwrap()
+    };
+    let (on, off) = (trial(true), trial(false));
+    let worst = |a: &[f64], b: &[f64]| {
+        a.iter()
+            .zip(b)
+            .fold(0.0f64, |m, (x, y)| m.max((x - y).abs()))
+    };
+    eprintln!(
+        "nu {:e} scale {:e} ln_d0 {:e} pooled {:e}",
+        worst(&on.fit.nu, &off.fit.nu),
+        worst(&on.scale, &off.scale),
+        worst(&on.ln_d0, &off.ln_d0),
+        (on.pooled - off.pooled).abs()
+    );
+    assert!(worst(&on.fit.nu, &off.fit.nu) <= 1e-13);
+    assert!(worst(&on.scale, &off.scale) <= 1e-13);
+    assert!(worst(&on.ln_d0, &off.ln_d0) <= 1e-13);
+    let bits = |t: &epsilon::Trial| -> Vec<u64> {
+        [&t.fit.nu, &t.scale, &t.ln_d0, &t.classes]
+            .into_iter()
+            .flatten()
+            .chain([&t.pooled])
+            .map(|x| x.to_bits())
+            .collect()
+    };
+    for threads in [1, 2, 8] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        let again = pool.install(|| trial(true));
+        assert_eq!(bits(&again), bits(&on), "{threads} threads");
+    }
+}
+
 /// A fit at a given epsilon is one trial at exactly that epsilon.
 #[test]
 fn fit_at_a_given_epsilon_is_one_trial() {
@@ -564,4 +635,79 @@ fn concurrent_end_trials_match_sequential() {
     let sequential = run(1);
     assert_eq!(run(4), sequential);
     assert_eq!(run(2), sequential);
+}
+
+/// A class short at zero friction is infeasible at every epsilon: the fit returns the typed
+/// error naming the epsilon, not "too little cost" scored as a positive sign (RFC 0360 D4).
+#[test]
+fn a_target_above_the_zero_friction_share_is_infeasible_not_too_little_cost() {
+    let w = world();
+    let (e0, c, s0) = (0.4, 1, 0.5);
+    let mut scale = [1.0; border::N_CLASSES];
+    scale[c] = s0;
+    let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
+    let (mut nu_target, data_flows) = known_scaled(&w, e0, &scale, &nu_group);
+    nu_target[c] = 0.5 + 0.5 * nu_target[c];
+    let t = Targets {
+        nu_target: &nu_target,
+        icio: &w.icio,
+        theta_class: &w.class,
+        ln_d: &w.ln_d,
+        weight: &trade_weight(&w.inp),
+        gravity: &w.gravity,
+        data_flows: &data_flows,
+        theta_fit: false,
+    };
+    let err = epsilon::fit_epsilon(&w.inp, &t, Limits::default(), &mut quiet()).unwrap_err();
+    let CalibrationError::Infeasible(e) = err else {
+        panic!("{err}");
+    };
+    assert!(e.starts_with("epsilon "), "{e}");
+}
+
+/// d_0 is the trade-weighted mean of ln d (ADR 0272, Decision 2): targets made with uneven pair
+/// weights come back from a trial given those weights, and the weights move d_0 off the
+/// unit-weight mean.
+#[test]
+fn d0_is_the_trade_weighted_mean_of_ln_distance() {
+    let w = world();
+    let n = w.inp.n_countries();
+    let uneven: Vec<f64> = (0..n * n)
+        .map(|k| 1.0 + ((k / n) * 7 + (k % n) * 3 % 5) as f64)
+        .collect();
+    let (e0, nu_group) = (0.4, [0.15, 0.6, 0.35, 0.0, 0.0]);
+    let (nu_target, data_flows) =
+        known_weighted(&w, e0, &[1.0; border::N_CLASSES], &nu_group, &uneven);
+    let trial = |weight: &[f64]| {
+        let t = Targets {
+            nu_target: &nu_target,
+            icio: &w.icio,
+            theta_class: &w.class,
+            ln_d: &w.ln_d,
+            weight,
+            gravity: &w.gravity,
+            data_flows: &data_flows,
+            theta_fit: false,
+        };
+        epsilon::fit_at_epsilon(&w.inp, &t, e0, Limits::default(), &mut quiet()).unwrap()
+    };
+    let (weighted, unit) = (trial(&uneven), trial(&trade_weight(&w.inp)));
+    let (mean, _) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &uneven);
+    for c in (0..border::N_CLASSES).filter(|&c| mean[c].is_finite()) {
+        if !weighted.floored.contains(&c) {
+            assert_eq!(weighted.ln_d0[c], mean[c], "class {c}");
+        }
+    }
+    assert!(
+        (0..border::N_CLASSES).any(|c| (weighted.ln_d0[c] - unit.ln_d0[c]).abs() > 1e-6),
+        "uneven weights left d_0 at the unit-weight mean: {:?}",
+        weighted.ln_d0
+    );
+    for (k, nu) in nu_group.iter().enumerate() {
+        assert!(
+            (weighted.fit.nu[k] - nu).abs() <= 1e-4,
+            "{:?}",
+            weighted.fit.nu
+        );
+    }
 }

@@ -880,6 +880,26 @@ pub fn static_digest(inputs: &EconInputs, params: &EconParams, trade: &TradePara
 /// which leave the steady state but enter the calibration's block map and market elasticities
 /// (ADRs 0091, 0267): a run under other storage parameters would keep stale price-gain limits.
 /// The adjustment speeds and the frictionless and rationing switches are free.
+/// Drops the calibrated steady state and market elasticities of `inputs` when they were built
+/// under other structural parameters than `params` and `trade`, so a world over them starts from
+/// the data state instead of failing [`EconWorld::new`]'s guard. Returns whether it dropped them.
+/// For interactive starts only; runs keep the guard.
+pub fn drop_stale_calibration(
+    inputs: &mut EconInputs,
+    params: &EconParams,
+    trade: &TradeParams,
+) -> bool {
+    let calibrated = inputs.steady.is_some() || inputs.market_elasticity.is_some();
+    let stale = calibrated
+        && structural_digest(inputs, params, trade)
+            != structural_digest(inputs, &EconParams::default(), &inputs.trade_params());
+    if stale {
+        inputs.steady = None;
+        inputs.market_elasticity = None;
+    }
+    stale
+}
+
 pub fn structural_digest(inputs: &EconInputs, params: &EconParams, trade: &TradeParams) -> Hash {
     static_digest(
         inputs,
@@ -3686,33 +3706,37 @@ mod tests {
         assert_eq!(back.monetary.as_ref(), Some(m));
     }
 
+    /// The monetary world with the HLW r* filter on, starting from r* = 2%.
+    fn hlw_world(w: EconWorld) -> EconWorld {
+        use crate::hlw::HlwParams;
+        let m = w.monetary.clone().unwrap().with_hlw(
+            HlwParams {
+                a1: 1.0,
+                a2: -0.2,
+                a_r: -0.3,
+                b_pi: 0.7,
+                b_y: 0.1,
+                c: 1.0,
+                sigma_y_gap: 0.005,
+                sigma_pi: 0.005,
+                sigma_y_star: 0.004,
+                sigma_g: 0.0005,
+                sigma_z: 0.0015,
+            },
+            0.02,
+        );
+        w.with_monetary(m)
+    }
+
     /// With the filter on, r* is re-estimated each year, so the policy rates differ from the
     /// fixed-intercept run while the real economy is untouched; replay and snapshot are exact.
     #[test]
     fn hlw_on_updates_r_star_annually_and_off_changes_nothing() {
-        use crate::hlw::HlwParams;
         let sim = |hlw: bool| {
             let mut s = monetary_sim();
             if hlw {
-                let w = s.world().clone();
-                let m = w.monetary.clone().unwrap().with_hlw(
-                    HlwParams {
-                        a1: 1.0,
-                        a2: -0.2,
-                        a_r: -0.3,
-                        b_pi: 0.7,
-                        b_y: 0.1,
-                        c: 1.0,
-                        sigma_y_gap: 0.005,
-                        sigma_pi: 0.005,
-                        sigma_y_star: 0.004,
-                        sigma_g: 0.0005,
-                        sigma_z: 0.0015,
-                    },
-                    0.02,
-                );
                 s = Sim::new(
-                    w.with_monetary(m),
+                    hlw_world(s.world().clone()),
                     crate::systems::schedule(),
                     crate::systems::SEED,
                 );
@@ -3999,6 +4023,65 @@ mod tests {
         assert_eq!(back.state_cells, on.world().state_cells);
     }
 
+    /// With the fiscal system on, the government account is minus the debt at every tick, also
+    /// with energy wedges or state cells on (#630); each switch moves the debt off the fiscal-only
+    /// run, so the identity is not met by the switch doing nothing.
+    #[test]
+    fn government_account_equals_minus_debt_with_energy_and_state_cells_on() {
+        use crate::energy_policy::{EnergyPolicy, EnergyWedges};
+        use crate::sfc::{BONDS, GOVERNMENT};
+        let base = world();
+        let (nc, n_ent) = (base.inputs().n_countries(), base.inputs().n_enterprises());
+        let unit = MINOR_PER_UNIT as i128 / 20;
+        let energy = EnergyPolicy {
+            goods: [1, 2, 7],
+            countries: vec![
+                EnergyWedges {
+                    wedge: [unit, -unit, unit]
+                };
+                nc
+            ],
+        };
+        let cells = crate::state_cells::StateCells {
+            share: vec![0.5; n_ent],
+        };
+        let fiscal = monetary_sim().world().clone().with_fiscal(government(nc));
+        let debts = |w: EconWorld| -> Vec<i128> {
+            let mut sim = Sim::new(w, crate::systems::schedule(), crate::systems::SEED);
+            let mut out = Vec::new();
+            while sim.tick() < 14 {
+                sim.step().unwrap_or_else(|v| panic!("{v}"));
+                let w = sim.world();
+                let g = w.fiscal.as_ref().unwrap();
+                for ((f, sheet), &a) in g
+                    .fiscal
+                    .iter()
+                    .zip(&g.sheets)
+                    .zip(&w.layout.accounts.government)
+                {
+                    assert_eq!(w.ledger.money_wide(a), -f.debt, "tick {}", sim.tick());
+                    assert_eq!(sheet.positions[BONDS][GOVERNMENT], -f.debt);
+                    out.push(f.debt);
+                }
+            }
+            out
+        };
+        let only = debts(fiscal.clone());
+        for (name, w) in [
+            ("energy", fiscal.clone().with_energy_policy(energy.clone())),
+            (
+                "state cells",
+                fiscal.clone().with_state_cells(cells.clone()),
+            ),
+            (
+                "both",
+                fiscal.with_energy_policy(energy).with_state_cells(cells),
+            ),
+        ] {
+            assert_ne!(debts(w), only, "{name} left the debt unchanged");
+        }
+    }
+
     /// Off, capital adds nothing; on, each enterprise's pipeline accumulates capital from its
     /// orders (permit lag, then Erlang stages), the real economy is untouched, and the section
     /// survives a snapshot.
@@ -4143,6 +4226,7 @@ mod tests {
             ("wage grid", wage_grid_sim(true).world().clone()),
             ("hazards", hazard_sim(1.0).world().clone()),
             ("fiscal", monetary.clone().with_fiscal(government(nc))),
+            ("hlw", hlw_world(monetary.clone())),
             ("energy", base.clone().with_energy_policy(energy.clone())),
             ("state cells", base.clone().with_state_cells(cells.clone())),
             ("capital", base.clone().with_capital(capital.clone())),

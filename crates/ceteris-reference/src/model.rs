@@ -40,6 +40,8 @@
 //! `g * P + i` for provinces and `g * N + a` for gateways; country pairs are flat (C, C, G),
 //! index `(exporter * C + importer) * G + g`.
 
+use std::ops::Range;
+
 use crate::demand::{self, Weights};
 use crate::io::{Inputs, Mat, pairwise_sum};
 
@@ -59,6 +61,22 @@ struct LegIndex {
     a_gate: Vec<usize>,
     c_from: Vec<usize>,
     c_to: Vec<usize>,
+}
+
+/// Each good's legs in the kernel tables, which list them good by good.
+struct GoodLegs {
+    dom: Vec<Range<usize>>,
+    acc: Vec<Range<usize>>,
+    cro: Vec<Range<usize>>,
+}
+
+fn by_good(good: &[usize], n_g: usize, table: &str) -> Result<Vec<Range<usize>>, String> {
+    if good.windows(2).any(|w| w[0] > w[1]) {
+        return Err(format!("the {table} legs are not sorted by good"));
+    }
+    Ok((0..n_g)
+        .map(|g| good.partition_point(|&x| x < g)..good.partition_point(|&x| x <= g))
+        .collect())
 }
 
 /// Per-leg factors of one routing pass: domestic, access and crossing legs, in the order of the
@@ -92,6 +110,7 @@ pub struct Model<'a> {
     /// elsewhere and for inputs without coverage.
     pub spoilage: Vec<f64>,
     legs: LegIndex,
+    good_legs: GoodLegs,
     ent_country: Vec<usize>,
     pop_country: Vec<usize>,
     /// e_k LF_k / L^s of the pop's province.
@@ -275,6 +294,11 @@ impl<'a> Model<'a> {
             c_from: flat(&cro.good, &cro.row, n_n),
             c_to: flat(&cro.good, &cro.col, n_n),
         };
+        let good_legs = GoodLegs {
+            dom: by_good(&dom.good, inp.n_goods(), "domestic")?,
+            acc: by_good(&acc.good, inp.n_goods(), "access")?,
+            cro: by_good(&cro.good, inp.n_goods(), "crossing")?,
+        };
         let times =
             |a: &[f64], b: &[f64]| -> Vec<f64> { a.iter().zip(b).map(|(x, y)| x * y).collect() };
         let cro_net = times(&cro.k, &cro.inv_duty);
@@ -327,6 +351,7 @@ impl<'a> Model<'a> {
             market_floor,
             active_cells,
             legs,
+            good_legs,
             ent_country: inp.ent_country(),
             pop_country,
             pop_labour_share,
@@ -426,6 +451,57 @@ impl<'a> Model<'a> {
             n_pg,
         );
         (0..n_pg).map(|j| w[j] + dom[j] + acc[j]).collect()
+    }
+
+    /// [`Model::origin_sums`] of good `g` alone, from its weights `w` (P,): bit-identical to the
+    /// good's slice of the all-goods sums, because the legs of different goods share no bin and
+    /// each bin adds its legs in table order either way.
+    pub fn origin_sums_good(&self, g: usize, w: &[f64], f: Factors) -> Vec<f64> {
+        let (l, gl) = (&self.legs, &self.good_legs);
+        let (n_p, n_n) = (self.inp.n_provinces(), self.inp.n_gateways());
+        let (op, on) = (g * n_p, g * n_n);
+        let mut v = vec![0.0; n_n];
+        for j in gl.acc[g].clone() {
+            v[l.a_gate[j] - on] += f.acc[j] * w[l.a_prov[j] - op];
+        }
+        let mut u = vec![0.0; n_n];
+        for j in gl.cro[g].clone() {
+            u[l.c_to[j] - on] += f.cro[j] * v[l.c_from[j] - on];
+        }
+        let mut dom = vec![0.0; n_p];
+        for j in gl.dom[g].clone() {
+            dom[l.d_to[j] - op] += f.dom[j] * w[l.d_from[j] - op];
+        }
+        let mut acc = vec![0.0; n_p];
+        for j in gl.acc[g].clone() {
+            acc[l.a_prov[j] - op] += f.acc[j] * u[l.a_gate[j] - on];
+        }
+        (0..n_p).map(|j| w[j] + dom[j] + acc[j]).collect()
+    }
+
+    /// [`Model::destination_sums`] of good `g` alone, from its weights `r` (P,); bit-identical to
+    /// the good's slice of the all-goods sums (see [`Model::origin_sums_good`]).
+    pub fn destination_sums_good(&self, g: usize, r: &[f64], f: Factors) -> Vec<f64> {
+        let (l, gl) = (&self.legs, &self.good_legs);
+        let (n_p, n_n) = (self.inp.n_provinces(), self.inp.n_gateways());
+        let (op, on) = (g * n_p, g * n_n);
+        let mut y = vec![0.0; n_n];
+        for j in gl.acc[g].clone() {
+            y[l.a_gate[j] - on] += f.acc[j] * r[l.a_prov[j] - op];
+        }
+        let mut z = vec![0.0; n_n];
+        for j in gl.cro[g].clone() {
+            z[l.c_from[j] - on] += f.cro[j] * y[l.c_to[j] - on];
+        }
+        let mut dom = vec![0.0; n_p];
+        for j in gl.dom[g].clone() {
+            dom[l.d_from[j] - op] += f.dom[j] * r[l.d_to[j] - op];
+        }
+        let mut acc = vec![0.0; n_p];
+        for j in gl.acc[g].clone() {
+            acc[l.a_prov[j] - op] += f.acc[j] * z[l.a_gate[j] - on];
+        }
+        (0..n_p).map(|j| r[j] + dom[j] + acc[j]).collect()
     }
 
     /// sum over routes o -> d of the route's leg factors times r_d, for every origin o, home

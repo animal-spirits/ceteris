@@ -89,6 +89,29 @@ impl Fiscal {
         self.debt += deficit;
         (tx, acq)
     }
+
+    /// A receipt (negative: an outlay) booked outside the instruments, such as state-enterprise
+    /// profit or an energy excise: it pays down the debt as a negative deficit.
+    pub fn close_receipt(
+        &mut self,
+        amount: i128,
+    ) -> (Transactions, [[i128; N_SECTOR]; N_INSTRUMENT]) {
+        let mut tx = Transactions::default();
+        let (from, to, amount) = if amount >= 0 {
+            (HOUSEHOLDS, GOVERNMENT, amount)
+        } else {
+            (GOVERNMENT, HOUSEHOLDS, -amount)
+        };
+        tx.post(TAXES, from, to, amount);
+        let mut acq = [[0i128; N_SECTOR]; N_INSTRUMENT];
+        let deficit = if from == HOUSEHOLDS { -amount } else { amount };
+        acq[BONDS][GOVERNMENT] -= deficit;
+        acq[BONDS][BANKS] += deficit;
+        acq[DEPOSITS][HOUSEHOLDS] += deficit;
+        acq[DEPOSITS][BANKS] -= deficit;
+        self.debt += deficit;
+        (tx, acq)
+    }
 }
 
 /// The government of every country (system 232, `specs/money/SPEC.md`): its fiscal state and
@@ -131,6 +154,21 @@ impl Government {
             capacity_spend,
             interest_rate,
         }
+    }
+
+    /// Books a receipt (negative: an outlay) that the ledger already holds in country `c`'s
+    /// government account, so the account stays equal to minus the debt (#630).
+    pub fn receive(&mut self, c: usize, amount: i128) {
+        let before = self.sheets[c];
+        let (tx, acq) = self.fiscal[c].close_receipt(amount);
+        self.sheets[c].apply(&acq, &[[0; N_SECTOR]; N_INSTRUMENT]);
+        debug_assert!(closes(
+            &before,
+            &self.sheets[c],
+            &tx,
+            &acq,
+            &[[0; N_SECTOR]; N_INSTRUMENT]
+        ));
     }
 
     /// Corporate tax of country `c` on the profit pool `base` (ADR 0362), which becomes the

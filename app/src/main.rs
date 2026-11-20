@@ -18,12 +18,17 @@ use ceteris_app::inspect;
 use ceteris_app::labels::Anchors;
 use ceteris_app::map::{Layer, Map, Picked, Style};
 use ceteris_app::modes::{self, Mode};
+use ceteris_app::session::Session;
+use ceteris_app::setup;
 use ceteris_app::sim::{Halt, Runner};
 use ceteris_app::web::{Counties, Provinces};
+use ceteris_app::workbench::{self, Host, Snapshot};
 use ceteris_app::zone;
+use ceteris_core::rng::Seed;
 use ceteris_core::sim::Sim;
 use ceteris_econ::{EconInputs, EconParams, EconWorld};
-use ceteris_trade::TradeParams;
+use ceteris_run::store::ChunkStore;
+use ceteris_run::{Scenario, Workbench};
 use slint::platform::Key;
 use slint::{Color, Model, ModelRc, VecModel};
 
@@ -36,17 +41,61 @@ fn pack_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/packs/2000"))
 }
 
-/// The econ world of the pack, from its calibrated steady state when the pack has one.
-fn econ(dir: &Path) -> Result<Sim<EconWorld>, String> {
+/// The economy's inputs from the pack, at its calibrated steady state when it has one.
+fn inputs(dir: &Path) -> Result<Arc<EconInputs>, String> {
     let pack = ceteris_geo::pack::Pack::load(dir, &ceteris_geo::graph::TransportParams::default())
         .map_err(|e| format!("the economy did not load: {e}"))?;
-    let inputs =
+    let mut inputs =
         EconInputs::from_pack(&pack, dir).map_err(|e| format!("the economy did not load: {e}"))?;
-    Ok(EconWorld::sim(
-        Arc::new(inputs),
-        EconParams::default(),
-        TradeParams::default(),
-    ))
+    let trade = inputs.trade_params();
+    if ceteris_econ::world::drop_stale_calibration(&mut inputs, &EconParams::default(), &trade) {
+        eprintln!(
+            "the pack's calibrated steady state does not match this build; starting from the \
+             data state (recalibrate the pack to use it)"
+        );
+    }
+    Ok(Arc::new(inputs))
+}
+
+fn world(inputs: Arc<EconInputs>) -> Sim<EconWorld> {
+    let trade = inputs.trade_params();
+    EconWorld::sim(inputs, EconParams::default(), trade)
+}
+
+/// The econ world of the pack.
+fn econ(dir: &Path) -> Result<Sim<EconWorld>, String> {
+    inputs(dir).map(world)
+}
+
+/// The branch session over the pack: the scenario file named by `CETERIS_SCENARIO`, else a new
+/// one with a single root branch. Only a scenario file reproduces a shared run hash; a new one
+/// carries no pack hash (`unpinned`).
+fn branch_session(pack: &Path) -> Result<Session, String> {
+    let engine = ceteris_run::engine_id();
+    let scenario = match std::env::var_os("CETERIS_SCENARIO") {
+        Some(file) => {
+            let text = std::fs::read_to_string(&file)
+                .map_err(|e| format!("{}: {e}", Path::new(&file).display()))?;
+            Scenario::parse(&text).map_err(|e| e.to_string())?
+        }
+        None => ceteris_run::commands::new_scenario("unpinned", &engine, vec![1]),
+    };
+    let seed = Seed(*scenario.seeds.first().ok_or("the scenario has no seed")?);
+    let inputs = inputs(pack)?;
+    let root = workbench::cache_root(&engine);
+    // Opened once here so a store that cannot open is reported; the closure reopens it per fork.
+    ChunkStore::open(&root, &engine).map_err(|e| e.to_string())?;
+    Ok(Session::new(scenario, move |s| {
+        let store = ChunkStore::open(&root, &engine).expect("opened above");
+        let inputs = inputs.clone();
+        Workbench::new(
+            s,
+            seed,
+            move |_| world(inputs.clone()),
+            |w, e| ceteris_econ::edit::apply_edit(w, e).map_err(|e| e.to_string()),
+            store,
+        )
+    }))
 }
 
 /// Requests a redraw from any thread.
@@ -128,6 +177,8 @@ struct State {
     costs: Option<Costs>,
     bench: Option<Bench>,
     runner: Runner<View>,
+    /// The branch session's thread; its snapshots fill the branch manager.
+    branches: Host,
     pack: PathBuf,
     /// The issue URL and bundle folder of the halt on show.
     halt: Option<(String, PathBuf)>,
@@ -138,6 +189,8 @@ struct State {
     /// A step waiting for the next view.
     stepping: bool,
     last_frame: Option<Instant>,
+    /// The branch and cursor the map last followed.
+    followed: Option<(String, u32)>,
 }
 
 impl State {
@@ -278,6 +331,7 @@ impl State {
             .last_frame
             .replace(now)
             .map_or(0.0, |t| now.duration_since(t).as_secs_f64());
+        self.show_branches(app);
         let mut changed = self.pull(app);
         let mut crossed = self.clock.advance(seconds, self.next.is_some());
         if self.stepping && self.next.is_some() {
@@ -317,6 +371,57 @@ impl State {
         app.set_sim_bound(self.clock.sim_bound);
         if self.clock.playing {
             app.window().request_redraw();
+        }
+    }
+
+    /// Shows the newest branch snapshot, if one arrived.
+    fn show_branches(&mut self, app: &AppWindow) {
+        let Some(Snapshot {
+            branch,
+            cursor,
+            rows,
+            log,
+            hash,
+            view,
+            error,
+        }) = self.branches.latest()
+        else {
+            return;
+        };
+        app.set_branch_rows(model(
+            rows.into_iter()
+                .map(|r| BranchRow {
+                    label: match r.fork_tick {
+                        Some(t) => format!("fork t{t}, {} edits", r.edits),
+                        None => format!("root, {} edits", r.edits),
+                    }
+                    .into(),
+                    current: r.id == branch,
+                    id: r.id.into(),
+                    depth: r.depth as i32,
+                })
+                .collect(),
+        ));
+        app.set_branch_log(model(log.into_iter().map(Into::into).collect()));
+        app.set_branch_cursor(cursor as i32);
+        app.set_branch_name(branch.into());
+        app.set_branch_hash(hash.into());
+        app.set_branch_error(error.unwrap_or_default().into());
+        // A seek, run-to, switch or fork moves the cursor; the map shows the world there and
+        // the free-running clock stops, so the two never fight over the map.
+        let at = (app.get_branch_name().to_string(), cursor);
+        if let Some(view) = view
+            && self.followed.as_ref() != Some(&at)
+        {
+            self.followed = Some(at);
+            self.clock.playing = false;
+            self.stepping = false;
+            self.current = Some(view);
+            self.next = None;
+            self.paint(app);
+            if self.selected.is_some() {
+                self.inspect(app);
+            }
         }
     }
 
@@ -389,6 +494,7 @@ impl State {
                     cam.zoom_at(v, [v[0] / 2.0, v[1] / 2.0], factor);
                 }
             }
+            Command::ToggleBranches => app.set_branches_open(!app.get_branches_open()),
             Command::ZoomReset => {
                 let v = self.viewport;
                 if let Some(cam) = self.camera.as_mut() {
@@ -419,10 +525,61 @@ fn mode(app: &AppWindow) -> Mode {
     }
 }
 
+/// Shows the first-run screen. The sources are the fixture until the fetch and build back end
+/// lands (#228); `CETERIS_SETUP=fixture` shows it over a built pack.
+fn run_setup() -> Result<(), Box<dyn std::error::Error>> {
+    let win = SetupWindow::new()?;
+    let state = Rc::new(RefCell::new(setup::fixture()));
+    let paint = {
+        let (state, weak) = (state.clone(), win.as_weak());
+        move || {
+            let (s, Some(win)) = (state.borrow(), weak.upgrade()) else {
+                return;
+            };
+            win.set_disk(s.disk_line().into());
+            win.set_disk_ok(s.disk_ok());
+            win.set_notice(s.rebuild_notice().unwrap_or_default().into());
+            win.set_can_build(s.can_build());
+            win.set_rows(model(
+                s.sources
+                    .iter()
+                    .map(|r| SetupRow {
+                        name: r.name.clone().into(),
+                        licence: r.licence.clone().into(),
+                        size: setup::size(r.bytes).into(),
+                        status: r.status().into(),
+                        manual_page: r.manual.as_ref().map_or("", |m| &m.page).into(),
+                        ready: r.state == setup::State::Verified,
+                        optional: r.optional,
+                    })
+                    .collect(),
+            ));
+        }
+    };
+    paint();
+    let (s, p, weak) = (state.clone(), paint.clone(), win.as_weak());
+    win.on_accept_file(move |path| {
+        let result = setup::digest(std::path::Path::new(path.trim()))
+            .map_err(|e| format!("{path}: {e}"))
+            .and_then(|(hash, bytes)| s.borrow_mut().accept(&hash, bytes));
+        let message = result.err().unwrap_or_default();
+        weak.upgrade().inspect(|w| w.set_message(message.into()));
+        p();
+    });
+    win.on_open_page(|url| {
+        let _ = halt::open(&url);
+    });
+    win.run()?;
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "profile")]
     tracy_client::Client::start();
     let pack = pack_dir();
+    if std::env::var_os("CETERIS_SETUP").is_some() || !pack.join("web/provinces.fill").exists() {
+        return run_setup();
+    }
     let dir = pack.join("web");
     let fill = Arc::new(Fill::read(&dir.join("provinces.fill"))?);
     let provinces = Provinces::read(&dir.join("provinces.json"))?;
@@ -476,6 +633,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         waker(&app),
     );
+    let branches = Host::spawn(
+        {
+            let pack = pack.clone();
+            move || branch_session(&pack)
+        },
+        {
+            let layout = OnceLock::new();
+            move |sim| {
+                let layout = layout.get_or_init(|| Arc::new(econ::Layout::new(sim.world())));
+                View::new(sim, layout)
+            }
+        },
+        waker(&app),
+    );
     let labels = Rc::new(VecModel::default());
     app.set_labels(labels.clone().into());
     let state = Rc::new(RefCell::new(State {
@@ -508,6 +679,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         costs: None,
         bench,
         runner,
+        branches,
         pack,
         halt: None,
         clock: Clock::default(),
@@ -515,6 +687,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         next: None,
         stepping: false,
         last_frame: None,
+        followed: None,
     }));
     state.borrow_mut().paint(&app);
 
@@ -616,6 +789,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             s.borrow_mut().execute(&app, cmd);
         }
     });
+
+    let s = state.clone();
+    app.on_branch_command(move |line| s.borrow().branches.send(&line));
 
     let s = state.clone();
     let weak = app.as_weak();

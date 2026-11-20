@@ -18,10 +18,12 @@ pub mod map;
 pub mod modes;
 pub mod ramps;
 pub mod session;
+pub mod setup;
 pub mod sim;
 pub mod tokens;
 pub mod web;
 pub mod why;
+pub mod workbench;
 
 /// A Tracy zone over the rest of the enclosing scope with the `profile` feature; nothing
 /// without it.

@@ -13,6 +13,33 @@
 - `calibrate` fits theta_2 jointly with epsilon, good 2's class held at scale 0; theta_2 is refitted at the other classes' current s_c and nu in each pass of the trial's scale loop (RFC 0355 D5).
 - The theta_2 fit reads a probe whose Sinkhorn has no balanced scaling (flat residual) as past the root instead of failing the fit (RFC 0355 D5).
 
+### perf(calibrate): the scaling's sweep runs its goods in parallel (bit-identical)
+
+- `steady::sinkhorn_with`: each good's sweep (weights, kernel sums, balance) runs on the rayon pool
+  and the goods are combined in good order; `Model::{origin,destination}_sums_good` are the
+  per-good sums. No output moves: digests of the scalings and the fixed point equal main's at 1, 2,
+  4 and every thread. `RAYON_NUM_THREADS=1` is the serial loop. Anderson mixing stays serial.
+  Kernel legs must be sorted by good (`Model::new` refuses others).
+- Test: `parallel_sweeps` (fixture; small pack with `--include-ignored`).
+
+### fix(calibrate): an epsilon scale left at 0 is re-solved (#622 findings)
+
+- `epsilon::trial`: a class left at s_c = 0 by an unsettled solve stays in the s_c solve after its
+  nu refits above zero, instead of ending with s_c = 0 and nu > 0. Test: `is_pinned` selection.
+  The trial's selection could not be provoked on the fixture, so the pin is on the selection rule.
+- Test: d_0 is the trade-weighted mean of ln d (`d0_is_the_trade_weighted_mean_of_ln_distance`).
+- The infeasibility message is typed and pinned by #643.
+
+### feat(app): branch manager panel (W1, #204)
+
+- View > Branches (key B) opens the branch manager: the tree of branches, the cursor and its state
+  hash, fork at the cursor, seek, run to tick, switch branch, and the edit log with source and god
+  flag. Every button sends a registry line (`branch.fork`, `branch.switch`, `time.seek`,
+  `time.run-to`); the field takes a registry line on Enter. The session runs on its own thread
+  (`workbench::Host`) over `CETERIS_SCENARIO` if set, else a new scenario with pack hash
+  `unpinned`. The map does not follow the cursor yet, and edits are not yet added from the UI.
+  Test: registry lines through the host give the hashes of a headless workbench.
+
 ### BEHAVIOUR: the fits' data state carries stage 1's rebates and final demand balance (#622)
 
 - `steady::data_state_spending`, where the border friction, the epsilon scale and the epsilon fit

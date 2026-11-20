@@ -16,6 +16,7 @@ pub mod epsilon;
 pub mod fit_cache;
 pub mod gravity;
 pub mod json;
+pub mod newton;
 pub mod pyfmt;
 pub mod rho;
 pub mod rho_panel;
