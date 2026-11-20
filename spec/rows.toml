@@ -1850,3 +1850,33 @@ sections = "17"
 rows = "0387"
 topic = "[In the epsilon fit a share above target at nu's upper end scores as too little cost; a share short of target at zero friction (nu 0 or scale 0) is a typed error naming the class or group and epsilon, never a sign; more than one sign change in a round is a non-monotone error](../rfcs/0360-epsilon-grid-search.md)"
 sections = "17"
+
+[[entry]]
+rows = "0388"
+topic = "[A scaling that has not met its stop rule after NEWTON_AFTER sweeps solves each good still out by Newton on the sweep's own gap, from the sweep's last point; goods in parallel, combined in good order; scalings that stop in the sweep phase are unchanged (P181)](../rfcs/0361-newton-scaling-solve.md)"
+sections = "17"
+
+[[entry]]
+rows = "0389"
+topic = "[The Newton step is solved by matrix-free GMRES on the pinned, reduced system (restart 30, at most 10 restarts, forcing term clamp(||F||, 1e-8, 1e-1)), serial and in index order; dense LU is the test oracle (P181)](../rfcs/0361-newton-scaling-solve.md)"
+sections = "17"
+
+[[entry]]
+rows = "0390"
+topic = "[Newton step control: backtracking to 2^-12 on a sufficient decrease of max |gap|, at most NEWTON_MAX 20 steps per good; NEWTON_AFTER is chosen by the spike from {20, 50, 100} by least wall-clock, ties to the larger, and fixed before code lands (P181)](../rfcs/0361-newton-scaling-solve.md)"
+sections = "17"
+
+[[entry]]
+rows = "0391"
+topic = "[Any good's Newton failure discards every Newton result and resumes the sweep where it stopped, so the call returns main's result and error bit for bit; the scaling's stop rule and error kinds are unchanged (P181)](../rfcs/0361-newton-scaling-solve.md)"
+sections = "17"
+
+[[entry]]
+rows = "0392"
+topic = "[solve_scale evaluates scale 0 cold and starts every later evaluation's data-state and final scalings of the same call from that evaluation's log weights; nothing carries across calls or trials (P182)](../rfcs/0361-newton-scaling-solve.md)"
+sections = "17"
+
+[[entry]]
+rows = "0393"
+topic = "[The data state runs pass 1's scaling to INNER_TOL_MAX and later passes to clamp(INNER_PER_OUTER x change, SINKHORN_TOL, INNER_TOL_MAX), and returns only from a pass whose scaling ran at SINKHORN_TOL (P182)](../rfcs/0361-newton-scaling-solve.md)"
+sections = "17"
