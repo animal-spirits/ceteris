@@ -57,6 +57,7 @@ use ceteris_reference::io::{Inputs, Mat, fixed_household_share};
 use ceteris_reference::linalg::lstsq;
 use ceteris_reference::model::{self, Factors, Model, Sourcing, max_abs};
 use ceteris_trade::TradeParams;
+use rayon::prelude::*;
 
 use crate::{balance, block, elasticity};
 
@@ -415,6 +416,15 @@ fn mix(f: &[f64], dx: &[Vec<f64>], dg: &[Vec<f64>], gamma: &[f64]) -> Vec<f64> {
         .collect()
 }
 
+/// What one good contributes to a sweep of [`sinkhorn_with`].
+struct GoodSweep {
+    new: Vec<f64>,
+    r: f64,
+    gap: f64,
+    worst: f64,
+    within: bool,
+}
+
 /// Stage 2 for every traded good at once: ln w of the active origins with
 /// w_o sum_d K_od / (1 + t_od) E_d / Phi_d = r_g V_o, from `spend` E (P, G) and `supply` V
 /// (P, G). Log domain: the weights of each good are shifted by their largest before each pass
@@ -453,7 +463,10 @@ pub fn sinkhorn_to(
     sinkhorn_with(m, spend, supply, start, max_sweeps, tol, Accel::Joint)
 }
 
-/// [`sinkhorn_to`] with the mixing `accel`.
+/// [`sinkhorn_to`] with the mixing `accel`. The goods of each sweep run on the current rayon pool
+/// (`RAYON_NUM_THREADS`, default every core); a pool of one thread runs them in a loop. Results
+/// are bit-identical at any thread count: the Anderson mixing stays serial, and the sweep's
+/// operations per good are the same either way.
 pub fn sinkhorn_with(
     m: &Model,
     spend: &Mat,
@@ -507,64 +520,90 @@ pub fn sinkhorn_with(
         cro: &net,
     };
     let depth: Vec<f64> = (0..n_g).map(|g| summation_depth(inp, g)).collect();
+    // One good's sweep: the map at its `lw`, its r, the largest |gap|, the worst gap within
+    // origins and whether that gap is within its rounding. Goods share no state, so goods may run
+    // on any number of threads: each good's operations and their order are the same either way,
+    // and the results are combined below in good order.
+    let good_step = |g: usize, lw: &[f64]| -> GoodSweep {
+        let cells = g * n_p..(g + 1) * n_p;
+        let (origin, v, e) = (&origin[cells.clone()], &v[cells.clone()], &e[cells]);
+        let mut top = f64::NEG_INFINITY;
+        for k in (0..n_p).filter(|&k| origin[k]) {
+            top = np_max(top, lw[k]);
+        }
+        let w: Vec<f64> = (0..n_p)
+            .map(|k| if origin[k] { (lw[k] - top).exp() } else { 0.0 })
+            .collect();
+        let phi = m.origin_sums_good(g, &w, gross);
+        let b: Vec<f64> = (0..n_p)
+            .map(|k| divide_where(e[k], phi[k], phi[k] > 0.0, 0.0))
+            .collect();
+        let reach = m.destination_sums_good(g, &b, net_factors);
+        let got: Vec<f64> = w.iter().zip(&reach).map(|(w, r)| w * r).collect();
+        let mut received = 0.0;
+        for x in &got {
+            received += x;
+        }
+        let r = divide_where(received, total[g], total[g] > 0.0, 1.0);
+        let target: Vec<f64> = (0..n_p).map(|k| (r * v[k]).ln()).collect();
+        // the map at the shifted weights, not shifted back: ln w of a good is free up to
+        // a common level, which would otherwise drift with the mixing until a unit in
+        // the last place of ln w passes SINKHORN_TOL (532 for coal and mining on the
+        // pack at nu 0.3, a residual stuck at 1.208e-13)
+        let new: Vec<f64> = (0..n_p)
+            .map(|k| {
+                if origin[k] {
+                    target[k] - reach[k].ln()
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let gap: Vec<f64> = (0..n_p)
+            .map(|k| {
+                if origin[k] {
+                    got[k].ln() - target[k]
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let (mut worst, mut big) = (0.0f64, 0.0f64);
+        for k in (0..n_p).filter(|&k| origin[k]) {
+            worst = worst.max(gap[k].abs());
+            big = big.max(2.0 * (lw[k] - top).abs() + 2.0 * target[k].abs());
+        }
+        GoodSweep {
+            new,
+            r,
+            gap: max_abs(&gap),
+            worst,
+            within: worst <= SINKHORN_TOL + f64::EPSILON * (big + depth[g] + 4.5),
+        }
+    };
     // the map at lw, r, the largest |gap| and whether every good's gap is within its rounding
     let step = |lw: &[f64]| -> (Vec<f64>, Vec<f64>, f64, bool, Vec<f64>) {
-        let mut top = vec![f64::NEG_INFINITY; n_g];
-        for i in (0..n).filter(|&i| origin[i]) {
-            top[good[i]] = np_max(top[good[i]], lw[i]);
-        }
-        let w: Vec<f64> = (0..n)
-            .map(|i| {
-                if origin[i] {
-                    (lw[i] - top[good[i]]).exp()
-                } else {
-                    0.0
-                }
-            })
-            .collect();
-        let phi = m.origin_sums(&w, gross);
-        let b: Vec<f64> = (0..n)
-            .map(|i| divide_where(e[i], phi[i], phi[i] > 0.0, 0.0))
-            .collect();
-        let reach = m.destination_sums(&b, net_factors);
-        let got: Vec<f64> = w.iter().zip(&reach).map(|(w, r)| w * r).collect();
-        let received = bincount(&good, got.iter().copied(), n_g);
-        let r: Vec<f64> = (0..n_g)
-            .map(|g| divide_where(received[g], total[g], total[g] > 0.0, 1.0))
-            .collect();
-        let target: Vec<f64> = (0..n).map(|i| (r[good[i]] * v[i]).ln()).collect();
-        let new = (0..n)
-            .map(|i| {
-                // the map at the shifted weights, not shifted back: ln w of a good is free up to
-                // a common level, which would otherwise drift with the mixing until a unit in
-                // the last place of ln w passes SINKHORN_TOL (532 for coal and mining on the
-                // pack at nu 0.3, a residual stuck at 1.208e-13)
-                if origin[i] {
-                    target[i] - reach[i].ln()
-                } else {
-                    0.0
-                }
-            })
-            .collect();
-        let gap: Vec<f64> = (0..n)
-            .map(|i| {
-                if origin[i] {
-                    got[i].ln() - target[i]
-                } else {
-                    0.0
-                }
-            })
-            .collect();
-        let mut worst = vec![0.0f64; n_g];
-        let mut big = vec![0.0f64; n_g];
-        for i in (0..n).filter(|&i| origin[i]) {
-            worst[good[i]] = worst[good[i]].max(gap[i].abs());
-            big[good[i]] =
-                big[good[i]].max(2.0 * (lw[i] - top[good[i]]).abs() + 2.0 * target[i].abs());
-        }
-        let within =
-            (0..n_g).all(|g| worst[g] <= SINKHORN_TOL + f64::EPSILON * (big[g] + depth[g] + 4.5));
-        (new, r, max_abs(&gap), within, worst)
+        let sweeps: Vec<GoodSweep> = if rayon::current_num_threads() > 1 {
+            (0..n_g)
+                .into_par_iter()
+                .map(|g| good_step(g, &lw[g * n_p..(g + 1) * n_p]))
+                .collect()
+        } else {
+            (0..n_g)
+                .map(|g| good_step(g, &lw[g * n_p..(g + 1) * n_p]))
+                .collect()
+        };
+        let new = sweeps.iter().flat_map(|s| s.new.iter().copied()).collect();
+        let r = sweeps.iter().map(|s| s.r).collect();
+        let err = max_abs(&sweeps.iter().map(|s| s.gap).collect::<Vec<_>>());
+        let within = sweeps.iter().all(|s| s.within);
+        (
+            new,
+            r,
+            err,
+            within,
+            sweeps.iter().map(|s| s.worst).collect(),
+        )
     };
 
     let (mut xs, mut gs): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (Vec::new(), Vec::new());
