@@ -1212,7 +1212,14 @@ conditioning (pinned, pass 9 converges in 1,960 sweeps). The tolerance does not 
 residual that has not fallen for the 20-sweep stall window and is within every good's rounding
 bound, 1e-13 + eps (2L + 2T + D_g + 4.5) (`steady::summation_depth`, derived below), also stops
 the scaling: with storage on (ADR 0356) the full pack's residual held at 1.599e-13 to the cap, 65
-minutes (2026-11-12), where the bare tolerance waits for a sweep that happens to round lower. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
+minutes (2026-11-12), where the bare tolerance waits for a sweep that happens to round lower.
+Newton phase (RFC 0361, ADRs 0388 to 0391, P181; not yet in code, #653): a scaling that has not
+stopped after `NEWTON_AFTER` sweeps solves each good still out by Newton on the same gap
+F_o = ln got_o - ln(r V_o), one origin pinned, its equation dropped, the step by matrix-free
+GMRES whose Jacobian product is one `origin_sums_good` and one `destination_sums_good`; the stop
+rule above is unchanged and judged by one final sweep evaluation. Any failure resumes the sweep
+where it stopped, so the result is then the sweep's, bit for bit; the sweep alone
+(`Limits::newton` off) is the oracle in tests. p_o = w_o^(-1/theta_g), each good's scale set so that its part of the world
 price index (Omega_g times calibrated province VA as weights) is 1; local goods take their price
 level p = p_c (ADR 0098), so the normalization runs over traded goods only and their index is 1. q_d, the arrival slots and the lead follow from sourcing: q_d = 1 / alpha_d, the
 delivered unit price of the physical arrivals, at every pass (`Model::physical`), and the

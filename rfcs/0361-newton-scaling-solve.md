@@ -1,6 +1,6 @@
 # RFC 0361. Per-good Newton solve for the stage 2 scaling, and nest hygiene in the epsilon fit
 
-Status: proposed
+Status: accepted
 Date: 2026-11-20
 Design sections: 15 (calibration), 17.1, 19.4; econ SPEC, Calibration, stage 2; ADRs 0089,
 0097, 0272, 0376, 0384 to 0387
@@ -86,8 +86,8 @@ Recommendation: A, because it removes the slow mode at its cause (Newton's rate 
 on the second eigenvalue) while leaving every scaling that already converges fast bit-identical,
 and the sweep phase keeps globalising the start.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-20 (question card, Newton scaling RFC thread: every recommended option).
+Row: ADR 0388.
 
 ### D2. How is the Newton step solved?
 
@@ -108,8 +108,8 @@ Recommendation: A, because its cost is products the sweep already knows how to c
 needs no n_g by n_g storage, and it is deterministic as written. B stays as the test oracle on
 fixtures small enough to factor.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-20 (question card, Newton scaling RFC thread: every recommended option).
+Row: ADR 0389.
 
 ### D3. Step control, stop and constants
 
@@ -132,8 +132,8 @@ Recommendation: B, because 50 is a guess and the switch point trades bit-identic
 scalings against Newton's reach; fixing the rule in advance keeps it inside the calibration
 rule.
 
-Decision: pending.
-Row: none yet.
+Decision: B, Antonio, 2026-11-20 (question card, Newton scaling RFC thread: every recommended option).
+Row: ADR 0390.
 
 ### D4. What does a Newton failure do?
 
@@ -156,8 +156,8 @@ Options:
 Recommendation: A, because the fallback is then main's own result, which makes it the rollback
 inside every call and keeps the failure surface exactly main's.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-20 (question card, Newton scaling RFC thread: every recommended option).
+Row: ADR 0391.
 
 ### D5. Does `solve_scale` start its scalings from a reference?
 
@@ -181,8 +181,8 @@ Options:
 Recommendation: A, because it is the documented path-independent pattern and costs one cold
 evaluation per call instead of 10 to 14.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-20 (question card, Newton scaling RFC thread: every recommended option).
+Row: ADR 0392.
 
 ### D6. How tightly does the data state run its scalings?
 
@@ -203,8 +203,8 @@ Recommendation: A, because pass 1 starts farthest from the fixed point and is th
 to run tight, and the termination condition already guarantees a tight last pass. Anderson on
 the passes is on PR #600 and not part of this RFC.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-20 (question card, Newton scaling RFC thread: every recommended option).
+Row: ADR 0393.
 
 ### D7. How is the work sequenced under the freeze?
 
@@ -220,8 +220,8 @@ Recommendation: A, because the hygiene items are small and independent of Newton
 fit outputs once and needs its own reviewed golden move, and a failing spike stops the Newton
 work without blocking the hygiene.
 
-Decision: pending.
-Row: none yet.
+Decision: A, Antonio, 2026-11-20 (question card, Newton scaling RFC thread: every recommended option).
+Row: none (sequencing; no spec row).
 
 ## Tolerance and determinism contract
 
@@ -365,14 +365,15 @@ check`; goldens per the section above; `spec-reviewer` on the econ SPEC.
 - Stacked with #652 and the RFC 0360 grid, the report's 10 to 30x per trial; the unknown share of
   non-scaling time (`settle`, RAS, `Model::new`) caps it, which the spike measures.
 
-## Spec changes (on acceptance)
+## Spec changes
 
-- econ SPEC, Calibration, stage 2: the Newton phase, its switch point, failure and fallback; the
-  stop rule text unchanged.
-- econ SPEC, Calibration, data state: the inner tolerance rule and the tight last pass; the
-  reference start of `solve_scale`.
-- 17: register entries for `NEWTON_AFTER` and `NEWTON_MAX` (solver constants, free numerical);
-  codes from `next-code P` in that PR.
+Written in this PR (ADRs 0388 to 0393):
+
+- 17: register entries P181 (the scaling's Newton phase: switch point, step cap, Krylov and line
+  search constants; ADRs 0388 to 0391) and P182 (the epsilon fit's nest: reference start of
+  `solve_scale`, the data state's inner tolerance and tight last pass; ADRs 0392, 0393).
+- econ SPEC, Calibration, stage 2: the Newton phase, its fallback and its oracle; the stop rule
+  text unchanged. Marked not yet in code until PR 2 of D7 lands.
 
 ## References
 
