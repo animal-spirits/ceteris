@@ -107,6 +107,13 @@ probe whose Sinkhorn residual is flat (`CalibrationError::Unbalanced`) is past t
 reads as a large negative residual and the bracket shrinks. The band's lower end must balance, and
 a band that does not bracket the root stays an error.
 
+Known gap, found merging main's `d0_is_the_trade_weighted_mean_of_ln_distance`: for a single-good
+class (3) at nu 0, where `(1 + nu) D < 1` at the weighted-mean d_0, d_0 and nu are not separately
+identified. A floored d_0 with nu 0, and the mean with a small nu (0.024 in the fixture), fit the
+targets alike, and the trial takes whichever its floor rule reaches first. The test's truth now
+floors by the trial's own rule (`product_misses`) and gives classes 3 and 4 a nu above the gap;
+whether the trial should prefer the floored solution is a model question for the epsilon refit.
+
 ## Consequences
 
 - N_CLASSES 5; `theta_class` [2, 4, 3, 0, 2, 0, 1, ...]; bulk freight rates apply to classes 3 and 4.

@@ -76,11 +76,24 @@ fn known_weighted(
     nu_group: &[f64],
     weight: &[f64],
 ) -> (Vec<f64>, Vec<f64>) {
-    // a scaled class is a floored one: d_0 at its smallest linked distance
-    // the per-good class at nu 0 is floored likewise
     let (mut mean, min) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, weight);
-    for c in (0..scale.len()).filter(|&c| scale[c] < 1.0 || c >= 3) {
+    // a scaled class is a floored one: d_0 at its smallest linked distance
+    for c in (0..scale.len()).filter(|&c| scale[c] < 1.0) {
         mean[c] = min[c];
+    }
+    // and so is any class the trial would floor at the truth's nu (ADR 0272, Decision 2): the same
+    // rule, `product_misses`, so the truth is a state the trial can recover
+    loop {
+        let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &mean, scale, epsilon).unwrap();
+        let nu = border::nu_of_goods(&w.groups, nu_group, &at.border_nu);
+        let bad = epsilon::product_misses(&w.inp, &w.class, &w.ln_d, &mean, scale, epsilon, &nu);
+        let new: Vec<usize> = bad.into_iter().filter(|&c| mean[c] != min[c]).collect();
+        if new.is_empty() {
+            break;
+        }
+        for c in new {
+            mean[c] = min[c];
+        }
     }
     let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &mean, scale, epsilon).unwrap();
     let nu = border::nu_of_goods(&w.groups, nu_group, &at.border_nu);
@@ -675,7 +688,10 @@ fn d0_is_the_trade_weighted_mean_of_ln_distance() {
     let uneven: Vec<f64> = (0..n * n)
         .map(|k| 1.0 + ((k / n) * 7 + (k % n) * 3 % 5) as f64)
         .collect();
-    let (e0, nu_group) = (0.4, [0.15, 0.6, 0.35, 0.0, 0.0]);
+    // Classes 3 and 4 at nu 0 sit where (1 + nu) D < 1 at the weighted mean, and there d_0 and nu
+    // are not separately identified (a floored d_0 with nu 0, or the mean with a small nu, fit
+    // alike); a nu above that gap makes the truth the trial's only fit.
+    let (e0, nu_group) = (0.4, [0.15, 0.6, 0.35, 0.3, 0.2]);
     let (nu_target, data_flows) =
         known_weighted(&w, e0, &[1.0; border::N_CLASSES], &nu_group, &uneven);
     let trial = |weight: &[f64]| {

@@ -216,7 +216,7 @@ pub fn at_distance(inp: &Inputs, d: &crate::write::Distance) -> Result<Inputs, S
 
 /// The classes where some crossing's `(1 + nu) D` is below 1 (ADR 0272, Decision 2), for the
 /// friction `nu` per good of `at` as it was fitted.
-fn product_misses(
+pub fn product_misses(
     inp: &Inputs,
     theta_class: &[usize],
     ln_d: &[f64],
