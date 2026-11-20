@@ -352,3 +352,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0358 | [Scenario edits may multiply a value instead of setting it](0358-relative-edits.md) | accepted | ADR 0381, 0382 |
 | 0359 | [Money system IDs follow the code: 233 energy policy, 234 investment](0359-money-system-ids.md) | accepted | ADR 0383 |
 | 0360 | [Epsilon search by a fixed parallel grid, with typed infeasibility](0360-epsilon-grid-search.md) | accepted | ADR 0384 to 0387 |
+| 0361 | [Per-good Newton solve for the stage 2 scaling, and nest hygiene in the epsilon fit](0361-newton-scaling-solve.md) | proposed | none yet |
