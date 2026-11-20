@@ -694,3 +694,77 @@ fn evaluations_start_from_the_reference() {
     assert_eq!(warm.abroad, again.abroad);
     assert_eq!(warm.total, again.total);
 }
+
+fn targets_of<'a>(
+    w: &'a World,
+    nu_target: &'a [f64],
+    weight: &'a [f64],
+    ln_d: &'a [f64],
+    data_flows: &'a [f64],
+) -> Targets<'a> {
+    Targets {
+        nu_target,
+        icio: &w.icio,
+        theta_class: &w.class,
+        ln_d,
+        weight,
+        gravity: &w.gravity,
+        data_flows,
+    }
+}
+
+#[test]
+fn preflight_accepts_the_fixture_and_rejects_an_infeasible_bracket() {
+    let w = world();
+    let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
+    let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
+    let weight = trade_weight(&w.inp);
+    let t = targets_of(&w, &nu_target, &weight, &w.ln_d, &data_flows);
+    let report = epsilon::preflight(&w.inp, &t).unwrap();
+    assert!(report.len() >= 3, "{report:?}");
+
+    // a linked pair with no distance: the fit could not scale its crossings
+    let n = w.inp.n_countries();
+    let mut ln_d = w.ln_d.clone();
+    let j = (0..w.inp.crossing.good.len())
+        .find(|&j| w.inp.crossing.good[j] < w.class.len() && w.inp.crossing.k[j] > 0.0)
+        .unwrap();
+    let (a, b) = (
+        w.inp.gateway_country[w.inp.crossing.row[j]],
+        w.inp.gateway_country[w.inp.crossing.col[j]],
+    );
+    assert_ne!(a, b);
+    ln_d[a * n + b] = f64::NAN;
+    let bad = targets_of(&w, &nu_target, &weight, &ln_d, &data_flows);
+    let err = epsilon::preflight(&w.inp, &bad).unwrap_err();
+    assert!(err.starts_with("preflight:"), "{err}");
+}
+
+#[test]
+fn live_progress_is_emitted_per_line_with_stamp_and_epsilon_and_keeps_the_result() {
+    use std::sync::Mutex;
+    let w = world();
+    let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
+    let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
+    let weight = trade_weight(&w.inp);
+    let t = targets_of(&w, &nu_target, &weight, &w.ln_d, &data_flows);
+    let dir = std::env::temp_dir().join(format!("ceteris-live-{}", std::process::id()));
+    let log = ceteris_calibrate::run_log::RunLog::new(&dir).unwrap();
+    let lines = Mutex::new(vec![]);
+    let live = |l: &str| lines.lock().unwrap().push(l.to_string());
+    let logged =
+        epsilon::fit_epsilon_logged(&w.inp, &t, Limits::default(), None, Some(0.4), &log, &live)
+            .unwrap();
+    let plain =
+        epsilon::fit_epsilon_at(&w.inp, &t, 0.4, Limits::default(), None, &mut quiet()).unwrap();
+    assert_eq!(logged.json().compact(), plain.json().compact());
+    let lines = lines.into_inner().unwrap();
+    assert!(!lines.is_empty());
+    assert!(
+        lines
+            .iter()
+            .all(|l| l.starts_with('[') && l.contains("s] epsilon 0.4")),
+        "{lines:?}"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}

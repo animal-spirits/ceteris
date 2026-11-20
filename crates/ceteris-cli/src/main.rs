@@ -1287,7 +1287,14 @@ fn run_epsilon_fit(
         data_flows: &data.data_flows,
     };
     let fit = match (log, fixed) {
-        (Some(l), _) => fit_epsilon_logged(inp, &t, limits, cache, fixed, l, progress),
+        (Some(l), _) => {
+            // flushed per line: println! is line-buffered, so a redirected log grows live
+            let live = |line: &str| println!("{line}");
+            for line in ceteris_calibrate::epsilon::preflight(inp, &t)? {
+                live(&line);
+            }
+            fit_epsilon_logged(inp, &t, limits, cache, fixed, l, &live)
+        }
         (None, Some(e)) => fit_epsilon_at(inp, &t, e, limits, cache, progress),
         (None, None) => fit_epsilon_cached(inp, &t, limits, cache, progress),
     };
@@ -1318,6 +1325,9 @@ fn fit_epsilon_driver(
 ) -> Result<ExitCode, String> {
     let mut progress = |line: &str| println!("{line}");
     let log = ceteris_calibrate::run_log::RunLog::new(out)?;
+    let probe = out.join(".preflight");
+    std::fs::write(&probe, b"").map_err(|e| format!("preflight: {}: {e}", probe.display()))?;
+    let _ = std::fs::remove_file(&probe);
     let Some((fit, _)) = run_epsilon_fit(
         inp,
         pack,
