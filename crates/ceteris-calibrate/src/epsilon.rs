@@ -44,6 +44,8 @@ pub const THETA_BAND: (f64, f64) = (6.2, 20.9);
 const THETA_SETTLE: f64 = 1e-4;
 const THETA_TOL: f64 = 1e-6;
 const THETA_ROUNDS: usize = 100;
+/// The residual read at a theta whose Sinkhorn has no balanced scaling: far below any share miss.
+const UNBALANCED_RESIDUAL: f64 = -1.0;
 const SCALE_ROUNDS: usize = 100;
 /// A residual at scale 1 this small counts as the target met there.
 const SCALE_FLAT: f64 = 1e-9;
@@ -308,6 +310,7 @@ fn within<T>(
 ) -> Result<T, CalibrationError> {
     r.map_err(|e| match e {
         CalibrationError::Failed(m) => format!("{}: {m}", what()).into(),
+        CalibrationError::Unbalanced(m) => CalibrationError::Unbalanced(format!("{}: {m}", what())),
         other => other,
     })
 }
@@ -399,8 +402,7 @@ pub fn at_theta(inp: &Inputs, g: usize, theta: f64) -> Result<Inputs, String> {
 /// `inp` at the theta of [`THETA_GOOD`] whose group's cross-border share at nu 0, at `epsilon`
 /// with the good's class at scale 0 (no distance cost of its own; the other classes still move its
 /// prices at their `scale` and `nu`) and `ln_d0`, meets its target, found by Brent's method in
-/// [`THETA_BAND`]; the share falls as theta rises. A target the band cannot reach is an error, not
-/// a clamp.
+/// [`THETA_BAND`] (see [`theta_root`]); the share falls as theta rises.
 #[allow(clippy::too_many_arguments)]
 fn fit_theta(
     inp: &Inputs,
@@ -441,21 +443,37 @@ fn fit_theta(
         )?;
         Ok(shares[k] - target)
     };
-    let (f_lo, f_hi) = (f(THETA_BAND.0)?, f(THETA_BAND.1)?);
-    if f_lo < 0.0 || f_hi > 0.0 {
-        return Err(format!(
+    let theta = theta_root(f, |f_lo, f_hi| {
+        format!(
             "epsilon {epsilon}: good {THETA_GOOD}'s share at nu 0 misses its target {target} for every theta in {THETA_BAND:?} (residuals {f_lo} and {f_hi})"
         )
-        .into());
+    })?;
+    Ok(at_theta(inp, THETA_GOOD, theta)?)
+}
+
+/// The root of `f` (share minus target, falling in theta) in [`THETA_BAND`]. A probe whose
+/// Sinkhorn has no balanced scaling is past the root and reads as [`UNBALANCED_RESIDUAL`]; the
+/// band's lower end must balance. A band that does not bracket the root is an error, not a clamp.
+fn theta_root(
+    f: impl Fn(f64) -> Result<f64, CalibrationError>,
+    misses: impl FnOnce(f64, f64) -> String,
+) -> Result<f64, CalibrationError> {
+    let probe = |theta: f64| match f(theta) {
+        Err(CalibrationError::Unbalanced(_)) if theta > THETA_BAND.0 => Ok(UNBALANCED_RESIDUAL),
+        r => r,
+    };
+    let (f_lo, f_hi) = (probe(THETA_BAND.0)?, probe(THETA_BAND.1)?);
+    if f_lo < 0.0 || f_hi > 0.0 {
+        return Err(misses(f_lo, f_hi).into());
     }
     let mut brent = Brent::new(THETA_BAND.0, f_lo, THETA_BAND.1, f_hi);
     for _ in 0..THETA_ROUNDS {
         let Some(x) = brent.next(THETA_TOL) else {
             break;
         };
-        brent.update(f(x)?);
+        brent.update(probe(x)?);
     }
-    Ok(at_theta(inp, THETA_GOOD, brent.root())?)
+    Ok(brent.root())
 }
 
 /// The fit at one `epsilon`: nu per group, `d_0` and the epsilon scale per class.
@@ -1061,5 +1079,30 @@ mod row_members_tests {
     fn a_pack_without_the_table_has_no_members() {
         let dir = tempfile::tempdir().unwrap();
         assert!(read_members(dir.path()).unwrap().is_none());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unbalanced_theta_probe_is_past_the_root() {
+        let root = 9.04;
+        let f = |theta: f64| {
+            if theta > 12.0 {
+                Err(CalibrationError::Unbalanced("flat".into()))
+            } else {
+                Ok(0.01 * (root - theta))
+            }
+        };
+        let got = theta_root(f, |_, _| "miss".into()).unwrap();
+        assert!((got - root).abs() < 1e-5, "{got}");
+    }
+
+    #[test]
+    fn an_unbalanced_lower_end_of_the_band_is_an_error() {
+        let f = |_: f64| Err(CalibrationError::Unbalanced("flat".into()));
+        assert!(theta_root(f, |_, _| "miss".into()).is_err());
     }
 }

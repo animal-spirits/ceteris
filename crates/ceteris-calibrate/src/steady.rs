@@ -156,6 +156,8 @@ pub enum CalibrationError {
         change: f64,
     },
     Failed(String),
+    /// Sinkhorn found no balanced scaling at these inputs: the residual is flat, not falling.
+    Unbalanced(String),
 }
 
 impl fmt::Display for CalibrationError {
@@ -166,7 +168,7 @@ impl fmt::Display for CalibrationError {
                 "passes did not settle in {passes}, last change {}",
                 sci(*change)
             ),
-            CalibrationError::Failed(s) => f.write_str(s),
+            CalibrationError::Failed(s) | CalibrationError::Unbalanced(s) => f.write_str(s),
         }
     }
 }
@@ -727,7 +729,8 @@ pub fn sinkhorn_with(
         .iter()
         .enumerate()
         .fold((0, 0.0), |m, (g, &w)| if w > m.1 { (g, w) } else { m });
-    Err(format!(
+    let flat = before_min.is_finite() && prev_min >= 0.99 * before_min;
+    let message = format!(
         "Sinkhorn did not converge in {max_sweeps} sweeps, residual {}, largest in good {} ({}); plateau {:?}, last two windows {} {}{}",
         sci(err),
         at.0,
@@ -737,13 +740,17 @@ pub fn sinkhorn_with(
         sci(prev_min),
         if !before_min.is_finite() {
             " (fewer than two windows)"
-        } else if prev_min >= 0.99 * before_min {
+        } else if flat {
             " (flat: no balanced scaling at these inputs)"
         } else {
             " (still falling: slow, not infeasible)"
         }
-    )
-    .into())
+    );
+    Err(if flat {
+        CalibrationError::Unbalanced(message)
+    } else {
+        CalibrationError::Failed(message)
+    })
 }
 
 /// The longest chain of additions in one of `Model::origin_sums` or `Model::destination_sums`

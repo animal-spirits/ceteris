@@ -100,6 +100,13 @@ single trial at epsilon 2 printed the miss by both routes: +2e-9 with the d_0 th
 where the trial had floored them. The refit now uses the trial's d_0 (class 3 is at scale 0, so its
 own d_0 does not enter).
 
+The refit on that fix (274e81d) met class 3's share at epsilon 2 (theta_2 9.04) and then failed
+inside the theta bracket: the probe at the band's upper end, theta_2 20.9, has no balanced scaling
+in good 2 (Sinkhorn residual flat at 7.27e-4, Mac, 10 h 34 min). Decided (Antonio 2026-11-20): a
+probe whose Sinkhorn residual is flat (`CalibrationError::Unbalanced`) is past the root, so it
+reads as a large negative residual and the bracket shrinks. The band's lower end must balance, and
+a band that does not bracket the root stays an error.
+
 ## Consequences
 
 - N_CLASSES 5; `theta_class` [2, 4, 3, 0, 2, 0, 1, ...]; bulk freight rates apply to classes 3 and 4.

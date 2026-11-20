@@ -11,6 +11,7 @@
   expectations in `p2_properties.rs`. Column-factor tolerance 1e-9 to 1e-7, nu independence 1e-12 to
   1e-10, H2 skips classes under eight crossings.
 - `calibrate` fits theta_2 jointly with epsilon, good 2's class held at scale 0; theta_2 is refitted at the other classes' current s_c and nu in each pass of the trial's scale loop (RFC 0355 D5).
+- The theta_2 fit reads a probe whose Sinkhorn has no balanced scaling (flat residual) as past the root instead of failing the fit (RFC 0355 D5).
 
 ### BEHAVIOUR: the fits' data state carries stage 1's rebates and final demand balance (#622)
 
