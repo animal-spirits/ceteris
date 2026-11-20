@@ -19,12 +19,33 @@ pub struct ScalingRecord {
     pub good_max: usize,
     pub good_sum: usize,
     pub ok: bool,
+    pub newton: String,
+    pub newton_steps: usize,
+    pub newton_products: usize,
+    pub newton_evals: usize,
+    pub newton_ns: u128,
+}
+
+#[derive(Clone, Debug)]
+pub struct OracleRecord {
+    pub ctx: &'static str,
+    pub sweeps_main: usize,
+    pub ns_main: u128,
+    pub sweeps_newton: usize,
+    pub ns_newton: u128,
+    pub steps: usize,
+    pub products: usize,
+    pub dlw: f64,
+    pub dr: f64,
+    pub res_newton: f64,
+    pub res_main: f64,
 }
 
 #[derive(Default)]
 struct Store {
     spans: BTreeMap<&'static str, (u64, u128)>,
     scalings: Vec<ScalingRecord>,
+    oracle: Vec<OracleRecord>,
 }
 
 static STORE: Mutex<Option<Store>> = Mutex::new(None);
@@ -51,7 +72,11 @@ impl Drop for Span {
         let ns = self.start.elapsed().as_nanos();
         STACK.with(|s| s.borrow_mut().pop());
         let mut g = STORE.lock().unwrap();
-        let e = g.get_or_insert_with(Store::default).spans.entry(self.name).or_default();
+        let e = g
+            .get_or_insert_with(Store::default)
+            .spans
+            .entry(self.name)
+            .or_default();
         e.0 += 1;
         e.1 += ns;
     }
@@ -62,7 +87,30 @@ pub fn context() -> &'static str {
 }
 
 pub fn record(r: ScalingRecord) {
-    STORE.lock().unwrap().get_or_insert_with(Store::default).scalings.push(r);
+    STORE
+        .lock()
+        .unwrap()
+        .get_or_insert_with(Store::default)
+        .scalings
+        .push(r);
+}
+
+pub fn record_oracle(r: OracleRecord) {
+    STORE
+        .lock()
+        .unwrap()
+        .get_or_insert_with(Store::default)
+        .oracle
+        .push(r);
+}
+
+pub fn oracle() -> Vec<OracleRecord> {
+    STORE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|s| s.oracle.clone())
+        .unwrap_or_default()
 }
 
 pub fn reset() {
@@ -70,7 +118,12 @@ pub fn reset() {
 }
 
 pub fn scalings() -> Vec<ScalingRecord> {
-    STORE.lock().unwrap().as_ref().map(|s| s.scalings.clone()).unwrap_or_default()
+    STORE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|s| s.scalings.clone())
+        .unwrap_or_default()
 }
 
 pub fn report() -> String {
@@ -78,7 +131,8 @@ pub fn report() -> String {
     let Some(s) = g.as_ref() else {
         return String::new();
     };
-    let mut out = String::from("span (inclusive)                     calls      total s     mean ms\n");
+    let mut out =
+        String::from("span (inclusive)                     calls      total s     mean ms\n");
     let mut spans: Vec<_> = s.spans.iter().collect();
     spans.sort_by_key(|(_, (_, ns))| std::cmp::Reverse(*ns));
     for (name, (n, ns)) in spans {
@@ -97,7 +151,10 @@ pub fn report() -> String {
         let mut sw: Vec<usize> = rs.iter().map(|r| r.sweeps).collect();
         sw.sort_unstable();
         let total_ns: u128 = rs.iter().map(|r| r.ns).sum();
-        let waste: f64 = rs.iter().map(|r| (r.accel_goods * r.sweeps) as f64).sum::<f64>()
+        let waste: f64 = rs
+            .iter()
+            .map(|r| (r.accel_goods * r.sweeps) as f64)
+            .sum::<f64>()
             / rs.iter().map(|r| r.good_sum as f64).sum::<f64>().max(1.0);
         out += &format!(
             "{ctx:<24} {:>5} {:>9.3} {:>6}/{:>6}/{:>6} {:>9} {:>6.2}x {:>3}\n",

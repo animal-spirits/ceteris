@@ -590,6 +590,33 @@ fn d0_is_the_trade_weighted_mean_of_ln_distance() {
 #[ignore]
 fn spike_profile() {
     let w = world();
+    if let Some(n) = std::env::var("CETERIS_NEWTON_AFTER")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        steady::NEWTON_AFTER.store(n, std::sync::atomic::Ordering::Relaxed);
+    }
+    if std::env::var_os("CETERIS_NEWTON_PLAIN").is_some() {
+        steady::NEWTON_FROM_PLAIN.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    if let Some(n) = std::env::var("CETERIS_NEWTON_CAP")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        steady::NEWTON_CAP.store(n, std::sync::atomic::Ordering::Relaxed);
+    }
+    if let Some(n) = std::env::var("CETERIS_NEWTON_MAX")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        steady::NEWTON_MAX_STEPS.store(n, std::sync::atomic::Ordering::Relaxed);
+    }
+    if std::env::var_os("CETERIS_NEWTON_L2").is_some() {
+        steady::NEWTON_L2.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    if std::env::var_os("CETERIS_NEWTON_ORACLE").is_some() {
+        steady::NEWTON_ORACLE.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
     for (e0, scale0) in [(0.0, 1.0), (0.4, 0.5)] {
         let mut scale = [1.0; border::N_CLASSES];
         scale[1] = scale0;
@@ -614,11 +641,64 @@ fn spike_profile() {
             tr.scale,
             tr.ln_d0
         );
+        println!(
+            "DIGEST {e0} pooled {:e} classes {:?} share {:?}",
+            tr.pooled, tr.classes, tr.fit.share
+        );
         println!("{}", ceteris_calibrate::prof::report());
         let mut slow = ceteris_calibrate::prof::scalings();
         slow.sort_by_key(|r| std::cmp::Reverse(r.sweeps));
         for r in slow.iter().take(5) {
             println!("{r:?}");
+        }
+        let nw: Vec<_> = slow.iter().filter(|r| !r.newton.is_empty()).collect();
+        let ok = nw.iter().filter(|r| r.newton == "ok").count();
+        println!(
+            "newton engaged {} ok {} steps {} products {} evals {} newton s {:.3}",
+            nw.len(),
+            ok,
+            nw.iter().map(|r| r.newton_steps).sum::<usize>(),
+            nw.iter().map(|r| r.newton_products).sum::<usize>(),
+            nw.iter().map(|r| r.newton_evals).sum::<usize>(),
+            nw.iter().map(|r| r.newton_ns).sum::<u128>() as f64 / 1e9
+        );
+        for r in nw.iter().filter(|r| r.newton != "ok") {
+            println!("  newton fell back: {} (sweeps {})", r.newton, r.sweeps);
+        }
+        let mut orc = ceteris_calibrate::prof::oracle();
+        orc.sort_by_key(|r| std::cmp::Reverse(r.sweeps_main));
+        for o in orc.iter().take(8) {
+            println!("  oracle {o:?}");
+        }
+        let big: Vec<_> = orc.iter().filter(|o| o.sweeps_main > 500).collect();
+        if !big.is_empty() {
+            println!(
+                "GO>500 sweeps: n {} max steps(sum over goods) {} max products {} max newton/main wall {:.4} (min {:.4}) main {:.2} s newton {:.3} s",
+                big.len(),
+                big.iter().map(|o| o.steps).max().unwrap(),
+                big.iter().map(|o| o.products).max().unwrap(),
+                big.iter()
+                    .map(|o| o.ns_newton as f64 / o.ns_main as f64)
+                    .fold(0.0, f64::max),
+                big.iter()
+                    .map(|o| o.ns_newton as f64 / o.ns_main as f64)
+                    .fold(f64::INFINITY, f64::min),
+                big.iter().map(|o| o.ns_main).sum::<u128>() as f64 / 1e9,
+                big.iter().map(|o| o.ns_newton).sum::<u128>() as f64 / 1e9,
+            );
+        }
+        if !orc.is_empty() {
+            let mx = |f: fn(&ceteris_calibrate::prof::OracleRecord) -> f64| {
+                orc.iter().map(f).fold(0.0, f64::max)
+            };
+            println!(
+                "oracle n {} max dlw {:.3e} max dr {:.3e}; main {:.3} s vs newton {:.3} s over those scalings",
+                orc.len(),
+                mx(|o| o.dlw),
+                mx(|o| o.dr),
+                orc.iter().map(|o| o.ns_main).sum::<u128>() as f64 / 1e9,
+                orc.iter().map(|o| o.ns_newton).sum::<u128>() as f64 / 1e9
+            );
         }
     }
 }

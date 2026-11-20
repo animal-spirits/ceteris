@@ -49,6 +49,7 @@
 
 use std::f64::consts::LN_10;
 use std::fmt;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
 
 use ceteris_econ::EconParams;
@@ -478,30 +479,131 @@ pub fn sinkhorn_with(
 ) -> Result<Scaling, CalibrationError> {
     let t0 = Instant::now();
     let ctx = crate::prof::context();
+    let newton_after = NEWTON_AFTER.load(Ordering::Relaxed);
     let mut stats = SweepStats::default();
-    let out = sinkhorn_inner(m, spend, supply, start, max_sweeps, tol, accel, &mut stats);
+    let out = sinkhorn_inner(
+        m,
+        spend,
+        supply,
+        start,
+        max_sweeps,
+        tol,
+        accel,
+        newton_after,
+        &mut stats,
+    );
+    let ns = t0.elapsed().as_nanos();
     let traded: Vec<usize> = (0..m.inp.n_goods()).filter(|&g| m.inp.traded[g]).collect();
     let n_goods = traded.len();
-    let lo: Vec<usize> = traded.iter().map(|&g| stats.last_out.get(g).copied().unwrap_or(0)).collect();
+    let lo: Vec<usize> = traded
+        .iter()
+        .map(|&g| stats.last_out.get(g).copied().unwrap_or(0))
+        .collect();
     crate::prof::record(crate::prof::ScalingRecord {
         ctx,
         tol,
         sweeps: out.as_ref().map_or(stats.sweeps, |s| s.sweeps),
-        ns: t0.elapsed().as_nanos(),
+        ns,
         warm: start.is_some(),
         accel_goods: n_goods,
-        slowest_good: lo.iter().enumerate().max_by_key(|&(_, &s)| s).map_or(0, |(i, _)| traded[i]),
+        slowest_good: lo
+            .iter()
+            .enumerate()
+            .max_by_key(|&(_, &s)| s)
+            .map_or(0, |(i, _)| traded[i]),
         good_max: lo.iter().copied().max().unwrap_or(0) + 1,
         good_sum: lo.iter().map(|x| x + 1).sum(),
         ok: out.is_ok(),
+        newton: stats.newton.clone(),
+        newton_steps: stats.newton_steps,
+        newton_products: stats.newton_products,
+        newton_evals: stats.newton_evals,
+        newton_ns: stats.newton_ns,
     });
+    if NEWTON_ORACLE.load(Ordering::Relaxed) && stats.newton == "ok" {
+        if let Ok(n) = &out {
+            let t1 = Instant::now();
+            let mut st2 = SweepStats::default();
+            if let Ok(o) =
+                sinkhorn_inner(m, spend, supply, start, max_sweeps, tol, accel, 0, &mut st2)
+            {
+                let ns_main = t1.elapsed().as_nanos();
+                let dlw = n
+                    .log_weight
+                    .data
+                    .iter()
+                    .zip(&o.log_weight.data)
+                    .map(|(a, b)| (a - b).abs())
+                    .fold(0.0, f64::max);
+                let dr =
+                    n.r.iter()
+                        .zip(&o.r)
+                        .map(|(a, b)| ((a - b) / b).abs())
+                        .fold(0.0, f64::max);
+                crate::prof::record_oracle(crate::prof::OracleRecord {
+                    ctx,
+                    sweeps_main: o.sweeps,
+                    ns_main,
+                    sweeps_newton: n.sweeps,
+                    ns_newton: ns,
+                    steps: stats.newton_steps,
+                    products: stats.newton_products,
+                    dlw,
+                    dr,
+                    res_newton: n.residual,
+                    res_main: o.residual,
+                });
+            }
+        }
+    }
     out
+}
+
+/// Spike switch: sweeps before the Newton phase, 0 for none.
+pub static NEWTON_AFTER: AtomicUsize = AtomicUsize::new(0);
+/// Spike switch: rerun each Newton-solved scaling sweep-only and record the difference.
+pub static NEWTON_FROM_PLAIN: AtomicBool = AtomicBool::new(false);
+/// Spike: largest |step| in ln w, in thousandths; 0 for no cap.
+pub static NEWTON_CAP: AtomicUsize = AtomicUsize::new(0);
+pub static NEWTON_L2: AtomicBool = AtomicBool::new(false);
+pub static NEWTON_ORACLE: AtomicBool = AtomicBool::new(false);
+pub static NEWTON_MAX_STEPS: AtomicUsize = AtomicUsize::new(20);
+const NEWTON_RESTART: usize = 30;
+const NEWTON_RESTARTS: usize = 10;
+const NEWTON_ETA_MIN: f64 = 1e-8;
+const NEWTON_ETA_MAX: f64 = 1e-1;
+const NEWTON_BACKTRACK: usize = 30;
+const NEWTON_ARMIJO: f64 = 1e-4;
+
+struct GoodState {
+    w: Vec<f64>,
+    phi: Vec<f64>,
+    b: Vec<f64>,
+    reach: Vec<f64>,
+    got: Vec<f64>,
+    received: f64,
+    gap: Vec<f64>,
+    worst: f64,
+    within: bool,
+    merit: f64,
+}
+
+struct NewtonGood {
+    x: Vec<f64>,
+    steps: usize,
+    products: usize,
+    evals: usize,
 }
 
 #[derive(Default)]
 struct SweepStats {
     sweeps: usize,
     last_out: Vec<usize>,
+    newton: String,
+    newton_steps: usize,
+    newton_products: usize,
+    newton_evals: usize,
+    newton_ns: u128,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -513,6 +615,7 @@ fn sinkhorn_inner(
     max_sweeps: usize,
     tol: f64,
     accel: Accel,
+    newton_after: usize,
     stats: &mut SweepStats,
 ) -> Result<Scaling, CalibrationError> {
     let inp = m.inp;
@@ -645,6 +748,233 @@ fn sinkhorn_inner(
         )
     };
 
+    // Newton phase (RFC 0361): one good's state at x, its residual and Jacobian product.
+    let good_state = |g: usize, x: &[f64]| -> GoodState {
+        let cells = g * n_p..(g + 1) * n_p;
+        let (origin, v, e) = (&origin[cells.clone()], &v[cells.clone()], &e[cells]);
+        let mut top = f64::NEG_INFINITY;
+        for k in (0..n_p).filter(|&k| origin[k]) {
+            top = np_max(top, x[k]);
+        }
+        let w: Vec<f64> = (0..n_p)
+            .map(|k| if origin[k] { (x[k] - top).exp() } else { 0.0 })
+            .collect();
+        let phi = m.origin_sums_good(g, &w, gross);
+        let b: Vec<f64> = (0..n_p)
+            .map(|k| divide_where(e[k], phi[k], phi[k] > 0.0, 0.0))
+            .collect();
+        let reach = m.destination_sums_good(g, &b, net_factors);
+        let got: Vec<f64> = w.iter().zip(&reach).map(|(w, r)| w * r).collect();
+        let mut received = 0.0;
+        for x in &got {
+            received += x;
+        }
+        let r = divide_where(received, total[g], total[g] > 0.0, 1.0);
+        let target: Vec<f64> = (0..n_p).map(|k| (r * v[k]).ln()).collect();
+        let gap: Vec<f64> = (0..n_p)
+            .map(|k| {
+                if origin[k] {
+                    got[k].ln() - target[k]
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let (mut worst, mut big, mut sq) = (0.0f64, 0.0f64, 0.0f64);
+        for k in (0..n_p).filter(|&k| origin[k]) {
+            worst = worst.max(gap[k].abs());
+            sq += gap[k] * gap[k];
+            big = big.max(2.0 * (x[k] - top).abs() + 2.0 * target[k].abs());
+        }
+        if !sq.is_finite() {
+            worst = f64::NAN;
+        }
+        let within = worst <= SINKHORN_TOL + f64::EPSILON * (big + depth[g] + 4.5);
+        let merit = if NEWTON_L2.load(Ordering::Relaxed) {
+            sq.sqrt()
+        } else {
+            worst
+        };
+        GoodState {
+            w,
+            phi,
+            b,
+            reach,
+            got,
+            received,
+            gap,
+            worst,
+            within,
+            merit,
+        }
+    };
+    // J v at the state, v zero off the origins
+    let jacobian_product = |g: usize, st: &GoodState, v: &[f64]| -> Vec<f64> {
+        let origin = &origin[g * n_p..(g + 1) * n_p];
+        let wv: Vec<f64> = (0..n_p).map(|k| st.w[k] * v[k]).collect();
+        let dphi = m.origin_sums_good(g, &wv, gross);
+        let bu: Vec<f64> = (0..n_p)
+            .map(|k| divide_where(st.b[k] * dphi[k], st.phi[k], st.phi[k] > 0.0, 0.0))
+            .collect();
+        let dr = m.destination_sums_good(g, &bu, net_factors);
+        let mut dreceived = 0.0;
+        let rel: Vec<f64> = (0..n_p)
+            .map(|k| if origin[k] { -dr[k] / st.reach[k] } else { 0.0 })
+            .collect();
+        for k in (0..n_p).filter(|&k| origin[k]) {
+            dreceived += st.got[k] * (v[k] + rel[k]);
+        }
+        let dlnr = dreceived / st.received;
+        (0..n_p)
+            .map(|k| if origin[k] { v[k] + rel[k] - dlnr } else { 0.0 })
+            .collect()
+    };
+    let newton_good = |g: usize, x0: &[f64]| -> Result<NewtonGood, String> {
+        let org: Vec<usize> = (0..n_p).filter(|&k| origin[g * n_p + k]).collect();
+        let mut x = x0.to_vec();
+        let top = org.iter().fold(f64::NEG_INFINITY, |t, &k| t.max(x[k]));
+        let pin = *org
+            .iter()
+            .find(|&&k| x[k] == top)
+            .expect("a good with origins");
+        let idx: Vec<usize> = org.iter().copied().filter(|&k| k != pin).collect();
+        let (mut steps, mut products, mut evals) = (0, 0, 1);
+        let mut st = good_state(g, &x);
+        let newton_max = NEWTON_MAX_STEPS.load(Ordering::Relaxed);
+        for _ in 0..=newton_max {
+            if !st.worst.is_finite() {
+                return Err("non-finite".into());
+            }
+            if st.worst <= tol {
+                return Ok(NewtonGood {
+                    x,
+                    steps,
+                    products,
+                    evals,
+                });
+            }
+            if steps == newton_max {
+                return Err(format!("max steps, gap {}", sci(st.worst)));
+            }
+            let eta = st.worst.clamp(NEWTON_ETA_MIN, NEWTON_ETA_MAX);
+            let rhs: Vec<f64> = idx.iter().map(|&k| -st.gap[k]).collect();
+            let mut matvec = |d: &[f64]| -> Vec<f64> {
+                let mut v = vec![0.0; n_p];
+                for (j, &k) in idx.iter().enumerate() {
+                    v[k] = d[j];
+                }
+                let jv = jacobian_product(g, &st, &v);
+                idx.iter().map(|&k| jv[k]).collect()
+            };
+            let delta =
+                match crate::newton::gmres(&mut matvec, &rhs, eta, NEWTON_RESTART, NEWTON_RESTARTS)
+                {
+                    Ok((d, p)) => {
+                        products += p + 1;
+                        let mut v = vec![0.0; n_p];
+                        for (j, &k) in idx.iter().enumerate() {
+                            v[k] = d[j];
+                        }
+                        let jd = jacobian_product(g, &st, &v);
+                        let res = idx
+                            .iter()
+                            .map(|&k| (jd[k] + st.gap[k]).powi(2))
+                            .sum::<f64>()
+                            .sqrt();
+                        let rhsn = rhs.iter().map(|x| x * x).sum::<f64>().sqrt();
+                        if !(res <= 2.0 * eta * rhsn) {
+                            return Err(format!(
+                                "gmres true residual {:.1e} of {:.1e}, gap {}",
+                                res,
+                                rhsn,
+                                sci(st.worst)
+                            ));
+                        }
+                        d
+                    }
+                    Err(p) => {
+                        products += p;
+                        return Err(format!("gmres, gap {}", sci(st.worst)));
+                    }
+                };
+            let cap = NEWTON_CAP.load(Ordering::Relaxed) as f64 / 1000.0;
+            let dmax = delta.iter().fold(0.0f64, |a, b| a.max(b.abs()));
+            let mut alpha = if cap > 0.0 && dmax > cap {
+                cap / dmax
+            } else {
+                1.0
+            };
+            let mut accepted = None;
+            for _ in 0..=NEWTON_BACKTRACK {
+                let mut xt = x.clone();
+                for (j, &k) in idx.iter().enumerate() {
+                    xt[k] += alpha * delta[j];
+                }
+                let t = good_state(g, &xt);
+                evals += 1;
+                if t.worst.is_finite() && t.merit <= (1.0 - NEWTON_ARMIJO * alpha) * st.merit {
+                    accepted = Some((xt, t));
+                    break;
+                }
+                alpha *= 0.5;
+            }
+            match accepted {
+                Some((xt, t)) => {
+                    (x, st) = (xt, t);
+                    steps += 1;
+                }
+                None if st.within => {
+                    return Ok(NewtonGood {
+                        x,
+                        steps,
+                        products,
+                        evals,
+                    });
+                }
+                None => {
+                    if std::env::var_os("CETERIS_NEWTON_DEBUG").is_some() {
+                        let mut v = vec![0.0; n_p];
+                        for (j, &k) in idx.iter().enumerate() {
+                            v[k] = delta[j];
+                        }
+                        let jd = jacobian_product(g, &st, &v);
+                        let res: f64 = idx
+                            .iter()
+                            .map(|&k| (jd[k] + st.gap[k]).powi(2))
+                            .sum::<f64>()
+                            .sqrt();
+                        let rhsn: f64 = rhs.iter().map(|x| x * x).sum::<f64>().sqrt();
+                        let dn: f64 = delta.iter().map(|x| x * x).sum::<f64>().sqrt();
+                        eprintln!(
+                            "DEBUG good {g} step {steps} n {} gap {:.3e} |rhs| {:.3e} gmres resid {:.3e} |delta| {:.3e} max|delta| {:.3e}",
+                            idx.len(),
+                            st.worst,
+                            rhsn,
+                            res,
+                            dn,
+                            delta.iter().fold(0.0f64, |a, b| a.max(b.abs()))
+                        );
+                        for a in [1.0, 0.5, 0.25, 0.1, 0.01, 0.001] {
+                            let mut xt = x.clone();
+                            for (j, &k) in idx.iter().enumerate() {
+                                xt[k] += a * delta[j];
+                            }
+                            let t = good_state(g, &xt);
+                            eprintln!(
+                                "   alpha {a}: worst {:.3e} merit {:.3e} (now merit {:.3e})",
+                                t.worst, t.merit, st.merit
+                            );
+                        }
+                        let xs: Vec<String> = org.iter().map(|&k| format!("{:.2}", x[k])).collect();
+                        eprintln!("   x {:?}", xs);
+                    }
+                    return Err(format!("line search, gap {}", sci(st.worst)));
+                }
+            }
+        }
+        unreachable!()
+    };
+
     let (mut xs, mut gs): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (Vec::new(), Vec::new());
     let (mut best, mut since) = (f64::INFINITY, 0);
     // per-good mixing: the origin cells of each good, and each good's own history and restart rule
@@ -705,6 +1035,66 @@ fn sinkhorn_inner(
             (gbest, gsince) = (vec![f64::INFINITY; n_g], vec![0; n_g]);
             lw = p;
             continue;
+        }
+        if newton_after > 0 && sweep == newton_after {
+            let t_n = Instant::now();
+            let out: Vec<usize> = (0..n_g)
+                .filter(|&g| !cells[g].is_empty() && last_by_good[g] > tol)
+                .collect();
+            let from = if NEWTON_FROM_PLAIN.load(Ordering::Relaxed) {
+                &fx
+            } else {
+                &lw
+            };
+            let run = |&g: &usize| (g, newton_good(g, &from[g * n_p..(g + 1) * n_p]));
+            let results: Vec<(usize, Result<NewtonGood, String>)> =
+                if rayon::current_num_threads() > 1 {
+                    out.par_iter().map(run).collect()
+                } else {
+                    out.iter().map(run).collect()
+                };
+            for (_, r) in &results {
+                if let Ok(n) = r {
+                    stats.newton_steps += n.steps;
+                    stats.newton_products += n.products;
+                    stats.newton_evals += n.evals;
+                }
+            }
+            let failed = results
+                .iter()
+                .find_map(|(g, r)| r.as_ref().err().map(|e| format!("good {g}: {e}")));
+            if let Some(f) = failed {
+                stats.newton = format!("fail {f}");
+            } else {
+                let mut lw_n = lw.clone();
+                for (g, r) in &results {
+                    let n = r.as_ref().expect("checked");
+                    lw_n[g * n_p..(g + 1) * n_p].copy_from_slice(&n.x);
+                }
+                let (_, r2, err2, within2, _) = step(&lw_n);
+                if err2.is_finite() && (err2 <= tol || within2) {
+                    let r = (0..n_g)
+                        .map(|g| if inp.traded[g] { r2[g] } else { 1.0 })
+                        .collect();
+                    let mut top = vec![f64::NEG_INFINITY; n_g];
+                    for i in (0..n).filter(|&i| origin[i]) {
+                        top[good[i]] = np_max(top[good[i]], lw_n[i]);
+                    }
+                    for i in (0..n).filter(|&i| origin[i]) {
+                        lw_n[i] -= top[good[i]];
+                    }
+                    stats.newton = "ok".into();
+                    stats.newton_ns = t_n.elapsed().as_nanos();
+                    return Ok(Scaling {
+                        log_weight: model::cells(&lw_n, n_p, n_g),
+                        r,
+                        sweeps: sweep + 1,
+                        residual: err2,
+                    });
+                }
+                stats.newton = format!("fail final gap {}", sci(err2));
+            }
+            stats.newton_ns = t_n.elapsed().as_nanos();
         }
         if accel == Accel::PerGood {
             let mut mixed = fx.clone();
