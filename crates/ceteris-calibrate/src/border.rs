@@ -313,8 +313,16 @@ fn solve_at(
     let other = |e: String| Failure::Other(e.into());
     let at = at_border_nu(inp, nu).map_err(other)?;
     let m = Model::new(&at).map_err(other)?;
-    let scaling = steady::sinkhorn_limited(&m, spend, supply, start, limits.max_sweeps)
-        .map_err(Failure::Scaling)?;
+    let scaling = steady::sinkhorn_to(
+        &m,
+        spend,
+        supply,
+        start,
+        limits.max_sweeps,
+        steady::SINKHORN_TOL,
+        limits.newton,
+    )
+    .map_err(Failure::Scaling)?;
     let (n_p, n_g) = (at.n_provinces(), at.n_goods());
     let lw = &scaling.log_weight;
     let mut top = vec![f64::NEG_INFINITY; n_g];
