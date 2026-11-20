@@ -1,6 +1,6 @@
 # RFC 0362. Newton scaling: step control as measured, and two criteria the spike could not meet
 
-Status: proposed (D1 decided; D2 and D3 await Antonio)
+Status: accepted
 Date: 2026-11-20
 Design sections: 15 (calibration), 17.1; econ SPEC, Calibration, stage 2
 Release: 1.0 (P4)
@@ -81,8 +81,8 @@ Options:
 Recommendation: B, because it states the measured fact instead of hiding it, keeps a bound that
 fails if the Newton point is wrong, and moves no downstream bound.
 
-Decision: pending, Antonio.
-Row: pending
+Decision: B (the recommended option), applied on Antonio's go to merge this PR (2026-11-20), relayed by the coordinator; he did not pick it on a card.
+Row: ADR 0395
 
 ### D3. Is "no fallback" still a go criterion?
 
@@ -105,8 +105,8 @@ Options:
 Recommendation: A, because the fallback is the designed safety net and its measured cost is
 inside the gate; C is a new rule tuned to 12 cases and is not warranted by them.
 
-Decision: pending, Antonio.
-Row: pending
+Decision: A (the recommended option), applied on Antonio's go to merge this PR (2026-11-20), relayed by the coordinator; he did not pick it on a card.
+Row: ADR 0396
 
 ## Acceptance of PR 2
 
@@ -121,7 +121,6 @@ bit for bit; the rounding plateau is not injected.
 
 ## Spec changes
 
-Written in this PR (ADR 0394): 17, P181 constants (`NEWTON_AFTER` 20, `NEWTON_MAX` 60, 2-norm
+Written in this PR (ADRs 0394 to 0396): 17, P181 constants (`NEWTON_AFTER` 20, `NEWTON_MAX` 60, 2-norm
 merit, step cap 10, 30 halvings, true-residual check) and "in code"; econ SPEC, Calibration, stage 2,
-the Newton phase text updated and "not yet in code" removed. D2 and D3 write their rows when
-decided.
+the Newton phase text updated and "not yet in code" removed. D2 and D3 (ADRs 0395, 0396) are in the same PR.
