@@ -311,10 +311,17 @@ fn solve_at(
     limits: Limits,
 ) -> Result<(Inputs, Mat, Mat), Failure> {
     let other = |e: String| Failure::Other(e.into());
+    let _p = crate::prof::span("solve_at");
     let at = at_border_nu(inp, nu).map_err(other)?;
-    let m = Model::new(&at).map_err(other)?;
-    let scaling = steady::sinkhorn_limited(&m, spend, supply, start, limits.max_sweeps)
-        .map_err(Failure::Scaling)?;
+    let m = {
+        let _p = crate::prof::span("solve_at.Model::new");
+        Model::new(&at).map_err(other)?
+    };
+    let scaling = {
+        let _p = crate::prof::span("solve_at.sinkhorn");
+        steady::sinkhorn_limited(&m, spend, supply, start, limits.max_sweeps)
+            .map_err(Failure::Scaling)?
+    };
     let (n_p, n_g) = (at.n_provinces(), at.n_goods());
     let lw = &scaling.log_weight;
     let mut top = vec![f64::NEG_INFINITY; n_g];
@@ -360,6 +367,7 @@ pub fn data_state_parts(
     icio: &[bool],
     limits: Limits,
 ) -> Result<(Vec<f64>, Vec<f64>), CalibrationError> {
+    let _p = crate::prof::span("data_state_parts");
     let (spend, supply) = spending_at(inp, nu, limits)?;
     let (at, price, _) = solve_at(inp, nu, &spend, &supply, None, limits)?;
     Ok(cross_border_parts(&at, &price, &spend, icio, groups)?)

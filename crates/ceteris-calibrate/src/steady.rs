@@ -476,6 +476,45 @@ pub fn sinkhorn_with(
     tol: f64,
     accel: Accel,
 ) -> Result<Scaling, CalibrationError> {
+    let t0 = Instant::now();
+    let ctx = crate::prof::context();
+    let mut stats = SweepStats::default();
+    let out = sinkhorn_inner(m, spend, supply, start, max_sweeps, tol, accel, &mut stats);
+    let traded: Vec<usize> = (0..m.inp.n_goods()).filter(|&g| m.inp.traded[g]).collect();
+    let n_goods = traded.len();
+    let lo: Vec<usize> = traded.iter().map(|&g| stats.last_out.get(g).copied().unwrap_or(0)).collect();
+    crate::prof::record(crate::prof::ScalingRecord {
+        ctx,
+        tol,
+        sweeps: out.as_ref().map_or(stats.sweeps, |s| s.sweeps),
+        ns: t0.elapsed().as_nanos(),
+        warm: start.is_some(),
+        accel_goods: n_goods,
+        slowest_good: lo.iter().enumerate().max_by_key(|&(_, &s)| s).map_or(0, |(i, _)| traded[i]),
+        good_max: lo.iter().copied().max().unwrap_or(0) + 1,
+        good_sum: lo.iter().map(|x| x + 1).sum(),
+        ok: out.is_ok(),
+    });
+    out
+}
+
+#[derive(Default)]
+struct SweepStats {
+    sweeps: usize,
+    last_out: Vec<usize>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sinkhorn_inner(
+    m: &Model,
+    spend: &Mat,
+    supply: &Mat,
+    start: Option<&Mat>,
+    max_sweeps: usize,
+    tol: f64,
+    accel: Accel,
+    stats: &mut SweepStats,
+) -> Result<Scaling, CalibrationError> {
     let inp = m.inp;
     let (n_p, n_g) = (inp.n_provinces(), inp.n_goods());
     let n = n_p * n_g;
@@ -621,6 +660,13 @@ pub fn sinkhorn_with(
     let mut plain: Option<Vec<f64>> = None;
     for sweep in 1..=max_sweeps {
         let (fx, r, e, within, by_good) = step(&lw);
+        stats.sweeps = sweep;
+        stats.last_out.resize(by_good.len(), 0);
+        for (g, &w) in by_good.iter().enumerate() {
+            if w > tol || !w.is_finite() {
+                stats.last_out[g] = sweep;
+            }
+        }
         (err, last_by_good) = (e, by_good);
         // Stalled within the gap's own rounding (`summation_depth`): no sweep can do better.
         // 1.6e-13 on the full pack with storage on, where one gateway's sums are 858 deep.
@@ -1420,6 +1466,7 @@ impl State {
 /// are kept); and the sales value V / (1 + delta s) (P, G) of traded origins, their output value
 /// less the spoilage it replaces (ADR 0091). The inputs' own border friction is the state's.
 pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), CalibrationError> {
+    let _p = crate::prof::span("data_state_spending");
     let setup = Setup::new(inp)?;
     let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
     let traded = &inp.traded;
@@ -1428,6 +1475,7 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
     let ones = Mat::filled(n_p, n_g, 1.0);
     let m = Model::physical(inp)?;
     let sales = setup.sales_data();
+    let mut passes_run = 0usize;
     let mut lw: Option<Mat> = None;
     let mut rebate = vec![0.0; n_c];
     // weights inverted at prices 1 would let every cost in q, another class's distance cost
@@ -1439,7 +1487,12 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
     let mut y_local = setup.local_start()?;
     let mut ras_start: Option<Vec<f64>> = None;
     for _ in 0..limits.max_passes {
-        let v = setup.settle(&rebate, &q, &weights, &y_local, limits.max_local)?;
+        passes_run += 1;
+        let _ = passes_run;
+        let v = {
+            let _p = crate::prof::span("ds.settle");
+            setup.settle(&rebate, &q, &weights, &y_local, limits.max_local)?
+        };
         y_local = (0..v.len())
             .map(|e| if setup.traded_e[e] { 0.0 } else { v[e] })
             .collect();
@@ -1454,7 +1507,10 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
         });
         // stage 2 at this spending: who pays which tariff follows the solved origin prices, not
         // posted prices 1, where imports and so duties are several times the calibrated ones
-        let scaling = sinkhorn_limited(&m, &spend, &sales, lw.as_ref(), limits.max_sweeps)?;
+        let scaling = {
+            let _p = crate::prof::span("ds.sinkhorn");
+            sinkhorn_limited(&m, &spend, &sales, lw.as_ref(), limits.max_sweeps)?
+        };
         let l = &scaling.log_weight;
         let price = Mat::from_fn(n_p, n_g, |p, g| {
             if traded[g] && inp.active[p][g] {
@@ -1470,6 +1526,7 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
         let weights_new = if inp.calibrated_weights.is_some() {
             weights.clone()
         } else {
+            let _p = crate::prof::span("ds.demand_weights");
             let (w, ras) =
                 setup.demand_weights(&hh, &spend_int, &duty, &q, ras_start.as_deref())?;
             ras_start = Some(ras.b);

@@ -583,3 +583,42 @@ fn d0_is_the_trade_weighted_mean_of_ln_distance() {
         );
     }
 }
+
+/// Spike instrumentation (RFC 0361): one fit at epsilon 0 and one at epsilon 0.4 with a clamped
+/// class, with the span and scaling report. Run with `--ignored --nocapture`.
+#[test]
+#[ignore]
+fn spike_profile() {
+    let w = world();
+    for (e0, scale0) in [(0.0, 1.0), (0.4, 0.5)] {
+        let mut scale = [1.0; border::N_CLASSES];
+        scale[1] = scale0;
+        let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
+        let (nu_target, data_flows) = known_scaled(&w, e0, &scale, &nu_group);
+        let t = Targets {
+            nu_target: &nu_target,
+            icio: &w.icio,
+            theta_class: &w.class,
+            ln_d: &w.ln_d,
+            weight: &trade_weight(&w.inp),
+            gravity: &w.gravity,
+            data_flows: &data_flows,
+        };
+        ceteris_calibrate::prof::reset();
+        let start = std::time::Instant::now();
+        let tr = epsilon::fit_at_epsilon(&w.inp, &t, e0, Limits::default(), &mut quiet()).unwrap();
+        println!(
+            "epsilon {e0}: wall {:.3} s, nu {:?}, scale {:?}, ln_d0 {:?}",
+            start.elapsed().as_secs_f64(),
+            tr.fit.nu,
+            tr.scale,
+            tr.ln_d0
+        );
+        println!("{}", ceteris_calibrate::prof::report());
+        let mut slow = ceteris_calibrate::prof::scalings();
+        slow.sort_by_key(|r| std::cmp::Reverse(r.sweeps));
+        for r in slow.iter().take(5) {
+            println!("{r:?}");
+        }
+    }
+}

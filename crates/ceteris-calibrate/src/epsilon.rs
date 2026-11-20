@@ -310,8 +310,10 @@ fn solve_scale(
     settled: bool,
     limits: Limits,
 ) -> Result<f64, CalibrationError> {
+    let _p = crate::prof::span("solve_scale");
     let groups = border::friction_groups(t.theta_class);
     let f = |s: f64| -> Result<f64, CalibrationError> {
+        let _p = crate::prof::span("solve_scale.eval");
         let mut sc = scale.to_vec();
         sc[c] = s;
         let at = at_epsilon(inp, t.theta_class, t.ln_d, ln_d0, &sc, epsilon)?;
@@ -376,6 +378,7 @@ fn trial(
     limits: Limits,
     progress: &mut dyn FnMut(&str),
 ) -> Result<Trial, CalibrationError> {
+    let _p = crate::prof::span("trial");
     let groups = border::friction_groups(t.theta_class);
     let (mean, min) = class_offsets(inp, t.theta_class, t.ln_d, t.weight);
     let mut ln_d0 = mean;
@@ -385,7 +388,10 @@ fn trial(
     let mut passes = 0;
     loop {
         let at = at_epsilon(inp, t.theta_class, t.ln_d, &ln_d0, &scale, epsilon)?;
-        let fit = border::fit_border_nu(&at, &groups, t.nu_target, t.icio, limits, progress)?;
+        let fit = {
+            let _p = crate::prof::span("trial.fit_border_nu");
+            border::fit_border_nu(&at, &groups, t.nu_target, t.icio, limits, progress)?
+        };
         let nu = fit.nu_of_goods(&at.border_nu);
         let bad = product_misses(inp, t.theta_class, t.ln_d, &ln_d0, &scale, epsilon, &nu);
         if bad.is_empty() {
@@ -425,6 +431,7 @@ fn trial(
                 }
                 continue;
             }
+            let _p = crate::prof::span("trial.final");
             let (spend, supply) = border::spending_at(&at, &nu, limits)?;
             let pairs = border::data_state_pair_values(&at, &nu, &spend, &supply, limits)?;
             let (n_c, n_g) = (at.n_countries(), at.n_goods());
