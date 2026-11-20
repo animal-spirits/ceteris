@@ -79,12 +79,16 @@ fn householder(a: &mut [Vec<f64>], b: &mut [f64]) -> usize {
 /// values, `u` holds U times them and `v` the right singular vectors. A pair with a column at or
 /// below `drop` times the largest is left alone: such a column is dropped as a zero singular
 /// value (a rotation only shrinks the smaller column of a pair), and rounding noise cannot be
-/// made orthogonal to eps relative.
+/// made orthogonal to eps relative. A pair counts as orthogonal at sqrt(rows) eps relative, the
+/// threshold of LAPACK's `gesvj` (Drmac and Veselic 2008): a rotation's rounding leaves the pair's
+/// inner product near eps sqrt(alpha beta) and a stricter test can cycle at that floor forever
+/// (R of a rank-deficient PPML regression, 8 by 8, stuck at 2.4e-16 against 2.2e-16).
 fn jacobi(u: &mut [Vec<f64>], drop: f64) -> Result<Vec<Vec<f64>>, String> {
     let k = u.len();
     let mut v: Vec<Vec<f64>> = (0..k)
         .map(|i| (0..k).map(|j| f64::from(u8::from(i == j))).collect())
         .collect();
+    let orthogonal = f64::EPSILON * (u.first().map_or(0, Vec::len) as f64).sqrt();
     for _ in 0..MAX_SWEEPS {
         let cutoff = drop * u.iter().map(|c| norm8(c)).fold(0.0, f64::max);
         let mut rotated = false;
@@ -93,7 +97,7 @@ fn jacobi(u: &mut [Vec<f64>], drop: f64) -> Result<Vec<Vec<f64>>, String> {
                 let (alpha, beta, gamma) =
                     (dot8(&u[p], &u[p]), dot8(&u[q], &u[q]), dot8(&u[p], &u[q]));
                 if gamma == 0.0
-                    || gamma.abs() <= f64::EPSILON * (alpha * beta).sqrt()
+                    || gamma.abs() <= orthogonal * (alpha * beta).sqrt()
                     || alpha.sqrt().min(beta.sqrt()) <= cutoff
                 {
                     continue;
@@ -420,6 +424,95 @@ mod tests {
 
     /// Five columns of length three: two are rounding noise once the others are orthogonal and
     /// cannot be rotated orthogonal to eps relative. Without the drop the sweep cap reports it.
+    /// The R of a rank-deficient PPML regression (4 countries, 12 pairs, 4 zero), by columns:
+    /// the second is zero and the others carry rounding noise of 1e-15. With an orthogonality test
+    /// of eps relative the sweeps cycled at 2.4e-16 and hit the cap; at sqrt(rows) eps they stop.
+    #[test]
+    fn jacobi_converges_on_a_rank_deficient_regression_factor() {
+        let r = vec![
+            vec![
+                -19.960889597581975,
+                -1.7763568394002505e-15,
+                -8.881784197001252e-16,
+                -1.7763568394002505e-15,
+                -1.7763568394002505e-15,
+                -4.440892098500626e-16,
+                -8.881784197001252e-16,
+                -4.440892098500626e-16,
+            ],
+            vec![0.0; 8],
+            vec![
+                -0.8609380241359694,
+                0.6391219059279101,
+                -1.1311741726078495,
+                -1.1102230246251565e-16,
+                -1.1102230246251565e-16,
+                -2.7755575615628914e-17,
+                -5.551115123125783e-17,
+                -2.7755575615628914e-17,
+            ],
+            vec![
+                -1.6366960912701194,
+                -0.5631890795287693,
+                0.927485303703678,
+                -1.124410572949265,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ],
+            vec![
+                -0.49709371764423327,
+                -0.17105054186469956,
+                0.28169378550948154,
+                1.0416052785964616,
+                -0.09806760361528781,
+                -6.938893903907228e-18,
+                -1.3877787807814457e-17,
+                3.469446951953614e-18,
+            ],
+            vec![
+                -0.20759329237430046,
+                -0.30491739735902024,
+                -0.42129902253860907,
+                0.10738481973524694,
+                -0.39161757434195416,
+                -0.4109498053381385,
+                5.551115123125783e-17,
+                -5.551115123125783e-17,
+            ],
+            vec![
+                -1.1990348895644667,
+                0.7562666683303864,
+                0.13209014552858817,
+                -0.5477410066811911,
+                -0.6796134590507357,
+                0.413658285836504,
+                -0.8252737788515199,
+                1.1102230246251565e-16,
+            ],
+            vec![
+                -0.48886827486062967,
+                -0.16822015718013705,
+                -0.2557002295076346,
+                0.4266647070640081,
+                0.3189133475616289,
+                0.4414907190177093,
+                0.19067863084089734,
+                0.7387715461568471,
+            ],
+        ];
+        let mut u = r.clone();
+        let v = jacobi(&mut u, 1.9984014443252818e-15).expect("converges");
+        // U sigma V^T gives the input back
+        for (j, col) in r.iter().enumerate() {
+            for (i, &x) in col.iter().enumerate() {
+                let back: f64 = (0..8).map(|k| u[k][i] * v[k][j]).sum();
+                assert!((back - x).abs() <= 1e-13, "{i},{j}: {back} {x}");
+            }
+        }
+    }
+
     #[test]
     fn jacobi_errs_at_its_sweep_cap() {
         let wide = vec![
