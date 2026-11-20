@@ -1691,6 +1691,9 @@ pub fn distribute(w: &mut EconWorld, tick: u32) {
                     acc.government[c],
                     state,
                 );
+                if let Some(g) = &mut w.fiscal {
+                    g.receive(c, i128::from(state));
+                }
                 paid -= state;
             }
             let f = inp.ent_foreign(e);
@@ -2265,6 +2268,9 @@ pub fn energy_policy(w: &mut EconWorld) {
                 } else {
                     pay(&mut w.ledger, GOV_TRANSFER, gov, account, part);
                 }
+            }
+            if let Some(g) = &mut w.fiscal {
+                g.receive(c, if wedge > 0 { amount } else { -amount });
             }
         }
     }
