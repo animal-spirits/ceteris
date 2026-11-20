@@ -1895,3 +1895,8 @@ sections = "17"
 rows = "0396"
 topic = "[A Newton fallback is not a failed go criterion if it is diagnosed (Scaling::newton records the first failure) and the wall-clock with fallbacks counted meets the speedup gate; the zero-fallback criterion of the Newton spike is dropped (P181)](../rfcs/0362-newton-step-control-as-measured.md)"
 sections = "17"
+
+[[entry]]
+rows = "0397"
+topic = "[Steel plant capacity and start year come from the GEM Global Iron and Steel Tracker (CC BY 4.0), not the SFI steel database; SFI remains the cement source](../rfcs/0363-steel-capacity-from-gem-tracker.md)"
+sections = "5.2, 7.1, 22"
