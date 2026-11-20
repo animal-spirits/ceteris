@@ -1,10 +1,10 @@
 name: pack-gate
 
-# Nightly full-pack gate on the owner's Mac (pre-P3 D5). Never on pull requests: the pack lives
-# only on that machine, and fork code must not reach it.
+# Full-pack gate on the owner's Mac (pre-P3 D5). Never on pull requests: the pack lives
+# only on that machine, and fork code must not reach it. The Mac runner was retired when CI moved
+# to hosted runners, so the nightly schedule is parked (#597); manual runs only. The small pack
+# runs on hosted runners in pack-ci.yml (RFC 0353).
 on:
-  schedule:
-    - cron: "0 9 * * *" # 03:00 US Central (CST)
   workflow_dispatch:
 
 concurrency:
