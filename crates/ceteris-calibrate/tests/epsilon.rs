@@ -317,6 +317,66 @@ fn clamped_class_takes_an_epsilon_scale() {
     }
 }
 
+/// The Newton phase moves a trial within the scalings' tolerance (RFC 0362 D2): nu and s_c agree
+/// with the sweep-only trial to 1e-13, and the trial is bit-identical at any thread count.
+#[test]
+fn newton_trial_agrees_with_the_sweep_and_threads() {
+    let w = world();
+    let (e0, c, s0) = (0.4, 1, 0.5);
+    let mut scale = [1.0; border::N_CLASSES];
+    scale[c] = s0;
+    let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
+    let (nu_target, data_flows) = known_scaled(&w, e0, &scale, &nu_group);
+    let t = Targets {
+        nu_target: &nu_target,
+        icio: &w.icio,
+        theta_class: &w.class,
+        ln_d: &w.ln_d,
+        weight: &trade_weight(&w.inp),
+        gravity: &w.gravity,
+        data_flows: &data_flows,
+    };
+    let trial = |newton| {
+        let limits = Limits {
+            newton,
+            ..Limits::default()
+        };
+        epsilon::fit_at_epsilon(&w.inp, &t, e0, limits, &mut quiet()).unwrap()
+    };
+    let (on, off) = (trial(true), trial(false));
+    let worst = |a: &[f64], b: &[f64]| {
+        a.iter()
+            .zip(b)
+            .fold(0.0f64, |m, (x, y)| m.max((x - y).abs()))
+    };
+    eprintln!(
+        "nu {:e} scale {:e} ln_d0 {:e} pooled {:e}",
+        worst(&on.fit.nu, &off.fit.nu),
+        worst(&on.scale, &off.scale),
+        worst(&on.ln_d0, &off.ln_d0),
+        (on.pooled - off.pooled).abs()
+    );
+    assert!(worst(&on.fit.nu, &off.fit.nu) <= 1e-13);
+    assert!(worst(&on.scale, &off.scale) <= 1e-13);
+    assert!(worst(&on.ln_d0, &off.ln_d0) <= 1e-13);
+    let bits = |t: &epsilon::Trial| -> Vec<u64> {
+        [&t.fit.nu, &t.scale, &t.ln_d0, &t.classes]
+            .into_iter()
+            .flatten()
+            .chain([&t.pooled])
+            .map(|x| x.to_bits())
+            .collect()
+    };
+    for threads in [1, 2, 8] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
+        let again = pool.install(|| trial(true));
+        assert_eq!(bits(&again), bits(&on), "{threads} threads");
+    }
+}
+
 /// The per-good class (3) takes one s_c on its pooled share (ADR 0376): both of its goods, held at
 /// nu 0, recover the scale the targets were made at.
 #[test]
