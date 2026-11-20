@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### perf(calibrate): the scaling's sweep runs its goods in parallel (bit-identical)
+
+- `steady::sinkhorn_with`: each good's sweep (weights, kernel sums, balance) runs on the rayon pool
+  and the goods are combined in good order; `Model::{origin,destination}_sums_good` are the
+  per-good sums. No output moves: digests of the scalings and the fixed point equal main's at 1, 2,
+  4 and every thread. `RAYON_NUM_THREADS=1` is the serial loop. Anderson mixing stays serial.
+  Kernel legs must be sorted by good (`Model::new` refuses others).
+- Test: `parallel_sweeps` (fixture; small pack with `--include-ignored`).
+
 ### fix(calibrate): an epsilon scale left at 0 is re-solved (#622 findings)
 
 - `epsilon::trial`: a class left at s_c = 0 by an unsettled solve stays in the s_c solve after its
