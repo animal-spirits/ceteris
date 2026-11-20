@@ -82,7 +82,9 @@ profits to the government account. The government account is a ledger account pe
 transfers by population (ADR 0361); taxes are collected once per tick after E4, income and payroll
 from pops on their wage income, VAT from pops on their spending, each split by largest remainder,
 and corporate tax from the profit pool at E4 before it pays out (ADR 0362); the deficit is borrowing, the account's balance minus the debt
-(ADR 0363). Public capital: `A = A_cal (K_g / K_g0)^P173`, public investment
+(ADR 0363); with the fiscal system on, the state-cell profits (E4) and energy excise or subsidy
+(233) that reach the account are booked to the debt as they are paid, so the identity holds at
+every tick (test `government_account_equals_minus_debt_with_energy_and_state_cells_on`, #630). Public capital: `A = A_cal (K_g / K_g0)^P173`, public investment
 times an efficiency factor from PIMA scores and governance (P174); the rest is lost. r minus g is
 reported per state.
 

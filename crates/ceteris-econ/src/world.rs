@@ -4023,6 +4023,65 @@ mod tests {
         assert_eq!(back.state_cells, on.world().state_cells);
     }
 
+    /// With the fiscal system on, the government account is minus the debt at every tick, also
+    /// with energy wedges or state cells on (#630); each switch moves the debt off the fiscal-only
+    /// run, so the identity is not met by the switch doing nothing.
+    #[test]
+    fn government_account_equals_minus_debt_with_energy_and_state_cells_on() {
+        use crate::energy_policy::{EnergyPolicy, EnergyWedges};
+        use crate::sfc::{BONDS, GOVERNMENT};
+        let base = world();
+        let (nc, n_ent) = (base.inputs().n_countries(), base.inputs().n_enterprises());
+        let unit = MINOR_PER_UNIT as i128 / 20;
+        let energy = EnergyPolicy {
+            goods: [1, 2, 7],
+            countries: vec![
+                EnergyWedges {
+                    wedge: [unit, -unit, unit]
+                };
+                nc
+            ],
+        };
+        let cells = crate::state_cells::StateCells {
+            share: vec![0.5; n_ent],
+        };
+        let fiscal = monetary_sim().world().clone().with_fiscal(government(nc));
+        let debts = |w: EconWorld| -> Vec<i128> {
+            let mut sim = Sim::new(w, crate::systems::schedule(), crate::systems::SEED);
+            let mut out = Vec::new();
+            while sim.tick() < 14 {
+                sim.step().unwrap_or_else(|v| panic!("{v}"));
+                let w = sim.world();
+                let g = w.fiscal.as_ref().unwrap();
+                for ((f, sheet), &a) in g
+                    .fiscal
+                    .iter()
+                    .zip(&g.sheets)
+                    .zip(&w.layout.accounts.government)
+                {
+                    assert_eq!(w.ledger.money_wide(a), -f.debt, "tick {}", sim.tick());
+                    assert_eq!(sheet.positions[BONDS][GOVERNMENT], -f.debt);
+                    out.push(f.debt);
+                }
+            }
+            out
+        };
+        let only = debts(fiscal.clone());
+        for (name, w) in [
+            ("energy", fiscal.clone().with_energy_policy(energy.clone())),
+            (
+                "state cells",
+                fiscal.clone().with_state_cells(cells.clone()),
+            ),
+            (
+                "both",
+                fiscal.with_energy_policy(energy).with_state_cells(cells),
+            ),
+        ] {
+            assert_ne!(debts(w), only, "{name} left the debt unchanged");
+        }
+    }
+
     /// Off, capital adds nothing; on, each enterprise's pipeline accumulates capital from its
     /// orders (permit lag, then Erlang stages), the real economy is untouched, and the section
     /// survives a snapshot.
