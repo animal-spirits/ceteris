@@ -3706,33 +3706,37 @@ mod tests {
         assert_eq!(back.monetary.as_ref(), Some(m));
     }
 
+    /// The monetary world with the HLW r* filter on, starting from r* = 2%.
+    fn hlw_world(w: EconWorld) -> EconWorld {
+        use crate::hlw::HlwParams;
+        let m = w.monetary.clone().unwrap().with_hlw(
+            HlwParams {
+                a1: 1.0,
+                a2: -0.2,
+                a_r: -0.3,
+                b_pi: 0.7,
+                b_y: 0.1,
+                c: 1.0,
+                sigma_y_gap: 0.005,
+                sigma_pi: 0.005,
+                sigma_y_star: 0.004,
+                sigma_g: 0.0005,
+                sigma_z: 0.0015,
+            },
+            0.02,
+        );
+        w.with_monetary(m)
+    }
+
     /// With the filter on, r* is re-estimated each year, so the policy rates differ from the
     /// fixed-intercept run while the real economy is untouched; replay and snapshot are exact.
     #[test]
     fn hlw_on_updates_r_star_annually_and_off_changes_nothing() {
-        use crate::hlw::HlwParams;
         let sim = |hlw: bool| {
             let mut s = monetary_sim();
             if hlw {
-                let w = s.world().clone();
-                let m = w.monetary.clone().unwrap().with_hlw(
-                    HlwParams {
-                        a1: 1.0,
-                        a2: -0.2,
-                        a_r: -0.3,
-                        b_pi: 0.7,
-                        b_y: 0.1,
-                        c: 1.0,
-                        sigma_y_gap: 0.005,
-                        sigma_pi: 0.005,
-                        sigma_y_star: 0.004,
-                        sigma_g: 0.0005,
-                        sigma_z: 0.0015,
-                    },
-                    0.02,
-                );
                 s = Sim::new(
-                    w.with_monetary(m),
+                    hlw_world(s.world().clone()),
                     crate::systems::schedule(),
                     crate::systems::SEED,
                 );
@@ -4163,6 +4167,7 @@ mod tests {
             ("wage grid", wage_grid_sim(true).world().clone()),
             ("hazards", hazard_sim(1.0).world().clone()),
             ("fiscal", monetary.clone().with_fiscal(government(nc))),
+            ("hlw", hlw_world(monetary.clone())),
             ("energy", base.clone().with_energy_policy(energy.clone())),
             ("state cells", base.clone().with_state_cells(cells.clone())),
             ("capital", base.clone().with_capital(capital.clone())),
