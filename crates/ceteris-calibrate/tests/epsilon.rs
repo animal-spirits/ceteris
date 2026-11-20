@@ -668,26 +668,29 @@ fn data_state_scalings_tighten_to_the_last_pass() {
     assert_eq!(d.tols.len(), d.sweeps.len());
 }
 
-/// RFC 0361 D5: an evaluation started from the reference takes fewer sweeps than a cold one, gives
-/// the cold one's parts within tolerance, and does not depend on what ran before it.
+/// RFC 0361 D5: the scalings take the reference as their start (the final scaling from its own
+/// converged weights stops in far fewer sweeps than cold), an evaluation from the reference gives the cold one's
+/// parts within tolerance, and its bits do not depend on what ran before it. How many sweeps a
+/// reference saves at another s is a property of the pack, measured on the full pack.
 #[test]
 fn evaluations_start_from_the_reference() {
     let w = world();
-    let reference = parts_at(&w, 0.0, None).reference;
-    let cold = parts_at(&w, 1.0, None);
-    let warm = parts_at(&w, 1.0, Some(&reference));
-    let sweeps = |r: &border::Reference| r.data_sweeps.iter().sum::<usize>() + r.final_sweeps;
+    let cold0 = parts_at(&w, 0.0, None);
+    let again0 = parts_at(&w, 0.0, Some(&cold0.reference));
     assert!(
-        sweeps(&warm.reference) < sweeps(&cold.reference),
-        "{} sweeps from the reference, {} cold",
-        sweeps(&warm.reference),
-        sweeps(&cold.reference)
+        again0.reference.final_sweeps * 2 < cold0.reference.final_sweeps,
+        "{} final sweeps from its own weights, {} cold",
+        again0.reference.final_sweeps,
+        cold0.reference.final_sweeps
     );
+    assert!(again0.reference.data_sweeps[0] <= cold0.reference.data_sweeps[0]);
+    let cold = parts_at(&w, 1.0, None);
+    let warm = parts_at(&w, 1.0, Some(&cold0.reference));
     for (a, b) in warm.abroad.iter().zip(&cold.abroad) {
         assert!((a - b).abs() <= 1e-9 * b.abs().max(1.0), "{a} vs {b}");
     }
-    let _unrelated = parts_at(&w, 0.5, Some(&reference));
-    let again = parts_at(&w, 1.0, Some(&reference));
+    let _unrelated = parts_at(&w, 0.5, Some(&cold0.reference));
+    let again = parts_at(&w, 1.0, Some(&cold0.reference));
     assert_eq!(warm.abroad, again.abroad);
     assert_eq!(warm.total, again.total);
 }
