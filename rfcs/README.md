@@ -354,3 +354,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0360 | [Epsilon search by a fixed parallel grid, with typed infeasibility](0360-epsilon-grid-search.md) | accepted | ADR 0384 to 0387 |
 | 0361 | [Per-good Newton solve for the stage 2 scaling, and nest hygiene in the epsilon fit](0361-newton-scaling-solve.md) | accepted | ADR 0388 to 0393 |
 | 0362 | [Newton scaling: step control as measured, and two criteria the spike could not meet](0362-newton-step-control-as-measured.md) | accepted | ADR 0394 to 0396 |
+| 0363 | [Steel capacity comes from the GEM Global Iron and Steel Tracker](0363-steel-capacity-from-gem-tracker.md) | accepted | ADR 0397 |

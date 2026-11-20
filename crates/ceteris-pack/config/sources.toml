@@ -376,10 +376,10 @@ confidence = "high"
 
 [[source]]
 id = "gem-trackers"
-name = "Global Energy Monitor trackers (coal, oil and gas plants, pipelines, mines)"
+name = "Global Energy Monitor trackers (coal, oil and gas plants, pipelines, mines; iron and steel)"
 provider = "Global Energy Monitor"
-version = "Latest release per tracker, pinned by date (Coal Mine Tracker August 2026; Oil and Gas Extraction Tracker March 2026)"
-role = "Energy assets (5.2, 7.7); coal mines and oil and gas fields place mining VA in provinces"
+version = "Latest release per tracker, pinned by date (Coal Mine Tracker August 2026; Oil and Gas Extraction Tracker March 2026; Iron and Steel Tracker September 2026 V1)"
+role = "Energy assets (5.2, 7.7); coal mines and oil and gas fields place mining VA in provinces; steel plant and unit capacity and start year seed C24A provinces (ADR 0275)"
 licence = "CC-BY-4.0"
 licence_url = "https://globalenergymonitor.org/creative-commons-license"
 attribution = "<Tracker name>, Global Energy Monitor, <release>"
@@ -390,7 +390,7 @@ policy = "bundle-aggregates"
 reason = "CC BY 4.0 unless otherwise noted"
 checked = 2026-10-23
 confidence = "medium"
-notes = "Saved by hand through GEM's download form (manual in fetch.toml). The form's licence page (checked 2026-10-24) is the unmodified text of the Creative Commons Attribution 4.0 International Public License. The README sheets state: Copyright (c) Global Energy Monitor; Distributed under a Creative Commons Attribution 4.0 International License; recommended citation \"Global Energy Monitor, Global Coal Mine Tracker, August 2026 release.\" and \"Global Oil and Gas Extraction Tracker, 2026 release\". Neither tracker flags third-party NC rows. Drop rows flagged with third-party NC licences in other trackers (e.g. TransitionZero solar records). Check the licence sheet in each download."
+notes = "Saved by hand through GEM's download form (manual in fetch.toml). The form's licence page (checked 2026-10-24) is the unmodified text of the Creative Commons Attribution 4.0 International Public License. The README sheets state: Copyright (c) Global Energy Monitor; Distributed under a Creative Commons Attribution 4.0 International License; recommended citation \"Global Energy Monitor, Global Coal Mine Tracker, August 2026 release.\" and \"Global Oil and Gas Extraction Tracker, 2026 release\". Neither tracker flags third-party NC rows. Iron and Steel Tracker (checked 2026-11-20, plant-level and steel unit workbooks, About sheet): Copyright Global Energy Monitor; Distributed under a Creative Commons Attribution 4.0 International License; recommended citation \"Global Energy Monitor, Global Iron and Steel Tracker, September 2026 (V1) release.\"; plants of 0.5 Mtpa and above only, so smaller plants are absent; no third-party NC flags; no restriction on a paid build beyond attribution. Drop rows flagged with third-party NC licences in other trackers (e.g. TransitionZero solar records). Check the licence sheet in each download."
 
 [[source]]
 id = "usgs-mrds"
@@ -864,21 +864,21 @@ notes = "Region keys reference GADM (GID_1) and carry no ISO 3166-2 codes: regio
 
 [[source]]
 id = "sfi-geoasset"
-name = "Spatial Finance Initiative GeoAsset databases: iron and steel, cement"
+name = "Spatial Finance Initiative GeoAsset database: cement"
 provider = "Oxford Sustainable Finance Group, Spatial Finance Initiative"
-version = "Iron and steel (1,598 plants); cement (3,117 plants, Dryad doi:10.5061/dryad.6t1g1jx4f)"
-role = "Plant capacity and start year: province seeds for C24A and C23 (ADR 0275)"
+version = "Cement (3,117 plants, Dryad doi:10.5061/dryad.6t1g1jx4f)"
+role = "Cement plant capacity and start year: province seeds for C23 (ADR 0275); steel moved to gem-trackers"
 licence = "CC-BY-4.0"
 licence_url = "https://gee-community-catalog.org/projects/gid/"
-attribution = "Spatial Finance Initiative (2021), GeoAsset Global Database of Iron and Steel Production Assets; Global Database of Cement Production Assets"
+attribution = "Spatial Finance Initiative (2021), GeoAsset Global Database of Cement Production Assets"
 commercial_use = true
 share_alike = false
 use = "primary"
 policy = "bundle-aggregates"
-reason = "Iron and steel CC BY 4.0, cement CC0 1.0 (as stated by the Earth Engine community catalogue records)"
+reason = "Cement CC0 1.0 (as stated by the Earth Engine community catalogue records)"
 checked = 2026-10-31
 confidence = "medium"
-notes = "The provider page (sustainablefinance.ox.ac.uk/geoasset-databases) states no licence; the licences come from the community catalogue records and Dryad's CC0 policy. Read the licence file in each download. Fields: capacity (Mt), start year, coordinates within about 10 km. The pulp and paper (3,403 mills) and ethylene (303) databases could seed C17_18 and C20 later. Steel data: unavailable. The request to SFI (sent before 2026-11-04) has had no reply; decided 2026-11-11 (issue #175) to calibrate steel and the 50-goods set on public data and revisit if SFI replies. Cement (Dryad) is unaffected."
+notes = "The provider page (sustainablefinance.ox.ac.uk/geoasset-databases) states no licence; the licences come from the community catalogue records and Dryad's CC0 policy. Read the licence file in each download. Fields: capacity (Mt), start year, coordinates within about 10 km. The iron and steel database is no longer used (RFC 0363). The pulp and paper (3,403 mills) and ethylene (303) databases could seed C17_18 and C20 later. Steel: the SFI request had no reply (2026-11-11, issue #175); steel capacity now comes from the GEM Global Iron and Steel Tracker (gem-trackers). Cement (Dryad) is unaffected."
 
 [[source]]
 id = "usgs-smelters"
