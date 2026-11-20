@@ -80,6 +80,11 @@ pub const MAX_SWEEPS: usize = 100_000;
 /// [`INNER_TOL_MAX`].
 pub const INNER_PER_OUTER: f64 = 1e-2;
 pub const INNER_TOL_MAX: f64 = 1e-6;
+
+/// The scaling's stop tolerance after a pass that changed by `change`.
+fn inner_tol(change: f64) -> f64 {
+    (INNER_PER_OUTER * change).clamp(SINKHORN_TOL, INNER_TOL_MAX)
+}
 pub const ANDERSON_MEMORY: usize = 8;
 /// Sweeps without a new smallest residual before the mixing restarts.
 pub const ANDERSON_STALL: usize = 20;
@@ -1714,6 +1719,31 @@ impl State {
 /// are kept); and the sales value V / (1 + delta s) (P, G) of traded origins, their output value
 /// less the spoilage it replaces (ADR 0091). The inputs' own border friction is the state's.
 pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), CalibrationError> {
+    let d = data_state_spending_from(inp, limits, None)?;
+    Ok((d.spend, d.sales))
+}
+
+/// The data state of [`data_state_spending`] with the scalings' log weights and their stop rules.
+pub struct DataState {
+    pub spend: Mat,
+    pub sales: Mat,
+    /// The last pass's scaling's ln w, which later evaluations start from (RFC 0361 D5).
+    pub log_weight: Mat,
+    /// Each pass's scaling's stop tolerance and sweeps. The last tolerance is [`SINKHORN_TOL`].
+    pub tols: Vec<f64>,
+    pub sweeps: Vec<usize>,
+}
+
+/// [`data_state_spending`] with the first scaling started from log weights `start` (a function of
+/// the caller's arguments alone, ADR 0097). Non-final scalings stop at a tolerance tied to the
+/// pass change as [`calibrate_from`]'s do (pass 1 at [`INNER_TOL_MAX`]); the state returns only
+/// from a pass whose change is at most [`PASS_TOL`] and whose scaling ran at [`SINKHORN_TOL`]
+/// (RFC 0361 D6).
+pub fn data_state_spending_from(
+    inp: &Inputs,
+    limits: Limits,
+    start: Option<&Mat>,
+) -> Result<DataState, CalibrationError> {
     let setup = Setup::new(inp)?;
     let (n_p, n_g, n_c) = (inp.n_provinces(), inp.n_goods(), inp.n_countries());
     let traded = &inp.traded;
@@ -1722,8 +1752,10 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
     let ones = Mat::filled(n_p, n_g, 1.0);
     let m = Model::physical(inp)?;
     let sales = setup.sales_data();
-    let mut lw: Option<Mat> = None;
+    let mut lw: Option<Mat> = start.cloned();
     let mut rebate = vec![0.0; n_c];
+    let mut change = f64::NAN;
+    let (mut tols, mut sweeps) = (vec![], vec![]);
     // weights inverted at prices 1 would let every cost in q, another class's distance cost
     // included, move households off the data's final demand shares
     let mut weights = match &inp.calibrated_weights {
@@ -1748,15 +1780,22 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
         });
         // stage 2 at this spending: who pays which tariff follows the solved origin prices, not
         // posted prices 1, where imports and so duties are several times the calibrated ones
+        let tol = if change.is_finite() {
+            inner_tol(change)
+        } else {
+            INNER_TOL_MAX
+        };
         let scaling = sinkhorn_to(
             &m,
             &spend,
             &sales,
             lw.as_ref(),
             limits.max_sweeps,
-            SINKHORN_TOL,
+            tol,
             limits.newton,
         )?;
+        tols.push(tol);
+        sweeps.push(scaling.sweeps);
         let l = &scaling.log_weight;
         let price = Mat::from_fn(n_p, n_g, |p, g| {
             if traded[g] && inp.active[p][g] {
@@ -1777,13 +1816,19 @@ pub fn data_state_spending(inp: &Inputs, limits: Limits) -> Result<(Mat, Mat), C
             ras_start = Some(ras.b);
             w
         };
-        let change = py_max([
+        change = py_max([
             relative(&rebate_new, &rebate),
             relative(&weights_new.scale, &weights.scale),
             relative(&weights_new.omega.data, &weights.omega.data),
         ]);
-        if change <= PASS_TOL {
-            return Ok((spend, sales));
+        if change <= PASS_TOL && tol == SINKHORN_TOL {
+            return Ok(DataState {
+                spend,
+                sales,
+                log_weight: lw.expect("set by this pass"),
+                tols,
+                sweeps,
+            });
         }
         (rebate, weights) = (rebate_new, weights_new);
     }
@@ -1930,7 +1975,7 @@ pub fn calibrate_from(
 
         // the scaling need only be as exact as the pass it feeds is settled
         let tol = if change.is_finite() {
-            (INNER_PER_OUTER * change).clamp(SINKHORN_TOL, INNER_TOL_MAX)
+            inner_tol(change)
         } else {
             SINKHORN_TOL
         };

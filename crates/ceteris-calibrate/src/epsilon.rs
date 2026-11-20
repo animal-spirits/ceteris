@@ -311,17 +311,24 @@ fn solve_scale(
     limits: Limits,
 ) -> Result<f64, CalibrationError> {
     let groups = border::friction_groups(t.theta_class);
-    let f = |s: f64| -> Result<f64, CalibrationError> {
+    // Every evaluation but the first starts its scalings from the s = 0 evaluation's (RFC 0361 D5):
+    // f(s) is a function of s and the call's arguments, not of Brent's path.
+    let eval = |s: f64, start: Option<&border::Reference>| -> Result<_, CalibrationError> {
         let mut sc = scale.to_vec();
         sc[c] = s;
         let at = at_epsilon(inp, t.theta_class, t.ln_d, ln_d0, &sc, epsilon)?;
-        let (abroad, total) = border::data_state_parts(&at, nu, &groups, t.icio, limits)?;
+        let p = border::data_state_parts_from(&at, nu, &groups, t.icio, limits, start)?;
         let (miss, all) = ks.iter().fold((0.0, 0.0), |(m, a), &k| {
-            (m + abroad[k] - t.nu_target[k] * total[k], a + total[k])
+            (
+                m + p.abroad[k] - t.nu_target[k] * p.total[k],
+                a + p.total[k],
+            )
         });
-        Ok(miss / all)
+        Ok((miss / all, p.reference))
     };
-    let (f_lo, f_hi) = (f(0.0)?, f(1.0)?);
+    let (f_lo, reference) = eval(0.0, None)?;
+    let f = |s: f64| -> Result<f64, CalibrationError> { Ok(eval(s, Some(&reference))?.0) };
+    let f_hi = f(1.0)?;
     // Short of the target even without distance cost. The first time it can be the nu of the other
     // groups, not yet refitted: s = 0, and the next refit says. Once refitted it is infeasible.
     if f_lo < -SCALE_FLAT {

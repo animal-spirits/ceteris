@@ -643,3 +643,51 @@ fn d0_is_the_trade_weighted_mean_of_ln_distance() {
         );
     }
 }
+
+fn parts_at(w: &World, s: f64, start: Option<&border::Reference>) -> border::Parts {
+    let (d0, _) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &trade_weight(&w.inp));
+    let at =
+        epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &d0, &[s; border::N_CLASSES], 0.4).unwrap();
+    let nu = border::nu_of_goods(&w.groups, &[0.15, 0.6, 0.35, 1.2, 0.5], &at.border_nu);
+    border::data_state_parts_from(&at, &nu, &w.groups, &w.icio, Limits::default(), start).unwrap()
+}
+
+/// RFC 0361 D6: the data state's non-final scalings stop above `SINKHORN_TOL`, pass 1 at
+/// `INNER_TOL_MAX`, and the returned pass's scaling ran at `SINKHORN_TOL`.
+#[test]
+fn data_state_scalings_tighten_to_the_last_pass() {
+    let w = world();
+    let d = steady::data_state_spending_from(&w.inp, Limits::default(), None).unwrap();
+    assert_eq!(d.tols[0], steady::INNER_TOL_MAX);
+    assert_eq!(*d.tols.last().unwrap(), steady::SINKHORN_TOL);
+    assert!(
+        d.tols[..d.tols.len() - 1]
+            .iter()
+            .any(|&t| t > steady::SINKHORN_TOL)
+    );
+    assert_eq!(d.tols.len(), d.sweeps.len());
+}
+
+/// RFC 0361 D5: an evaluation started from the reference takes fewer sweeps than a cold one, gives
+/// the cold one's parts within tolerance, and does not depend on what ran before it.
+#[test]
+fn evaluations_start_from_the_reference() {
+    let w = world();
+    let reference = parts_at(&w, 0.0, None).reference;
+    let cold = parts_at(&w, 1.0, None);
+    let warm = parts_at(&w, 1.0, Some(&reference));
+    let sweeps = |r: &border::Reference| r.data_sweeps.iter().sum::<usize>() + r.final_sweeps;
+    assert!(
+        sweeps(&warm.reference) < sweeps(&cold.reference),
+        "{} sweeps from the reference, {} cold",
+        sweeps(&warm.reference),
+        sweeps(&cold.reference)
+    );
+    for (a, b) in warm.abroad.iter().zip(&cold.abroad) {
+        assert!((a - b).abs() <= 1e-9 * b.abs().max(1.0), "{a} vs {b}");
+    }
+    let _unrelated = parts_at(&w, 0.5, Some(&reference));
+    let again = parts_at(&w, 1.0, Some(&reference));
+    assert_eq!(warm.abroad, again.abroad);
+    assert_eq!(warm.total, again.total);
+}
