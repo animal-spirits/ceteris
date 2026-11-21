@@ -233,6 +233,53 @@ Go if all hold:
 Otherwise record the negative result on #653 and in this RFC, keep whichever of D4 and D5 pass
 on their own, and stop.
 
+### Spike result (2026-11-21): no-go
+
+Run on an unmerged branch from main at 54fc991 (patch and log kept outside the repository), p2
+fixture, release, 4 cores, the trial set-up of the #653 spike (epsilon 0 with s_c 1; epsilon 0.4
+with class 1 at s_c 0.5). D2 to D5 implemented as written, with the slope of the #664 comment:
+dF/d nu_k from one residual evaluation at nu + 1e-6 at the solved ln w, one GMRES solve per good
+(relative residual 1e-6), the share at the moved point through `cross_border_parts`. Walls are
+the median of three runs; counts are deterministic.
+
+| | epsilon 0: main | D2 to D5 | D2 to D4 | epsilon 0.4: main | D2 to D5 | D2 to D4 |
+|---|---|---|---|---|---|---|
+| scalings per trial (all callers) | 179 | 164 | 171 | 799 | 693 | 698 |
+| nu fit evaluations (`Fit::evaluations`) | 76 | 61 | 68 | 79 | 44 | 46 |
+| trial wall, s | 0.53 | 0.96 | 1.47 | 3.73 | 2.58 | 3.31 |
+| Newton / bisection steps | | 44 / 18 | 54 / 24 | | 160 / 0 | 224 / 0 |
+| slope solves (products) | | 82 (875) | 87 (975) | | 223 (2,173) | 245 (2,453) |
+| seeded groups / fell back | | 9 / 2 | | | 32 / 9 | |
+
+Go numbers:
+
+1. Scalings per trial fall 1.09x and 1.15x (need 2x): not met.
+2. Trial wall: 0.56x (slower) and 1.44x (need 1.5x): not met.
+3. Bounds. `fit_at_spending`: nu within 1.6e-13 and 1.1e-10 (2e-9), shares within 1.2e-13 and
+   4.8e-11 (1e-9), `clamped` identical. `fit_at_epsilon`: nu within 9e-15 and 5e-11 (1e-8), s_c
+   within 1.3e-14 (1e-5), d_0 identical, pooled within 4e-16 and 1.4e-11 (1e-6). Slope against a
+   central difference (step 1e-3) on interior groups: 2e-6 to 7e-5 relative (1e-4). One miss:
+   at epsilon 0 two groups whose target equals their share at nu 0 to rounding end at nu
+   1.7e-16 and 1.4e-16, interior, where main clamps them at 0, so `clamped` differs in the
+   trial. A tie at the corner, but the bound asks for identical flags: not met.
+4. Bisection steps: 29% at epsilon 0 (the two tie groups, root at the bracket's end), 0% at
+   0.4 (need under 20%): not met at epsilon 0.
+
+Why: the RFC's premise is gone. It took the #653 measurement (94 to 96% of a trial in nu fit
+scalings), made before the per-good Newton scaling (#656). With #656 on main a trial is 0.5 s
+and 3.7 s on the fixture, not 13.5 s and 36.7 s, and the nu fit is 76 of 179 scalings at
+epsilon 0: the data state's scalings now outnumber it. Brent already ends in 4 to 6 rounds per
+`fit_at_spending`; Newton saves 2 to 10 evaluations there, and each slope costs an
+`at_border_nu` (a `reprice`), two `Model::new` and a GMRES solve, which at epsilon 0 costs more
+than the scalings it saves. D5 alone (D2 to D5 against D2 to D4) saves 7 and 5 evaluations per
+trial; D4 saves at most one scaling per fitted group per `fit_at_spending`. Neither alone can
+reach a 2x fall in scalings when all four together give 1.15x, so none is kept.
+
+Outcome: per the rule above, nothing is merged; `border.rs` keeps Brent, per-group upper ends
+and cold rounds. ADRs 0398 to 0402 stay accepted but unimplemented; their supersession, if
+wanted, is a new RFC. The question for the per-trial time is now the full-pack split (#653,
+Mac), which decides whether the data state (D1 B) is worth an RFC.
+
 ## Acceptance (the PR)
 
 1. Switch-on behaviour test through `fit_border_nu`: on the fixture, `Fit::evaluations` is at
