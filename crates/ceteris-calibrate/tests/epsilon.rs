@@ -799,7 +799,7 @@ fn targets_of<'a>(
 }
 
 #[test]
-fn preflight_accepts_the_fixture_and_rejects_an_infeasible_bracket() {
+fn preflight_accepts_the_fixture_and_reports_an_unlinked_pair() {
     let w = world();
     let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
     let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
@@ -808,7 +808,8 @@ fn preflight_accepts_the_fixture_and_rejects_an_infeasible_bracket() {
     let report = epsilon::preflight(&w.inp, &t).unwrap();
     assert!(report.len() >= 3, "{report:?}");
 
-    // a linked pair with no distance: the fit could not scale its crossings
+    // a linked pair with no distance: its crossings carry no distance cost (`ln_factor`) and stay
+    // out of d_0, as on the real pack; preflight reports the pair instead of refusing the fit
     let n = w.inp.n_countries();
     let mut ln_d = w.ln_d.clone();
     let j = (0..w.inp.crossing.good.len())
@@ -821,8 +822,14 @@ fn preflight_accepts_the_fixture_and_rejects_an_infeasible_bracket() {
     assert_ne!(a, b);
     ln_d[a * n + b] = f64::NAN;
     let bad = targets_of(&w, &nu_target, &weight, &ln_d, &data_flows);
-    let err = epsilon::preflight(&w.inp, &bad).unwrap_err();
-    assert!(err.starts_with("preflight:"), "{err}");
+    let report = epsilon::preflight(&w.inp, &bad).unwrap();
+    let line = report
+        .iter()
+        .find(|l| l.contains("no finite ln distance"))
+        .unwrap_or_else(|| panic!("{report:?}"));
+    assert!(line.contains(&format!("({a}, {b})")), "{line}");
+    // the bracket checks still run
+    assert!(report.len() >= 4, "{report:?}");
 }
 
 #[test]

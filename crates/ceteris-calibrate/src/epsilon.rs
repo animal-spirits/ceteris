@@ -733,19 +733,26 @@ pub fn preflight(inp: &Inputs, t: &Targets) -> Result<Vec<String>, String> {
             "preflight: the data's distance coefficient is {data_pooled}"
         ));
     }
+    // A crossing without a finite distance carries no distance cost (`ln_factor`) and is left out
+    // of d_0 (`class_offsets`), as on the real pack; it is reported, not refused.
+    let mut unlinked = std::collections::BTreeSet::new();
     for j in 0..inp.crossing.good.len() {
         if inp.crossing.good[j] >= n_t || inp.crossing.k[j] <= 0.0 {
             continue;
         }
         let (a, b) = pair_of(inp, j);
         if a != b && !t.ln_d[a * n_c + b].is_finite() {
-            return Err(format!(
-                "preflight: crossing {j} links countries {a} and {b} without a finite ln distance"
-            ));
+            unlinked.insert((a, b));
         }
     }
     let (mean, min) = class_offsets(inp, t.theta_class, t.ln_d, t.weight);
     let mut report = vec![format!("preflight: data pooled coefficient {data_pooled}")];
+    if !unlinked.is_empty() {
+        report.push(format!(
+            "preflight: {} country pairs with crossings have no finite ln distance and carry no distance cost: {unlinked:?}",
+            unlinked.len()
+        ));
+    }
     let nu_zero = vec![0.0; n_t];
     for eps in [0.0, EPSILON_MAX] {
         let miss = product_misses(
