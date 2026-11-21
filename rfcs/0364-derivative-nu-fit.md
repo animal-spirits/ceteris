@@ -1,6 +1,6 @@
 # RFC 0364. Derivative-based border friction fit, seeded rounds, and the joint system deferred
 
-Status: proposed
+Status: accepted
 Date: 2026-11-21
 Design sections: 15 (calibration), 17.1; econ SPEC, Calibration, stage 2
 Release: 1.0 (P4)
@@ -62,8 +62,8 @@ separates by group so one-dimensional bracketed Newton is the exact method for i
 corner rule stays untouched. B buys at most the 3 to 6% share on the fixture for the largest
 correctness risk in the fit, on a system RFC 0355 may redefine.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-21 (question card, fit speed-up research thread: every recommended option).
+Row: ADR 0398.
 
 ### D2. Where does the slope come from?
 
@@ -87,8 +87,8 @@ Recommendation: A, because the operator exists and is tested, the slope is exact
 linear solve, and an inexact slope cannot move the root: it only changes how many evaluations
 the bracketed iteration takes (D3). A is checked against B in a test, not replaced by it.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-21 (question card, fit speed-up research thread: every recommended option).
+Row: ADR 0399.
 
 ### D3. How is the Newton iteration kept safe, and when does it stop?
 
@@ -109,8 +109,8 @@ Options:
 Recommendation: A, because it can never leave the bracket, never does worse than bisection, and
 its stop is a statement about nu in the same units as today's.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-21 (question card, fit speed-up research thread: every recommended option).
+Row: ADR 0400.
 
 ### D4. Are the upper bracket ends evaluated together?
 
@@ -128,8 +128,8 @@ Options:
 Recommendation: A, because the separation it relies on is the one the Brent rounds already
 rely on in every shared evaluation.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-21 (question card, fit speed-up research thread: every recommended option).
+Row: ADR 0401.
 
 ### D5. Do later data-state rounds start from the previous round's root?
 
@@ -157,8 +157,8 @@ Recommendation: A, because rounds 2 to 5 move nu by 1e-3 or less, so the seed is
 neighbourhood where the warm-start spike measured the root within 2e-10 of the cold fit, and
 the gain is the largest of this RFC. B only if the spike (D6) shows the fallback rarely fires.
 
-Decision:
-Row:
+Decision: A, Antonio, 2026-11-21 (question card, fit speed-up research thread: every recommended option).
+Row: ADR 0402.
 
 ### D6. How is the work sequenced under the freeze?
 
@@ -172,7 +172,7 @@ Options:
 Recommendation: A, because RFC 0361's spike overturned three constants fixed before any code
 ran (RFC 0362), and the development laws ask for a go/no-go number first.
 
-Decision:
+Decision: A, Antonio, 2026-11-21 (question card, fit speed-up research thread: every recommended option).
 Row: none (sequencing; no spec row).
 
 ### D7. Does the epsilon search change again?
@@ -187,8 +187,8 @@ Options:
 Recommendation: A, because one reviewed move is better than two and the larger lever on the
 Mac is the per-trial time.
 
-Decision:
-Row: none if A.
+Decision: A, Antonio, 2026-11-21 (question card, fit speed-up research thread: every recommended option).
+Row: none (ADR 0384 stands).
 
 ## Tolerance and determinism contract
 
@@ -262,9 +262,13 @@ D1 B is the next question.
 
 ## Spec changes
 
-Written in this PR once decided: register entry for the nu fit's iteration constants (17);
-econ SPEC, Calibration, stage 2, border friction fit (method, stop, seeded rounds), marked not
-yet in code until the PR lands; ADR 0092's and ADR 0373's rows marked amended.
+Written in this PR (ADRs 0398 to 0402):
+
+- 17: register entry P183 (the nu fit's bracketed Newton iteration, slope solve, shared upper
+  ends and seeded rounds).
+- econ SPEC, Calibration, border friction fit: the method, marked not yet in code until the PR
+  of D6 lands (#664). ADR 0092's Brent and ADR 0373's scope are amended by these rows; their
+  record files are not rewritten.
 
 ## References
 

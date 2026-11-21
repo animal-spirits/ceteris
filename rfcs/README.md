@@ -355,4 +355,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0361 | [Per-good Newton solve for the stage 2 scaling, and nest hygiene in the epsilon fit](0361-newton-scaling-solve.md) | accepted | ADR 0388 to 0393 |
 | 0362 | [Newton scaling: step control as measured, and two criteria the spike could not meet](0362-newton-step-control-as-measured.md) | accepted | ADR 0394 to 0396 |
 | 0363 | [Steel capacity comes from the GEM Global Iron and Steel Tracker](0363-steel-capacity-from-gem-tracker.md) | accepted | ADR 0397 |
-| 0364 | [Derivative-based border friction fit, seeded rounds, and the joint system deferred](0364-derivative-nu-fit.md) | proposed | |
+| 0364 | [Derivative-based border friction fit, seeded rounds, and the joint system deferred](0364-derivative-nu-fit.md) | accepted | ADR 0398 to 0402 |
