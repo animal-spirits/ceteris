@@ -1037,6 +1037,12 @@ fn air_share(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     Ok(ExitCode::SUCCESS)
 }
 
+/// Progress lines prefixed with the seconds since this call, so a log shows where the time goes.
+fn stamped() -> impl FnMut(&str) {
+    let start = std::time::Instant::now();
+    move |line: &str| println!("[{:>7.0}s] {line}", start.elapsed().as_secs_f64())
+}
+
 /// `calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]`: exit 1 without a
 /// calibration.
 fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
@@ -1140,7 +1146,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     }
     let u_star = u_star.unwrap_or_else(|| inp.u_star.clone());
     let pack_province = pack_province.unwrap_or_else(|| (0..inp.n_provinces()).collect());
-    let mut progress = |line: &str| println!("{line}");
+    let mut progress = stamped();
     // A pack's border friction is fitted to ICIO's cross-border shares (ADR 0092) before the
     // steady state; the fixture keeps its own.
     let mut distance = None;
@@ -1317,7 +1323,7 @@ fn fit_epsilon_driver(
     cache: Option<&Path>,
     fixed: Option<f64>,
 ) -> Result<ExitCode, String> {
-    let mut progress = |line: &str| println!("{line}");
+    let mut progress = stamped();
     let log = ceteris_calibrate::run_log::RunLog::new(out)?;
     let Some((fit, _)) = run_epsilon_fit(
         inp,
