@@ -339,20 +339,27 @@ fn solve_scale(
     limits: Limits,
 ) -> Result<f64, CalibrationError> {
     let groups = border::friction_groups(t.theta_class);
-    let f = |s: f64| -> Result<f64, CalibrationError> {
+    // Every evaluation but the first starts its scalings from the s = 0 evaluation's (RFC 0361 D5):
+    // f(s) is a function of s and the call's arguments, not of Brent's path.
+    let eval = |s: f64, start: Option<&border::Reference>| -> Result<_, CalibrationError> {
         let mut sc = scale.to_vec();
         sc[c] = s;
         let at = at_epsilon(inp, t.theta_class, t.ln_d, ln_d0, &sc, epsilon)?;
-        let (abroad, total) = within(
-            border::data_state_parts(&at, nu, &groups, t.icio, limits),
+        let p = within(
+            border::data_state_parts_from(&at, nu, &groups, t.icio, limits, start),
             || format!("epsilon {epsilon}: s_c of class {c} probed at {s}, scales {sc:?}"),
         )?;
         let (miss, all) = ks.iter().fold((0.0, 0.0), |(m, a), &k| {
-            (m + abroad[k] - t.nu_target[k] * total[k], a + total[k])
+            (
+                m + p.abroad[k] - t.nu_target[k] * p.total[k],
+                a + p.total[k],
+            )
         });
-        Ok(miss / all)
+        Ok((miss / all, p.reference))
     };
-    let (f_lo, f_hi) = (f(0.0)?, f(1.0)?);
+    let (f_lo, reference) = eval(0.0, None)?;
+    let f = |s: f64| -> Result<f64, CalibrationError> { Ok(eval(s, Some(&reference))?.0) };
+    let f_hi = f(1.0)?;
     // Short of the target even without distance cost. The first time it can be the nu of the other
     // groups, not yet refitted: s = 0, and the next refit says. Once refitted it is infeasible.
     if f_lo < -SCALE_FLAT {
@@ -666,7 +673,7 @@ pub fn fit_epsilon_cached(
     cache: Option<&Path>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<EpsilonFit, CalibrationError> {
-    fit_epsilon_inner(inp, t, limits, cache, None, None, progress)
+    fit_epsilon_inner(inp, t, limits, cache, None, None, None, progress)
 }
 
 /// One trial at the given `epsilon`, no search: nu, `d_0` and s_c fitted there, the pooled and
@@ -680,11 +687,14 @@ pub fn fit_epsilon_at(
     cache: Option<&Path>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<EpsilonFit, CalibrationError> {
-    fit_epsilon_inner(inp, t, limits, cache, Some(epsilon), None, progress)
+    fit_epsilon_inner(inp, t, limits, cache, Some(epsilon), None, None, progress)
 }
 
 /// [`fit_epsilon_cached`], or [`fit_epsilon_at`] with `fixed`, writing a checkpoint per trial to
-/// `log`; the result is bit-identical.
+/// `log`; the result is bit-identical. Progress lines reach `live` as the trial produces them,
+/// stamped with the seconds since the fit began and tagged with their epsilon, not when the
+/// trial ends (the two end trials run at once, hence `Sync`); a failing trial emits its exact
+/// error there at once.
 pub fn fit_epsilon_logged(
     inp: &Inputs,
     t: &Targets,
@@ -692,9 +702,78 @@ pub fn fit_epsilon_logged(
     cache: Option<&Path>,
     fixed: Option<f64>,
     log: &RunLog,
-    progress: &mut dyn FnMut(&str),
+    live: &(dyn Fn(&str) + Sync),
 ) -> Result<EpsilonFit, CalibrationError> {
-    fit_epsilon_inner(inp, t, limits, cache, fixed, Some(log), progress)
+    fit_epsilon_inner(
+        inp,
+        t,
+        limits,
+        cache,
+        fixed,
+        Some(log),
+        Some(live),
+        &mut |_| {},
+    )
+}
+
+/// Checks that take seconds and would otherwise fail hours into the fit: the data's coefficient
+/// exists, every crossing pair has a finite distance, and at both ends of the epsilon bracket
+/// and with nu 0 no class misses `(1 + nu) D >= 1` at its smallest linked distance. Returns
+/// one report line per check.
+pub fn preflight(inp: &Inputs, t: &Targets) -> Result<Vec<String>, String> {
+    let n_c = inp.n_countries();
+    let n_t = t.theta_class.len();
+    let all: Vec<usize> = (0..n_t).collect();
+    let (data_pooled, _) = t
+        .gravity
+        .coefficient(&sums(t.data_flows, n_c * n_c, n_t, &all))
+        .map_err(|e| format!("preflight: the data's distance coefficient: {e}"))?;
+    if !data_pooled.is_finite() {
+        return Err(format!(
+            "preflight: the data's distance coefficient is {data_pooled}"
+        ));
+    }
+    for j in 0..inp.crossing.good.len() {
+        if inp.crossing.good[j] >= n_t || inp.crossing.k[j] <= 0.0 {
+            continue;
+        }
+        let (a, b) = pair_of(inp, j);
+        if a != b && !t.ln_d[a * n_c + b].is_finite() {
+            return Err(format!(
+                "preflight: crossing {j} links countries {a} and {b} without a finite ln distance"
+            ));
+        }
+    }
+    let (mean, min) = class_offsets(inp, t.theta_class, t.ln_d, t.weight);
+    let mut report = vec![format!("preflight: data pooled coefficient {data_pooled}")];
+    let nu_zero = vec![0.0; n_t];
+    for eps in [0.0, EPSILON_MAX] {
+        let miss = product_misses(
+            inp,
+            t.theta_class,
+            t.ln_d,
+            &min,
+            &[1.0; border::N_CLASSES],
+            eps,
+            &nu_zero,
+        );
+        if !miss.is_empty() {
+            return Err(format!(
+                "preflight: classes {miss:?} miss (1 + nu) D >= 1 at epsilon {eps} even at their smallest d_0"
+            ));
+        }
+        at_epsilon(
+            inp,
+            t.theta_class,
+            t.ln_d,
+            &mean,
+            &[1.0; border::N_CLASSES],
+            eps,
+        )
+        .map_err(|e| format!("preflight: inputs at epsilon {eps}: {e}"))?;
+        report.push(format!("preflight: epsilon {eps} bracket end feasible"));
+    }
+    Ok(report)
 }
 
 struct Computed {
@@ -703,6 +782,7 @@ struct Computed {
     cached: bool,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn fit_epsilon_inner(
     inp: &Inputs,
     t: &Targets,
@@ -710,8 +790,18 @@ fn fit_epsilon_inner(
     cache: Option<&Path>,
     fixed: Option<f64>,
     log: Option<&RunLog>,
+    live: Option<&(dyn Fn(&str) + Sync)>,
     progress: &mut dyn FnMut(&str),
 ) -> Result<EpsilonFit, CalibrationError> {
+    let start = std::time::Instant::now();
+    let stamp = |eps: f64, l: &str| {
+        let tag = if l.starts_with("epsilon ") {
+            String::new()
+        } else {
+            format!("epsilon {eps}: ")
+        };
+        format!("[{:.0}s] {tag}{l}", start.elapsed().as_secs_f64())
+    };
     let cache = cache.map(|dir| TrialCache::new(dir, inp, t, limits));
     let n_c = inp.n_countries();
     let n_t = t.theta_class.len();
@@ -727,14 +817,23 @@ fn fit_epsilon_inner(
     // their progress lines, cache store and log checkpoint in the sequential order.
     let compute = |eps: f64| -> Computed {
         if let Some(hit) = cache.as_ref().and_then(|c| c.load(eps)) {
+            let line = format!("epsilon {eps}: trial from the cache");
+            if let Some(live) = live {
+                live(&stamp(eps, &line));
+            }
             return Computed {
-                lines: vec![format!("epsilon {eps}: trial from the cache")],
+                lines: vec![line],
                 result: Ok(hit),
                 cached: true,
             };
         }
         let mut lines = vec![];
-        let result = match trial(inp, t, eps, limits, &mut |l| lines.push(l.to_string())) {
+        let result = match trial(inp, t, eps, limits, &mut |l| {
+            if let Some(live) = live {
+                live(&stamp(eps, l));
+            }
+            lines.push(l.to_string())
+        }) {
             Ok(r) => {
                 lines.push(format!(
                     "epsilon {eps}: pooled distance coefficient {} against the data's {data_pooled}",
@@ -753,6 +852,9 @@ fn fit_epsilon_inner(
             }
             Err(e) => Err(e),
         };
+        if let (Some(live), Err(e)) = (live, &result) {
+            live(&stamp(eps, &format!("FAILED: {e}")));
+        }
         Computed {
             lines,
             result,
@@ -761,8 +863,10 @@ fn fit_epsilon_inner(
     };
     let mut commit = |eps: f64, c: Computed| -> Result<Option<Trial>, CalibrationError> {
         evaluations += 1;
-        for l in &c.lines {
-            progress(l);
+        if live.is_none() {
+            for l in &c.lines {
+                progress(l);
+            }
         }
         let result = c.result?;
         if c.cached {

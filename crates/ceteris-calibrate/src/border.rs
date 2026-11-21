@@ -282,9 +282,9 @@ fn shares_at(
     limits: Limits,
 ) -> Result<(Vec<f64>, Mat), Failure> {
     let other = |e: String| Failure::Other(e.into());
-    let (at, price, log_weight) = solve_at(inp, nu, spend, supply, start, limits)?;
+    let (at, price, scaling) = solve_at(inp, nu, spend, supply, start, limits)?;
     let share = cross_border_shares(&at, &price, spend, icio, groups).map_err(other)?;
-    Ok((share, log_weight))
+    Ok((share, scaling.log_weight))
 }
 
 /// The inputs at border frictions `nu` (per good), and stage 2's posted prices and log weights.
@@ -295,13 +295,20 @@ fn solve_at(
     supply: &Mat,
     start: Option<&Mat>,
     limits: Limits,
-) -> Result<(Inputs, Mat, Mat), Failure> {
+) -> Result<(Inputs, Mat, steady::Scaling), Failure> {
     let other = |e: String| Failure::Other(e.into());
     let at = at_border_nu(inp, nu).map_err(other)?;
     let m = Model::new(&at).map_err(other)?;
-    let scaling =
-        steady::sinkhorn_plateau(&m, spend, supply, start, limits.max_sweeps, limits.newton)
-            .map_err(Failure::Scaling)?;
+    let scaling = steady::sinkhorn_plateau(
+        &m,
+        spend,
+        supply,
+        start,
+        limits.max_sweeps,
+        steady::SINKHORN_TOL,
+        limits.newton,
+    )
+    .map_err(Failure::Scaling)?;
     let (n_p, n_g) = (at.n_provinces(), at.n_goods());
     let lw = &scaling.log_weight;
     let mut top = vec![f64::NEG_INFINITY; n_g];
@@ -319,7 +326,7 @@ fn solve_at(
             1.0
         }
     });
-    Ok((at, price, scaling.log_weight))
+    Ok((at, price, scaling))
 }
 
 /// Country-pair value by good, `[(exporter * C + importer) * G + g]`, at border frictions `nu`
@@ -347,9 +354,59 @@ pub fn data_state_parts(
     icio: &[bool],
     limits: Limits,
 ) -> Result<(Vec<f64>, Vec<f64>), CalibrationError> {
-    let (spend, supply) = spending_at(inp, nu, limits)?;
-    let (at, price, _) = solve_at(inp, nu, &spend, &supply, None, limits)?;
-    Ok(cross_border_parts(&at, &price, &spend, icio, groups)?)
+    let p = data_state_parts_from(inp, nu, groups, icio, limits, None)?;
+    Ok((p.abroad, p.total))
+}
+
+/// The scalings of one [`data_state_parts_from`] evaluation: log weights for a later evaluation's
+/// start, and the sweeps each took.
+pub struct Reference {
+    pub data_log_weight: Mat,
+    pub final_log_weight: Mat,
+    pub data_sweeps: Vec<usize>,
+    pub final_sweeps: usize,
+}
+
+pub struct Parts {
+    pub abroad: Vec<f64>,
+    pub total: Vec<f64>,
+    pub reference: Reference,
+}
+
+/// [`data_state_parts`] with the data state's first scaling and the final scaling started from
+/// `start` (RFC 0361 D5), cold where None.
+pub fn data_state_parts_from(
+    inp: &Inputs,
+    nu: &[f64],
+    groups: &[Vec<usize>],
+    icio: &[bool],
+    limits: Limits,
+    start: Option<&Reference>,
+) -> Result<Parts, CalibrationError> {
+    let d = steady::data_state_spending_from(
+        &at_border_nu(inp, nu)?,
+        limits,
+        start.map(|r| &r.data_log_weight),
+    )?;
+    let (at, price, scaling) = solve_at(
+        inp,
+        nu,
+        &d.spend,
+        &d.sales,
+        start.map(|r| &r.final_log_weight),
+        limits,
+    )?;
+    let (abroad, total) = cross_border_parts(&at, &price, &d.spend, icio, groups)?;
+    Ok(Parts {
+        abroad,
+        total,
+        reference: Reference {
+            data_log_weight: d.log_weight,
+            final_log_weight: scaling.log_weight,
+            data_sweeps: d.sweeps,
+            final_sweeps: scaling.sweeps,
+        },
+    })
 }
 
 /// The cross-border share of every group at border frictions `nu` (per good), over the countries

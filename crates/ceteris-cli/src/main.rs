@@ -1037,12 +1037,6 @@ fn air_share(mut args: impl Iterator<Item = String>) -> Result<ExitCode, String>
     Ok(ExitCode::SUCCESS)
 }
 
-/// Progress lines prefixed with the seconds since this call, so a log shows where the time goes.
-fn stamped() -> impl FnMut(&str) {
-    let start = std::time::Instant::now();
-    move |line: &str| println!("[{:>7.0}s] {line}", start.elapsed().as_secs_f64())
-}
-
 /// `calibrate --pack DIR [--no-border-fit] | --inputs DIR [--out DIR]`: exit 1 without a
 /// calibration.
 fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
@@ -1146,7 +1140,7 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
     }
     let u_star = u_star.unwrap_or_else(|| inp.u_star.clone());
     let pack_province = pack_province.unwrap_or_else(|| (0..inp.n_provinces()).collect());
-    let mut progress = stamped();
+    let mut progress = |line: &str| println!("{line}");
     // A pack's border friction is fitted to ICIO's cross-border shares (ADR 0092) before the
     // steady state; the fixture keeps its own.
     let mut distance = None;
@@ -1294,7 +1288,14 @@ fn run_epsilon_fit(
         data_flows: &data.data_flows,
     };
     let fit = match (log, fixed) {
-        (Some(l), _) => fit_epsilon_logged(inp, &t, limits, cache, fixed, l, progress),
+        (Some(l), _) => {
+            // flushed per line: println! is line-buffered, so a redirected log grows live
+            let live = |line: &str| println!("{line}");
+            for line in ceteris_calibrate::epsilon::preflight(inp, &t)? {
+                live(&line);
+            }
+            fit_epsilon_logged(inp, &t, limits, cache, fixed, l, &live)
+        }
         (None, Some(e)) => fit_epsilon_at(inp, &t, e, limits, cache, progress),
         (None, None) => fit_epsilon_cached(inp, &t, limits, cache, progress),
     };
@@ -1323,8 +1324,11 @@ fn fit_epsilon_driver(
     cache: Option<&Path>,
     fixed: Option<f64>,
 ) -> Result<ExitCode, String> {
-    let mut progress = stamped();
+    let mut progress = |line: &str| println!("{line}");
     let log = ceteris_calibrate::run_log::RunLog::new(out)?;
+    let probe = out.join(".preflight");
+    std::fs::write(&probe, b"").map_err(|e| format!("preflight: {}: {e}", probe.display()))?;
+    let _ = std::fs::remove_file(&probe);
     let Some((fit, _)) = run_epsilon_fit(
         inp,
         pack,

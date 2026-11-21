@@ -727,3 +727,129 @@ fn d0_is_the_trade_weighted_mean_of_ln_distance() {
         );
     }
 }
+
+fn parts_at(w: &World, s: f64, start: Option<&border::Reference>) -> border::Parts {
+    let (d0, _) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &trade_weight(&w.inp));
+    let at =
+        epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &d0, &[s; border::N_CLASSES], 0.4).unwrap();
+    let nu = border::nu_of_goods(&w.groups, &[0.15, 0.6, 0.35, 1.2, 0.5], &at.border_nu);
+    border::data_state_parts_from(&at, &nu, &w.groups, &w.icio, Limits::default(), start).unwrap()
+}
+
+/// RFC 0361 D6: the data state's non-final scalings stop above `SINKHORN_TOL`, pass 1 at
+/// `INNER_TOL_MAX`, and the returned pass's scaling ran at `SINKHORN_TOL`.
+#[test]
+fn data_state_scalings_tighten_to_the_last_pass() {
+    let w = world();
+    let d = steady::data_state_spending_from(&w.inp, Limits::default(), None).unwrap();
+    assert_eq!(d.tols[0], steady::INNER_TOL_MAX);
+    assert_eq!(*d.tols.last().unwrap(), steady::SINKHORN_TOL);
+    assert!(
+        d.tols[..d.tols.len() - 1]
+            .iter()
+            .any(|&t| t > steady::SINKHORN_TOL)
+    );
+    assert_eq!(d.tols.len(), d.sweeps.len());
+}
+
+/// RFC 0361 D5: the scalings take the reference as their start (the final scaling from its own
+/// converged weights stops in far fewer sweeps than cold), an evaluation from the reference gives the cold one's
+/// parts within tolerance, and its bits do not depend on what ran before it. How many sweeps a
+/// reference saves at another s is a property of the pack, measured on the full pack.
+#[test]
+fn evaluations_start_from_the_reference() {
+    let w = world();
+    let cold0 = parts_at(&w, 0.0, None);
+    let again0 = parts_at(&w, 0.0, Some(&cold0.reference));
+    assert!(
+        again0.reference.final_sweeps * 2 < cold0.reference.final_sweeps,
+        "{} final sweeps from its own weights, {} cold",
+        again0.reference.final_sweeps,
+        cold0.reference.final_sweeps
+    );
+    assert!(again0.reference.data_sweeps[0] <= cold0.reference.data_sweeps[0]);
+    let cold = parts_at(&w, 1.0, None);
+    let warm = parts_at(&w, 1.0, Some(&cold0.reference));
+    for (a, b) in warm.abroad.iter().zip(&cold.abroad) {
+        assert!((a - b).abs() <= 1e-9 * b.abs().max(1.0), "{a} vs {b}");
+    }
+    let _unrelated = parts_at(&w, 0.5, Some(&cold0.reference));
+    let again = parts_at(&w, 1.0, Some(&cold0.reference));
+    assert_eq!(warm.abroad, again.abroad);
+    assert_eq!(warm.total, again.total);
+}
+
+fn targets_of<'a>(
+    w: &'a World,
+    nu_target: &'a [f64],
+    weight: &'a [f64],
+    ln_d: &'a [f64],
+    data_flows: &'a [f64],
+) -> Targets<'a> {
+    Targets {
+        nu_target,
+        icio: &w.icio,
+        theta_class: &w.class,
+        ln_d,
+        weight,
+        gravity: &w.gravity,
+        data_flows,
+        theta_fit: false,
+    }
+}
+
+#[test]
+fn preflight_accepts_the_fixture_and_rejects_an_infeasible_bracket() {
+    let w = world();
+    let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
+    let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
+    let weight = trade_weight(&w.inp);
+    let t = targets_of(&w, &nu_target, &weight, &w.ln_d, &data_flows);
+    let report = epsilon::preflight(&w.inp, &t).unwrap();
+    assert!(report.len() >= 3, "{report:?}");
+
+    // a linked pair with no distance: the fit could not scale its crossings
+    let n = w.inp.n_countries();
+    let mut ln_d = w.ln_d.clone();
+    let j = (0..w.inp.crossing.good.len())
+        .find(|&j| w.inp.crossing.good[j] < w.class.len() && w.inp.crossing.k[j] > 0.0)
+        .unwrap();
+    let (a, b) = (
+        w.inp.gateway_country[w.inp.crossing.row[j]],
+        w.inp.gateway_country[w.inp.crossing.col[j]],
+    );
+    assert_ne!(a, b);
+    ln_d[a * n + b] = f64::NAN;
+    let bad = targets_of(&w, &nu_target, &weight, &ln_d, &data_flows);
+    let err = epsilon::preflight(&w.inp, &bad).unwrap_err();
+    assert!(err.starts_with("preflight:"), "{err}");
+}
+
+#[test]
+fn live_progress_is_emitted_per_line_with_stamp_and_epsilon_and_keeps_the_result() {
+    use std::sync::Mutex;
+    let w = world();
+    let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
+    let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
+    let weight = trade_weight(&w.inp);
+    let t = targets_of(&w, &nu_target, &weight, &w.ln_d, &data_flows);
+    let dir = std::env::temp_dir().join(format!("ceteris-live-{}", std::process::id()));
+    let log = ceteris_calibrate::run_log::RunLog::new(&dir).unwrap();
+    let lines = Mutex::new(vec![]);
+    let live = |l: &str| lines.lock().unwrap().push(l.to_string());
+    let logged =
+        epsilon::fit_epsilon_logged(&w.inp, &t, Limits::default(), None, Some(0.4), &log, &live)
+            .unwrap();
+    let plain =
+        epsilon::fit_epsilon_at(&w.inp, &t, 0.4, Limits::default(), None, &mut quiet()).unwrap();
+    assert_eq!(logged.json().compact(), plain.json().compact());
+    let lines = lines.into_inner().unwrap();
+    assert!(!lines.is_empty());
+    assert!(
+        lines
+            .iter()
+            .all(|l| l.starts_with('[') && l.contains("s] epsilon 0.4")),
+        "{lines:?}"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}

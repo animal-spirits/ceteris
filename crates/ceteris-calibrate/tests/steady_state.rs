@@ -506,10 +506,11 @@ fn a_plateaued_scaling_stops_where_the_strict_rule_runs_out() {
 /// budget the plain iteration overruns (the pack's contracts a few percent a pass).
 #[test]
 fn the_data_states_passes_settle_within_a_small_budget() {
-    // plain passes need 17 on the fixture, Anderson mixing 11
+    // plain passes need 17 on the fixture, Anderson mixing 11; the adaptive inner tolerance (RFC
+    // 0361) adds three full-tolerance passes at the end, so 14
     let w = &worlds()[0];
     let limits = Limits {
-        max_passes: 12,
+        max_passes: 14,
         ..Limits::default()
     };
     steady::data_state_spending(&w.inp, limits).unwrap();
