@@ -1900,3 +1900,28 @@ sections = "17"
 rows = "0397"
 topic = "[Steel plant capacity and start year come from the GEM Global Iron and Steel Tracker (CC BY 4.0), not the SFI steel database; SFI remains the cement source](../rfcs/0363-steel-capacity-from-gem-tracker.md)"
 sections = "5.2, 7.1, 22"
+
+[[entry]]
+rows = "0398"
+topic = "[The epsilon fit replaces only the nu fit's root search; the scale passes, solve_scale, the data-state rounds and every corner rule stay, and the coupled (nu, s_c) system is deferred until RFC 0355's structure is decided and a full-pack profile asks for it (P183)](../rfcs/0364-derivative-nu-fit.md)"
+sections = "17"
+
+[[entry]]
+rows = "0399"
+topic = "[The nu fit's slope d share_k / d nu_k comes from implicit differentiation of the scaling: one GMRES solve per good of the group per evaluation to a relative residual of 1e-6, checked against central differences in a test (P183)](../rfcs/0364-derivative-nu-fit.md)"
+sections = "17"
+
+[[entry]]
+rows = "0400"
+topic = "[Each friction group's nu is found by Newton's method kept inside Brent's bracket: the Newton point if strictly inside and the last step at least halved the one before, else bisection; stop at a bracket of NU_TOL or a step of NU_TOL / 10; amends ADR 0092's Brent for nu (P183)](../rfcs/0364-derivative-nu-fit.md)"
+sections = "17"
+
+[[entry]]
+rows = "0401"
+topic = "[The nu fit evaluates every fitted group's upper bracket end in one scaling at NU_MAX, falling back to one scaling per group with halvings where that scaling fails (P183)](../rfcs/0364-derivative-nu-fit.md)"
+sections = "17"
+
+[[entry]]
+rows = "0402"
+topic = "[Within one fit_border_nu call, data-state rounds after the first start each interior group at the previous round's root and run cold if the root is not bracketed within the seed's 2% neighbourhood; a seed from inside the call is authoritative, a seed from outside stays non-authoritative (amends ADR 0373's scope; P183)](../rfcs/0364-derivative-nu-fit.md)"
+sections = "17"
