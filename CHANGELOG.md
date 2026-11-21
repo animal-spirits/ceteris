@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### BEHAVIOUR: good 2 takes its own theta class (RFC 0355 draft, #595)
+
+- N_CLASSES 4 to 5: coal and other mining is class 3 at theta 9.27 (`GOOD2_THETA`, Mac fit; refit after #619), fuels class 4 at 16.91; classes stay ordered by theta. `friction_groups` is now the
+  theta classes (ADR 0276's per-good split removed).
+- Fixture goldens move: `p2-econ.txt`, `p3-workbench.txt`, the committed fixture export, reference
+  and calibration, BALANCE re-derived (ADR 0299, residual 1e-13), the rationed-cell and held-chain
+  expectations in `p2_properties.rs`. Column-factor tolerance 1e-9 to 1e-7, nu independence 1e-12 to
+  1e-10, H2 skips classes under eight crossings.
+- `calibrate` fits theta_2 jointly with epsilon, good 2's class held at scale 0; theta_2 is refitted at the other classes' current s_c and nu in each pass of the trial's scale loop (RFC 0355 D5).
+- The theta_2 fit reads a probe whose Sinkhorn has no balanced scaling (flat residual) as past the root instead of failing the fit (RFC 0355 D5).
+
 ### perf(calibrate): the scaling's sweep runs its goods in parallel (bit-identical)
 
 - `steady::sinkhorn_with`: each good's sweep (weights, kernel sums, balance) runs on the rayon pool

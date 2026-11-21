@@ -42,8 +42,12 @@ impl TrialCache {
     /// The cache in `dir` for these inputs, targets and limits; `dir` is created on the first store.
     pub fn new(dir: &Path, inp: &Inputs, t: &Targets, limits: Limits) -> Self {
         let mut w = HashWriter(Sha256::new());
-        write!(w, "scale1{inp:?}{limits:?}{:?}{:?}", t.icio, t.theta_class)
-            .expect("hashing cannot fail");
+        write!(
+            w,
+            "theta2{inp:?}{limits:?}{:?}{:?}{}",
+            t.icio, t.theta_class, t.theta_fit
+        )
+        .expect("hashing cannot fail");
         let mut h = w.0;
         for v in [t.nu_target, t.ln_d, t.weight, t.data_flows] {
             bits(&mut h, v);
@@ -107,7 +111,7 @@ fn encode(trial: &Option<Trial>) -> String {
     let clamped: Vec<usize> = f.clamped.iter().map(|&c| usize::from(c)).collect();
     format!(
         "trial\ngroups {groups}\nnu {}\ntarget {}\nshare {}\nevaluations {}\nclamped {}\n\
-         ln_d0 {}\nfloored {}\nscale {}\npooled {}\nclasses {}\n",
+         ln_d0 {}\nfloored {}\nscale {}\npooled {}\nclasses {}\ntheta2 {}\n",
         floats(&f.nu),
         floats(&f.target),
         floats(&f.share),
@@ -118,6 +122,7 @@ fn encode(trial: &Option<Trial>) -> String {
         floats(&t.scale),
         floats(&[t.pooled]),
         floats(&t.classes),
+        floats(&[t.theta2]),
     )
 }
 
@@ -154,8 +159,10 @@ fn decode(text: &str, epsilon: f64) -> Option<Option<Trial>> {
     let scale = parse_f(field("scale")?)?;
     let pooled = *parse_f(field("pooled")?)?.first()?;
     let classes = parse_f(field("classes")?)?;
+    let theta2 = *parse_f(field("theta2")?)?.first()?;
     Some(Some(Trial {
         epsilon,
+        theta2,
         fit: Fit {
             groups,
             nu,

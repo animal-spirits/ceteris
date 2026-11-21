@@ -1004,11 +1004,11 @@ mod tests {
 
         let json = fs::read_to_string(dir.join("params.json")).unwrap();
         assert!(
-            json.contains("\"theta\": [7.68, 16.91, 16.91, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0]"),
+            json.contains("\"theta\": [7.68, 16.91, 9.27, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0]"),
             "{json}"
         );
         assert!(
-            json.contains("\"theta_class\": [2, 3, 3, 0, 2, 0, 1, 0, 0, 0]"),
+            json.contains("\"theta_class\": [2, 4, 3, 0, 2, 0, 1, 0, 0, 0]"),
             "{json}"
         );
         assert!(json.contains("\"theta_scale\": 1.0"), "{json}");

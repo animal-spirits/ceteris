@@ -749,8 +749,8 @@ mod tests {
     fn bulk_legs_follow_the_bulk_paths() {
         let (pack, inputs) = (pack(), inputs());
         let off = TradeParams {
-            bulk_sea: [1.0; 4],
-            bulk_port: [1.0; 4],
+            bulk_sea: [1.0; ceteris_trade::N_CLASSES],
+            bulk_port: [1.0; ceteris_trade::N_CLASSES],
             ..TradeParams::default()
         };
         assert!(
@@ -760,14 +760,14 @@ mod tests {
                 .is_none()
         );
         let on = TradeParams {
-            bulk_sea: [1.0, 1.0, 1.0, 0.5],
-            bulk_port: [1.0, 1.0, 1.0, 0.25],
+            bulk_sea: [1.0, 1.0, 1.0, 0.5, 0.5],
+            bulk_port: [1.0, 1.0, 1.0, 0.25, 0.25],
             ..TradeParams::default()
         };
         let base = inputs.network_from_graph(&pack, &gateways(), &off);
         let net = inputs.network_from_graph(&pack, &gateways(), &on);
         let b = net.bulk.as_ref().unwrap();
-        assert_eq!(b.classes, [false, false, false, true]);
+        assert_eq!(b.classes, [false, false, false, true, true]);
         let ends = |legs: &[Leg]| legs.iter().map(|l| (l.from, l.to)).collect::<Vec<_>>();
         assert_eq!(ends(&b.domestic), ends(&net.domestic));
         assert_eq!(ends(&b.access), ends(&net.access));
@@ -797,8 +797,8 @@ mod tests {
     fn bulk_rate_can_switch_the_path() {
         let (pack, inputs) = (pack_with_coastal_route(true), inputs());
         let on = TradeParams {
-            bulk_sea: [1.0, 1.0, 1.0, 0.1],
-            bulk_port: [1.0, 1.0, 1.0, 0.1],
+            bulk_sea: [1.0, 1.0, 1.0, 0.1, 0.1],
+            bulk_port: [1.0, 1.0, 1.0, 0.1, 0.1],
             ..TradeParams::default()
         };
         let net = inputs.network_from_graph(&pack, &gateways(), &on);

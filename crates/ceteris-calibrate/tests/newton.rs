@@ -171,7 +171,10 @@ fn an_unbalanceable_good_falls_back_to_the_sweeps_error() {
             &c.v,
             None,
             80,
-            SINKHORN_TOL,
+            steady::Stop {
+                tol: SINKHORN_TOL,
+                plateau: None,
+            },
             Accel::Joint,
             newton,
         );
