@@ -432,7 +432,7 @@ fn fit_at_a_given_epsilon_is_one_trial() {
 
 /// RFC 0355 D3: with `theta_fit` on, the trial's theta of good 2 is the one whose cross-border
 /// share at nu 0 meets the target: targets made at theta 11 (good 2 at nu 0 and no distance cost of its own) on a world built at
-/// 9.27 return 11, and with the switch off the mismatch shows up as a good 2 border friction.
+/// 9.0531 return 11, and with the switch off the mismatch shows up as a good 2 border friction.
 #[test]
 fn good_2_theta_is_fitted_jointly_with_epsilon() {
     let (truth, start) = (11.0, world());

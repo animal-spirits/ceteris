@@ -44,13 +44,13 @@ const VA_PER_MILLION: [f64; N_GOODS] = [6.0, 15.0, 5.0, 9.0, 12.0, 20.0, 25.0, 5
 /// generated world's trade is balanced at D_c = 0 (ADR 0299): world spending on each good then
 /// meets its sales at the calibrated point without a rescale. Local goods keep their VA.
 pub const BALANCE: [f64; N_GOODS] = [
-    1.2978567164219,
-    0.3157512455515,
-    1.7887349123907,
-    1.3445590237892,
-    1.4498814127674,
-    0.51193362211926,
-    0.77786947231788,
+    1.29786283161139,
+    0.315752715245024,
+    1.78872569732403,
+    1.34456546820699,
+    1.44988828470417,
+    0.511936004961899,
+    0.777873152096098,
     1.0,
     1.0,
     1.0,

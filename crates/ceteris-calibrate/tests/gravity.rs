@@ -964,7 +964,7 @@ fn fixture_defaults_match_the_calibration_constants() {
         .collect();
     assert_eq!(
         theta,
-        [7.68, 16.91, 9.27, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0]
+        [7.68, 16.91, ceteris_trade::params::GOOD2_THETA, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0]
     );
     let n_classes = *of[..7].iter().max().unwrap() as usize + 1;
     let classes: Vec<Vec<usize>> = (0..n_classes)

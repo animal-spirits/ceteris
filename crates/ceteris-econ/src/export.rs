@@ -1004,7 +1004,7 @@ mod tests {
 
         let json = fs::read_to_string(dir.join("params.json")).unwrap();
         assert!(
-            json.contains("\"theta\": [7.68, 16.91, 9.27, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0]"),
+            json.contains("\"theta\": [7.68, 16.91, 9.053074248655555, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0]"),
             "{json}"
         );
         assert!(
