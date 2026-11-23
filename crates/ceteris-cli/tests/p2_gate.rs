@@ -27,7 +27,7 @@ use arrow_array::types::Float64Type;
 use arrow_cast::cast;
 use arrow_ipc::reader::FileReader;
 use arrow_schema::DataType;
-use ceteris_calibrate::{benchmark, border, write};
+use ceteris_calibrate::{benchmark, write};
 use ceteris_econ::{EconInputs, EconParams};
 use ceteris_pack::fetch;
 use ceteris_pack::read::natural_earth::read_codes;
@@ -54,7 +54,7 @@ const H2_DISTANCE: (f64, f64) = (-1.1, -0.7);
 /// Theta classes; each must recover its own theta_c within max(2 pair-clustered standard errors,
 /// [`H2_THETA_TOL`] of theta_c) of its PPML estimate with the model's country-pair kernel as the
 /// cost control (ADRs 0092, 0264).
-const N_CLASSES: usize = 4;
+const N_CLASSES: usize = 5;
 /// With the model's own kernel as the control the regression is nearly an identity and the
 /// clustered s.e. no longer measures sampling error: V1's 1% (ADR 0264).
 const H2_THETA_TOL: f64 = V1_TOL;
@@ -793,21 +793,13 @@ fn h2_theta_by_class() {
         n_classes, N_CLASSES,
         "the export has {n_classes} theta classes"
     );
-    // each class, gated; and each good of a class whose goods take their own border friction
-    // (ADR 0276), reported
-    let mut sets: Vec<(String, Vec<usize>, bool)> = (0..N_CLASSES)
+    // each class, gated
+    let sets: Vec<(String, Vec<usize>, bool)> = (0..N_CLASSES)
         .map(|c| {
             let goods: Vec<usize> = (0..N_TRADED).filter(|&k| of[k] == c).collect();
             (format!("class {c} goods {goods:?}"), goods, true)
         })
         .collect();
-    for k in (0..N_TRADED).filter(|&k| of[k] == border::PER_GOOD_CLASS) {
-        sets.push((
-            format!("class {} good {k} alone (diagnostic)", of[k]),
-            vec![k],
-            false,
-        ));
-    }
     for (label, goods, gated) in sets {
         let theta_c = theta_good[goods[0]];
         let rows_of = |keep: &dyn Fn(usize, usize, usize) -> bool| -> Vec<(usize, usize, usize)> {

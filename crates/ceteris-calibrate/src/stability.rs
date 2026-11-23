@@ -550,7 +550,7 @@ mod tests {
             [
                 "| 0 Agriculture | 7.68 | 3 | 0.168 / 0.151 | 49.75 |",
                 "| 1 Crude oil, gas and refined fuels | 16.91 | 1 | 0.103 / 0.096 | 2.50 |",
-                "| 2 Coal and other mining | 16.91 | 2 | 0.102 / 0.095 | 25.60 |",
+                "| 2 Coal and other mining | 9.27 | 2 | 0.177 / 0.157 | 25.60 |",
                 "| 5 Chemicals and metals | 2.91 | 2 | 0.424 / 0.295 | 28.70 |",
             ]
         );

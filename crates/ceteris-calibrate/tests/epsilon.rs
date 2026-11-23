@@ -78,9 +78,22 @@ fn known_weighted(
 ) -> (Vec<f64>, Vec<f64>) {
     let (mut mean, min) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, weight);
     // a scaled class is a floored one: d_0 at its smallest linked distance
-    // the per-good class at nu 0 is floored likewise
-    for c in (0..scale.len()).filter(|&c| scale[c] < 1.0 || c == border::PER_GOOD_CLASS) {
+    for c in (0..scale.len()).filter(|&c| scale[c] < 1.0) {
         mean[c] = min[c];
+    }
+    // and so is any class the trial would floor at the truth's nu (ADR 0272, Decision 2): the same
+    // rule, `product_misses`, so the truth is a state the trial can recover
+    loop {
+        let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &mean, scale, epsilon).unwrap();
+        let nu = border::nu_of_goods(&w.groups, nu_group, &at.border_nu);
+        let bad = epsilon::product_misses(&w.inp, &w.class, &w.ln_d, &mean, scale, epsilon, &nu);
+        let new: Vec<usize> = bad.into_iter().filter(|&c| mean[c] != min[c]).collect();
+        if new.is_empty() {
+            break;
+        }
+        for c in new {
+            mean[c] = min[c];
+        }
     }
     let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &mean, scale, epsilon).unwrap();
     let nu = border::nu_of_goods(&w.groups, nu_group, &at.border_nu);
@@ -108,7 +121,15 @@ fn trade_weight(inp: &Inputs) -> Vec<f64> {
 #[test]
 fn epsilon_zero_is_the_inputs() {
     let w = world();
-    let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &[0.0; 4], &[1.0; 4], 0.0).unwrap();
+    let at = epsilon::at_epsilon(
+        &w.inp,
+        &w.class,
+        &w.ln_d,
+        &[0.0; border::N_CLASSES],
+        &[1.0; border::N_CLASSES],
+        0.0,
+    )
+    .unwrap();
     assert_eq!(at.crossing.k, w.inp.crossing.k);
 }
 
@@ -121,6 +142,7 @@ fn fit_recovers_a_known_epsilon() {
     let e0 = 0.4;
     let (nu_target, data_flows) = known(&w, e0, &nu_group);
     let t = Targets {
+        theta_fit: false,
         nu_target: &nu_target,
         icio: &w.icio,
         theta_class: &w.class,
@@ -164,6 +186,7 @@ fn data_at_epsilon_zero_keeps_zero() {
     }
     debug_assert_eq!(data_flows.len(), n * n * n_t);
     let t = Targets {
+        theta_fit: false,
         nu_target: &nu_target,
         icio: &w.icio,
         theta_class: &w.class,
@@ -193,8 +216,8 @@ fn run_and_calibration_apply_the_same_distance_cost() {
     let ln_d = ln_distance(n);
     let d = Distance {
         epsilon: 0.4,
-        ln_d0: vec![6.0, 6.2, 6.4, f64::NAN],
-        scale: vec![1.0, 0.7, 1.0, 1.0],
+        ln_d0: vec![6.0, 6.2, 6.4, f64::NAN, f64::NAN],
+        scale: vec![1.0, 0.7, 1.0, 1.0, 1.0],
         ln_d: ln_d.clone(),
     };
     let dir = tempfile::tempdir().unwrap();
@@ -245,6 +268,7 @@ fn cached_fit_is_bit_identical() {
     let run = |nu: &[f64], cache: Option<&std::path::Path>| {
         let nu = targets(nu);
         let t = Targets {
+            theta_fit: false,
             nu_target: &nu,
             icio: &w.icio,
             theta_class: &w.class,
@@ -294,6 +318,7 @@ fn clamped_class_takes_an_epsilon_scale() {
     let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
     let (nu_target, data_flows) = known_scaled(&w, e0, &scale, &nu_group);
     let t = Targets {
+        theta_fit: false,
         nu_target: &nu_target,
         icio: &w.icio,
         theta_class: &w.class,
@@ -335,6 +360,7 @@ fn newton_trial_agrees_with_the_sweep_and_threads() {
         weight: &trade_weight(&w.inp),
         gravity: &w.gravity,
         data_flows: &data_flows,
+        theta_fit: false,
     };
     let trial = |newton| {
         let limits = Limits {
@@ -377,36 +403,6 @@ fn newton_trial_agrees_with_the_sweep_and_threads() {
     }
 }
 
-/// The per-good class (3) takes one s_c on its pooled share (ADR 0376): both of its goods, held at
-/// nu 0, recover the scale the targets were made at.
-#[test]
-fn per_good_class_takes_one_epsilon_scale() {
-    let w = world();
-    let (e0, c, s0) = (0.4, border::PER_GOOD_CLASS, 0.5);
-    let mut scale = [1.0; border::N_CLASSES];
-    scale[c] = s0;
-    let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
-    let (nu_target, data_flows) = known_scaled(&w, e0, &scale, &nu_group);
-    let t = Targets {
-        nu_target: &nu_target,
-        icio: &w.icio,
-        theta_class: &w.class,
-        ln_d: &w.ln_d,
-        weight: &trade_weight(&w.inp),
-        gravity: &w.gravity,
-        data_flows: &data_flows,
-    };
-    let tr = epsilon::fit_at_epsilon(&w.inp, &t, e0, Limits::default(), &mut quiet()).unwrap();
-    assert!((tr.scale[c] - s0).abs() <= 1e-3, "{:?}", tr.scale);
-    for (k, target) in nu_target.iter().enumerate().skip(3) {
-        assert!(tr.fit.nu[k] < 1e-4, "{:?}", tr.fit.nu);
-        assert!((tr.fit.share[k] - target).abs() <= 1e-4);
-    }
-    for k in (0..border::N_CLASSES).filter(|&k| k != c) {
-        assert_eq!(tr.scale[k], 1.0);
-    }
-}
-
 /// A fit at a given epsilon is one trial at exactly that epsilon.
 #[test]
 fn fit_at_a_given_epsilon_is_one_trial() {
@@ -414,6 +410,7 @@ fn fit_at_a_given_epsilon_is_one_trial() {
     let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
     let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
     let t = Targets {
+        theta_fit: false,
         nu_target: &nu_target,
         icio: &w.icio,
         theta_class: &w.class,
@@ -429,6 +426,79 @@ fn fit_at_a_given_epsilon_is_one_trial() {
         (0.37, 1, false)
     );
     assert!(fit.json().compact().contains("\"scale\""));
+}
+
+/// RFC 0355 D3: with `theta_fit` on, the trial's theta of good 2 is the one whose cross-border
+/// share at nu 0 meets the target: targets made at theta 11 (good 2 at nu 0 and no distance cost of its own) on a world built at
+/// 9.27 return 11, and with the switch off the mismatch shows up as a good 2 border friction.
+#[test]
+fn good_2_theta_is_fitted_jointly_with_epsilon() {
+    let (truth, start) = (11.0, world());
+    assert_ne!(start.inp.theta[epsilon::THETA_GOOD], truth);
+    let mut w = world();
+    w.inp = epsilon::at_theta(&start.inp, epsilon::THETA_GOOD, truth).unwrap();
+    let nu_group = [0.15, 0.6, 0.35, 0.0, 0.5];
+    let (nu_target, data_flows) = known_scaled(&w, 0.4, &[1.0, 1.0, 1.0, 0.0, 1.0], &nu_group);
+    let weight = trade_weight(&start.inp);
+    let targets = |theta_fit| Targets {
+        theta_fit,
+        nu_target: &nu_target,
+        icio: &start.icio,
+        theta_class: &start.class,
+        ln_d: &start.ln_d,
+        weight: &weight,
+        gravity: &start.gravity,
+        data_flows: &data_flows,
+    };
+    let on = epsilon::fit_at_epsilon(
+        &start.inp,
+        &targets(true),
+        0.4,
+        Limits::default(),
+        &mut quiet(),
+    )
+    .unwrap();
+    assert!((on.theta2 - truth).abs() <= 1e-3, "theta {}", on.theta2);
+    assert!(on.fit.nu[3] < 1e-4, "{:?}", on.fit.nu);
+    // off, the starting theta absorbs the mismatch in a border friction the targets never had
+    let off = epsilon::fit_at_epsilon(
+        &start.inp,
+        &targets(false),
+        0.4,
+        Limits::default(),
+        &mut quiet(),
+    )
+    .unwrap();
+    assert_eq!(off.theta2, start.inp.theta[epsilon::THETA_GOOD]);
+    assert!(off.fit.nu[3] > 1e-2, "{:?}", off.fit.nu);
+}
+
+/// theta_2 is fitted at the other classes' settled s_c, nu and d_0, not at s_c = 1 and the mean
+/// d_0: targets made at theta 11 with classes 0 and 1 clamped (s_c 0.5, d_0 floored) return 11, and
+/// class 3 meets its share at nu 0 (the Mac refit missed it by 0.0019 with the other classes'
+/// floors unseen by the theta fit).
+#[test]
+fn good_2_theta_is_refitted_at_the_settled_epsilon_scales() {
+    let (truth, start) = (11.0, world());
+    let mut w = world();
+    w.inp = epsilon::at_theta(&start.inp, epsilon::THETA_GOOD, truth).unwrap();
+    let nu_group = [0.0, 0.0, 0.35, 0.0, 0.5];
+    let (nu_target, data_flows) = known_scaled(&w, 0.4, &[0.5, 0.5, 1.0, 0.0, 1.0], &nu_group);
+    let weight = trade_weight(&start.inp);
+    let t = Targets {
+        theta_fit: true,
+        nu_target: &nu_target,
+        icio: &start.icio,
+        theta_class: &start.class,
+        ln_d: &start.ln_d,
+        weight: &weight,
+        gravity: &start.gravity,
+        data_flows: &data_flows,
+    };
+    let tr = epsilon::fit_at_epsilon(&start.inp, &t, 0.4, Limits::default(), &mut quiet()).unwrap();
+    assert!(tr.scale[0] < 1.0 && tr.scale[1] < 1.0, "{:?}", tr.scale);
+    assert!((tr.theta2 - truth).abs() <= 1e-3, "theta {}", tr.theta2);
+    assert!(tr.fit.nu[3] < 1e-4, "{:?}", tr.fit.nu);
 }
 
 /// Issues #619, #622: with the other classes' distance cost on (their buyer prices move), good 2
@@ -494,7 +564,15 @@ fn the_fits_data_state_is_the_calibrated_state() {
     let w = world();
     let lim = Limits::default();
     let (d0, _) = epsilon::class_offsets(&w.inp, &w.class, &w.ln_d, &trade_weight(&w.inp));
-    let at = epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &d0, &[1.0; 4], 0.4).unwrap();
+    let at = epsilon::at_epsilon(
+        &w.inp,
+        &w.class,
+        &w.ln_d,
+        &d0,
+        &[1.0; border::N_CLASSES],
+        0.4,
+    )
+    .unwrap();
     let nu = border::nu_of_goods(&w.groups, &[0.15, 0.6, 0.35, 1.2, 0.5], &at.border_nu);
     let at_nu = border::at_border_nu(&at, &nu).unwrap();
     let fitted = border::data_state_shares(&at, &nu, &w.groups, &w.icio, lim).unwrap();
@@ -543,6 +621,7 @@ fn concurrent_end_trials_match_sequential() {
     let nu_group = [0.15, 0.6, 0.35, 0.0, 0.0];
     let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
     let t = Targets {
+        theta_fit: false,
         nu_target: &nu_target,
         icio: &w.icio,
         theta_class: &w.class,
@@ -590,6 +669,7 @@ fn a_target_above_the_zero_friction_share_is_infeasible_not_too_little_cost() {
         weight: &trade_weight(&w.inp),
         gravity: &w.gravity,
         data_flows: &data_flows,
+        theta_fit: false,
     };
     let err = epsilon::fit_epsilon(&w.inp, &t, Limits::default(), &mut quiet()).unwrap_err();
     let CalibrationError::Infeasible(e) = err else {
@@ -608,7 +688,10 @@ fn d0_is_the_trade_weighted_mean_of_ln_distance() {
     let uneven: Vec<f64> = (0..n * n)
         .map(|k| 1.0 + ((k / n) * 7 + (k % n) * 3 % 5) as f64)
         .collect();
-    let (e0, nu_group) = (0.4, [0.15, 0.6, 0.35, 0.0, 0.0]);
+    // Classes 3 and 4 at nu 0 sit where (1 + nu) D < 1 at the weighted mean, and there d_0 and nu
+    // are not separately identified (a floored d_0 with nu 0, or the mean with a small nu, fit
+    // alike); a nu above that gap makes the truth the trial's only fit.
+    let (e0, nu_group) = (0.4, [0.15, 0.6, 0.35, 0.3, 0.2]);
     let (nu_target, data_flows) =
         known_weighted(&w, e0, &[1.0; border::N_CLASSES], &nu_group, &uneven);
     let trial = |weight: &[f64]| {
@@ -620,6 +703,7 @@ fn d0_is_the_trade_weighted_mean_of_ln_distance() {
             weight,
             gravity: &w.gravity,
             data_flows: &data_flows,
+            theta_fit: false,
         };
         epsilon::fit_at_epsilon(&w.inp, &t, e0, Limits::default(), &mut quiet()).unwrap()
     };
@@ -710,11 +794,12 @@ fn targets_of<'a>(
         weight,
         gravity: &w.gravity,
         data_flows,
+        theta_fit: false,
     }
 }
 
 #[test]
-fn preflight_accepts_the_fixture_and_rejects_an_infeasible_bracket() {
+fn preflight_accepts_the_fixture_and_reports_an_unlinked_pair() {
     let w = world();
     let nu_group = [0.15, 0.0, 0.35, 0.0, 0.0];
     let (nu_target, data_flows) = known(&w, 0.4, &nu_group);
@@ -723,7 +808,8 @@ fn preflight_accepts_the_fixture_and_rejects_an_infeasible_bracket() {
     let report = epsilon::preflight(&w.inp, &t).unwrap();
     assert!(report.len() >= 3, "{report:?}");
 
-    // a linked pair with no distance: the fit could not scale its crossings
+    // a linked pair with no distance: its crossings carry no distance cost (`ln_factor`) and stay
+    // out of d_0, as on the real pack; preflight reports the pair instead of refusing the fit
     let n = w.inp.n_countries();
     let mut ln_d = w.ln_d.clone();
     let j = (0..w.inp.crossing.good.len())
@@ -736,8 +822,14 @@ fn preflight_accepts_the_fixture_and_rejects_an_infeasible_bracket() {
     assert_ne!(a, b);
     ln_d[a * n + b] = f64::NAN;
     let bad = targets_of(&w, &nu_target, &weight, &ln_d, &data_flows);
-    let err = epsilon::preflight(&w.inp, &bad).unwrap_err();
-    assert!(err.starts_with("preflight:"), "{err}");
+    let report = epsilon::preflight(&w.inp, &bad).unwrap();
+    let line = report
+        .iter()
+        .find(|l| l.contains("no finite ln distance"))
+        .unwrap_or_else(|| panic!("{report:?}"));
+    assert!(line.contains(&format!("({a}, {b})")), "{line}");
+    // the bracket checks still run
+    assert!(report.len() >= 4, "{report:?}");
 }
 
 #[test]

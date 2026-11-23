@@ -35,6 +35,17 @@ pub const EPSILON_TOL: f64 = 1e-3;
 
 /// Brent's bracket on a class's epsilon scale ends this narrow, within this many rounds.
 const SCALE_TOL: f64 = 1e-6;
+/// Good fitted for its own theta jointly with epsilon (RFC 0355 D3): coal and other mining.
+pub const THETA_GOOD: usize = 2;
+/// The band theta of [`THETA_GOOD`] is searched in: the Mining estimate 13.53 plus or minus two
+/// s.e. (3.67, ADR 0023).
+pub const THETA_BAND: (f64, f64) = (6.2, 20.9);
+/// theta_2 moves less than this between refits: settled.
+const THETA_SETTLE: f64 = 1e-4;
+const THETA_TOL: f64 = 1e-6;
+const THETA_ROUNDS: usize = 100;
+/// The residual read at a theta whose Sinkhorn has no balanced scaling: far below any share miss.
+const UNBALANCED_RESIDUAL: f64 = -1.0;
 const SCALE_ROUNDS: usize = 100;
 /// A residual at scale 1 this small counts as the target met there.
 const SCALE_FLAT: f64 = 1e-9;
@@ -205,7 +216,7 @@ pub fn at_distance(inp: &Inputs, d: &crate::write::Distance) -> Result<Inputs, S
 
 /// The classes where some crossing's `(1 + nu) D` is below 1 (ADR 0272, Decision 2), for the
 /// friction `nu` per good of `at` as it was fitted.
-fn product_misses(
+pub fn product_misses(
     inp: &Inputs,
     theta_class: &[usize],
     ln_d: &[f64],
@@ -246,6 +257,8 @@ pub struct ClassCheck {
 #[derive(Clone, Debug)]
 pub struct Trial {
     pub epsilon: f64,
+    /// theta of [`THETA_GOOD`] as used (fitted when `Targets::theta_fit`).
+    pub theta2: f64,
     pub fit: Fit,
     /// `ln d_0` per theta class as used.
     pub ln_d0: Vec<f64>,
@@ -272,6 +285,9 @@ pub struct EpsilonFit {
 
 /// What the epsilon fit reads besides the inputs.
 pub struct Targets<'a> {
+    /// Fit theta of [`THETA_GOOD`] at each epsilon trial so its cross-border share at nu 0 meets
+    /// its target (RFC 0355 D3).
+    pub theta_fit: bool,
     /// The ICIO cross-border share per friction group of [`border::friction_groups`].
     pub nu_target: &'a [f64],
     pub icio: &'a [bool],
@@ -285,6 +301,18 @@ pub struct Targets<'a> {
     /// The data's 2000 trade by exporter, importer and traded good,
     /// `[(o * C + d) * theta_class.len() + g]` as `gravity::baci_flows`.
     pub data_flows: &'a [f64],
+}
+
+/// `r` with `what` prefixed to its error: a fit that fails after hours says which probe it was on.
+fn within<T>(
+    r: Result<T, CalibrationError>,
+    what: impl FnOnce() -> String,
+) -> Result<T, CalibrationError> {
+    r.map_err(|e| match e {
+        CalibrationError::Failed(m) => format!("{}: {m}", what()).into(),
+        CalibrationError::Unbalanced(m) => CalibrationError::Unbalanced(format!("{}: {m}", what())),
+        other => other,
+    })
 }
 
 fn sums(values: &[f64], n_pairs: usize, stride: usize, goods: &[usize]) -> Vec<f64> {
@@ -317,7 +345,10 @@ fn solve_scale(
         let mut sc = scale.to_vec();
         sc[c] = s;
         let at = at_epsilon(inp, t.theta_class, t.ln_d, ln_d0, &sc, epsilon)?;
-        let p = border::data_state_parts_from(&at, nu, &groups, t.icio, limits, start)?;
+        let p = within(
+            border::data_state_parts_from(&at, nu, &groups, t.icio, limits, start),
+            || format!("epsilon {epsilon}: s_c of class {c} probed at {s}, scales {sc:?}"),
+        )?;
         let (miss, all) = ks.iter().fold((0.0, 0.0), |(m, a), &k| {
             (
                 m + p.abroad[k] - t.nu_target[k] * p.total[k],
@@ -358,6 +389,99 @@ fn solve_scale(
     Ok(brent.root())
 }
 
+/// `inp` with the kernel of good `g` rebuilt at theta `theta`: K to the power `theta / theta_g`
+/// (K is a power of the leg factor, so the legs are unchanged), the base prices and selection
+/// constants recomputed.
+pub fn at_theta(inp: &Inputs, g: usize, theta: f64) -> Result<Inputs, String> {
+    let mut out = inp.clone();
+    let ratio = theta / inp.theta[g];
+    for j in 0..out.crossing.good.len() {
+        if out.crossing.good[j] == g {
+            out.crossing.k[j] = out.crossing.k[j].powf(ratio);
+        }
+    }
+    out.theta[g] = theta;
+    border::reprice(&mut out)?;
+    Ok(out)
+}
+
+/// `inp` at the theta of [`THETA_GOOD`] whose group's cross-border share at nu 0, at `epsilon`
+/// with the good's class at scale 0 (no distance cost of its own; the other classes still move its
+/// prices at their `scale` and `nu`) and `ln_d0`, meets its target, found by Brent's method in
+/// [`THETA_BAND`] (see [`theta_root`]); the share falls as theta rises.
+#[allow(clippy::too_many_arguments)]
+fn fit_theta(
+    inp: &Inputs,
+    t: &Targets,
+    epsilon: f64,
+    ln_d0: &[f64],
+    scale: &[f64],
+    nu_of: &[f64],
+    limits: Limits,
+) -> Result<Inputs, CalibrationError> {
+    let groups = border::friction_groups(t.theta_class);
+    let k = groups
+        .iter()
+        .position(|goods| goods.contains(&THETA_GOOD))
+        .ok_or("no friction group holds the good whose theta is fitted")?;
+    let target = t.nu_target[k];
+    if target.is_nan() {
+        return Ok(inp.clone());
+    }
+    let mut scale = scale.to_vec();
+    scale[t.theta_class[THETA_GOOD]] = 0.0;
+    let f = |theta: f64| -> Result<f64, CalibrationError> {
+        let at = at_epsilon(
+            &at_theta(inp, THETA_GOOD, theta)?,
+            t.theta_class,
+            t.ln_d,
+            ln_d0,
+            &scale,
+            epsilon,
+        )?;
+        let mut nu = nu_of.to_vec();
+        for &g in &groups[k] {
+            nu[g] = 0.0;
+        }
+        let shares = within(
+            border::data_state_shares(&at, &nu, &groups, t.icio, limits),
+            || format!("epsilon {epsilon}: theta_2 probed at {theta}, scales {scale:?}"),
+        )?;
+        Ok(shares[k] - target)
+    };
+    let theta = theta_root(f, |f_lo, f_hi| {
+        format!(
+            "epsilon {epsilon}: good {THETA_GOOD}'s share at nu 0 misses its target {target} for every theta in {THETA_BAND:?} (residuals {f_lo} and {f_hi})"
+        )
+    })?;
+    Ok(at_theta(inp, THETA_GOOD, theta)?)
+}
+
+/// The root of `f` (share minus target, falling in theta) in [`THETA_BAND`]. A probe whose
+/// Sinkhorn has no balanced scaling is past the root and reads as [`UNBALANCED_RESIDUAL`]; the
+/// band's lower end must balance. A band that does not bracket the root is an error, not a clamp.
+fn theta_root(
+    f: impl Fn(f64) -> Result<f64, CalibrationError>,
+    misses: impl FnOnce(f64, f64) -> String,
+) -> Result<f64, CalibrationError> {
+    let probe = |theta: f64| match f(theta) {
+        Err(CalibrationError::Unbalanced(_)) if theta > THETA_BAND.0 => Ok(UNBALANCED_RESIDUAL),
+        r => r,
+    };
+    let (f_lo, f_hi) = (probe(THETA_BAND.0)?, probe(THETA_BAND.1)?);
+    if f_lo < 0.0 || f_hi > 0.0 {
+        return Err(misses(f_lo, f_hi).into());
+    }
+    let mut brent = Brent::new(THETA_BAND.0, f_lo, THETA_BAND.1, f_hi);
+    for _ in 0..THETA_ROUNDS {
+        let Some(x) = brent.next(THETA_TOL) else {
+            break;
+        };
+        brent.update(probe(x)?);
+    }
+    Ok(brent.root())
+}
+
 /// Whether a group takes part in its class's s_c solve. `scale` is the class's s_c once solved. A
 /// class left at s_c = 0 by an unsettled solve stays in it whatever nu the refit gave: s_c = 0
 /// with nu > 0 would drop the class's distance cost although an s_c in (0, 1) at nu 0 may exist.
@@ -385,6 +509,23 @@ fn trial(
 ) -> Result<Trial, CalibrationError> {
     let groups = border::friction_groups(t.theta_class);
     let (mean, min) = class_offsets(inp, t.theta_class, t.ln_d, t.weight);
+    let refit_theta = t.theta_fit && epsilon > 0.0;
+    let mut inp = if refit_theta {
+        fit_theta(
+            inp,
+            t,
+            epsilon,
+            &mean,
+            &[1.0; border::N_CLASSES],
+            &inp.border_nu,
+            limits,
+        )?
+    } else {
+        inp.clone()
+    };
+    let inp = &mut inp;
+    // class 3 is at scale 0 in the theta fits: its d_0 does not enter, the other classes' (floored
+    // ones included) do
     let mut ln_d0 = mean;
     let mut floored: Vec<usize> = vec![];
     let mut scale = vec![1.0; border::N_CLASSES];
@@ -392,10 +533,36 @@ fn trial(
     let mut passes = 0;
     loop {
         let at = at_epsilon(inp, t.theta_class, t.ln_d, &ln_d0, &scale, epsilon)?;
-        let fit = border::fit_border_nu(&at, &groups, t.nu_target, t.icio, limits, progress)?;
+        let fit = within(
+            border::fit_border_nu(&at, &groups, t.nu_target, t.icio, limits, progress),
+            || {
+                format!(
+                    "epsilon {epsilon}: border fit at scales {scale:?}, theta_2 {}, pass {passes}",
+                    inp.theta[THETA_GOOD]
+                )
+            },
+        )?;
         let nu = fit.nu_of_goods(&at.border_nu);
         let bad = product_misses(inp, t.theta_class, t.ln_d, &ln_d0, &scale, epsilon, &nu);
         if bad.is_empty() {
+            // theta_2 was fitted before the other classes' s_c and nu were known; refit it at
+            // the current state so its share at nu 0 meets the target there too
+            if refit_theta {
+                let refit = fit_theta(inp, t, epsilon, &ln_d0, &scale, &nu, limits)?;
+                let moved = (refit.theta[THETA_GOOD] - inp.theta[THETA_GOOD]).abs() > THETA_SETTLE;
+                progress(&format!(
+                    "epsilon {epsilon}: theta_2 {} at the current scales",
+                    refit.theta[THETA_GOOD]
+                ));
+                if moved {
+                    *inp = refit;
+                    passes += 1;
+                    if passes > SCALE_PASSES {
+                        return Err("theta_2 and the epsilon scales did not settle".into());
+                    }
+                    continue;
+                }
+            }
             // A class with groups pinned at nu 0 takes its own s_c (ADR 0376), solved on the
             // pinned groups pooled, so a per-good class has one s_c too. s_c is re-solved at the
             // refitted nu of the other groups until it settles.
@@ -433,7 +600,10 @@ fn trial(
                 continue;
             }
             let (spend, supply) = border::spending_at(&at, &nu, limits)?;
-            let pairs = border::data_state_pair_values(&at, &nu, &spend, &supply, limits)?;
+            let pairs = within(
+                border::data_state_pair_values(&at, &nu, &spend, &supply, limits),
+                || format!("epsilon {epsilon}: pair values at the settled state, scales {scale:?}"),
+            )?;
             let (n_c, n_g) = (at.n_countries(), at.n_goods());
             let traded: Vec<usize> = (0..t.theta_class.len()).collect();
             let pooled = t
@@ -457,6 +627,7 @@ fn trial(
                 .collect::<Result<Vec<_>, String>>()?;
             return Ok(Trial {
                 epsilon,
+                theta2: inp.theta[THETA_GOOD],
                 fit,
                 ln_d0,
                 floored,
@@ -562,19 +733,26 @@ pub fn preflight(inp: &Inputs, t: &Targets) -> Result<Vec<String>, String> {
             "preflight: the data's distance coefficient is {data_pooled}"
         ));
     }
+    // A crossing without a finite distance carries no distance cost (`ln_factor`) and is left out
+    // of d_0 (`class_offsets`), as on the real pack; it is reported, not refused.
+    let mut unlinked = std::collections::BTreeSet::new();
     for j in 0..inp.crossing.good.len() {
         if inp.crossing.good[j] >= n_t || inp.crossing.k[j] <= 0.0 {
             continue;
         }
         let (a, b) = pair_of(inp, j);
         if a != b && !t.ln_d[a * n_c + b].is_finite() {
-            return Err(format!(
-                "preflight: crossing {j} links countries {a} and {b} without a finite ln distance"
-            ));
+            unlinked.insert((a, b));
         }
     }
     let (mean, min) = class_offsets(inp, t.theta_class, t.ln_d, t.weight);
     let mut report = vec![format!("preflight: data pooled coefficient {data_pooled}")];
+    if !unlinked.is_empty() {
+        report.push(format!(
+            "preflight: {} country pairs with crossings have no finite ln distance and carry no distance cost: {unlinked:?}",
+            unlinked.len()
+        ));
+    }
     let nu_zero = vec![0.0; n_t];
     for eps in [0.0, EPSILON_MAX] {
         let miss = product_misses(
@@ -982,6 +1160,7 @@ impl EpsilonFit {
             ("epsilon", Json::Float(t.epsilon)),
             ("at_zero", Json::Int(i64::from(self.at_zero))),
             ("evaluations", Json::Int(self.evaluations as i64)),
+            ("theta2", Json::Float(t.theta2)),
             ("model_pooled", Json::Float(t.pooled)),
             ("data_pooled", Json::Float(self.data_pooled)),
             ("nu", floats(&t.fit.nu)),
@@ -1028,6 +1207,26 @@ mod row_members_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_unbalanced_theta_probe_is_past_the_root() {
+        let root = 9.04;
+        let f = |theta: f64| {
+            if theta > 12.0 {
+                Err(CalibrationError::Unbalanced("flat".into()))
+            } else {
+                Ok(0.01 * (root - theta))
+            }
+        };
+        let got = theta_root(f, |_, _| "miss".into()).unwrap();
+        assert!((got - root).abs() < 1e-5, "{got}");
+    }
+
+    #[test]
+    fn an_unbalanced_lower_end_of_the_band_is_an_error() {
+        let f = |_: f64| Err(CalibrationError::Unbalanced("flat".into()));
+        assert!(theta_root(f, |_, _| "miss".into()).is_err());
+    }
 
     #[test]
     fn a_class_at_scale_zero_is_resolved_whatever_its_nu() {

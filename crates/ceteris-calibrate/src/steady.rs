@@ -76,6 +76,16 @@ pub const SINKHORN_TOL: f64 = 1e-13;
 /// Jacobian, `sinkhorn_is_unique_up_to_scale`). The cap was set when an earlier pack's mode
 /// (province 3906, 0.99995 a sweep) needed 34,614 sweeps in pass 7.
 pub const MAX_SWEEPS: usize = 100_000;
+/// A fit's evaluation (`border::spending_at` and what reads it) takes a scaling whose residual
+/// has stopped falling above [`SINKHORN_TOL`] if it is within this: a share to 1e-9 needs no
+/// more, and good 2's Brazil block plateaus at about 4e-13 (RFC 0355). The calibration proper
+/// keeps the strict rule.
+pub const PLATEAU_TOL: f64 = 1e-11;
+/// The window, in sweeps, over which a residual must at least halve to not be a plateau: the
+/// plain sweep contracts good 2's slowest mode by 0.99908 a sweep (a factor 0.01 a window), a
+/// plateau of rounding noise does not move.
+pub const PLATEAU_SWEEPS: usize = 5_000;
+pub const PLATEAU_FALL: f64 = 0.5;
 /// The scaling stops at this fraction of the last pass's change, within [`SINKHORN_TOL`] and
 /// [`INNER_TOL_MAX`].
 pub const INNER_PER_OUTER: f64 = 1e-2;
@@ -162,6 +172,8 @@ pub enum CalibrationError {
     /// The target is above the model's share at zero friction: no epsilon can fix it.
     Infeasible(String),
     Failed(String),
+    /// Sinkhorn found no balanced scaling at these inputs: the residual is flat, not falling.
+    Unbalanced(String),
 }
 
 impl fmt::Display for CalibrationError {
@@ -174,6 +186,7 @@ impl fmt::Display for CalibrationError {
             ),
             CalibrationError::TooLittleCost(s)
             | CalibrationError::Infeasible(s)
+            | CalibrationError::Unbalanced(s)
             | CalibrationError::Failed(s) => f.write_str(s),
         }
     }
@@ -511,6 +524,33 @@ pub fn sinkhorn_limited(
     sinkhorn_to(m, spend, supply, start, max_sweeps, SINKHORN_TOL, true)
 }
 
+/// [`sinkhorn_limited`] for a fit's evaluation: a residual within [`PLATEAU_TOL`] that has
+/// stopped falling for [`PLATEAU_SWEEPS`] sweeps ends the scaling, its residual reported.
+pub fn sinkhorn_plateau(
+    m: &Model,
+    spend: &Mat,
+    supply: &Mat,
+    start: Option<&Mat>,
+    max_sweeps: usize,
+    tol: f64,
+    newton: bool,
+) -> Result<Scaling, CalibrationError> {
+    let stop = Stop {
+        tol,
+        plateau: Some((PLATEAU_TOL, PLATEAU_SWEEPS)),
+    };
+    sinkhorn_with(
+        m,
+        spend,
+        supply,
+        start,
+        max_sweeps,
+        stop,
+        Accel::Joint,
+        newton,
+    )
+}
+
 /// [`sinkhorn_limited`] stopping at `tol` (at least [`SINKHORN_TOL`]).
 pub fn sinkhorn_to(
     m: &Model,
@@ -521,16 +561,26 @@ pub fn sinkhorn_to(
     tol: f64,
     newton: bool,
 ) -> Result<Scaling, CalibrationError> {
+    let stop = Stop { tol, plateau: None };
     sinkhorn_with(
         m,
         spend,
         supply,
         start,
         max_sweeps,
-        tol,
+        stop,
         Accel::Joint,
         newton,
     )
+}
+
+/// When a scaling stops: its residual within `tol`, or, for a fit, on a plateau (see
+/// [`PLATEAU_TOL`]): `(bound, window)` of a residual within `bound` whose smallest value in a
+/// window of that many sweeps is not under [`PLATEAU_FALL`] of the previous window's.
+#[derive(Clone, Copy, Debug)]
+pub struct Stop {
+    pub tol: f64,
+    pub plateau: Option<(f64, usize)>,
 }
 
 /// [`sinkhorn_to`] with the mixing `accel`. The goods of each sweep run on the current rayon pool
@@ -546,11 +596,11 @@ pub fn sinkhorn_with(
     supply: &Mat,
     start: Option<&Mat>,
     max_sweeps: usize,
-    tol: f64,
+    stop: Stop,
     accel: Accel,
     newton: bool,
 ) -> Result<Scaling, CalibrationError> {
-    sinkhorn_traced(m, spend, supply, start, max_sweeps, tol, accel, newton).0
+    sinkhorn_traced(m, spend, supply, start, max_sweeps, stop, accel, newton).0
 }
 
 /// [`sinkhorn_with`] and what its Newton phase did, which an error return would otherwise lose.
@@ -561,13 +611,13 @@ pub fn sinkhorn_traced(
     supply: &Mat,
     start: Option<&Mat>,
     max_sweeps: usize,
-    tol: f64,
+    stop: Stop,
     accel: Accel,
     newton: bool,
 ) -> (Result<Scaling, CalibrationError>, NewtonStats) {
     let mut stats = NewtonStats::default();
     let out = sinkhorn_run(
-        m, spend, supply, start, max_sweeps, tol, accel, newton, &mut stats,
+        m, spend, supply, start, max_sweeps, stop, accel, newton, &mut stats,
     );
     (out, stats)
 }
@@ -579,7 +629,7 @@ fn sinkhorn_run(
     supply: &Mat,
     start: Option<&Mat>,
     max_sweeps: usize,
-    tol: f64,
+    stop: Stop,
     accel: Accel,
     newton: bool,
     stats: &mut NewtonStats,
@@ -752,7 +802,7 @@ fn sinkhorn_run(
             if !ev.norm.is_finite() {
                 break Err("non-finite".to_string());
             }
-            if ev.worst <= tol {
+            if ev.worst <= stop.tol {
                 break Ok(());
             }
             if steps == newton::NEWTON_MAX {
@@ -861,6 +911,8 @@ fn sinkhorn_run(
     let mut gbest = vec![f64::INFINITY; n_g];
     let mut gsince = vec![0usize; n_g];
     let mut err = f64::NAN;
+    let (mut before_min, mut prev_min, mut window_min) =
+        (f64::INFINITY, f64::INFINITY, f64::INFINITY);
     let mut last_by_good = Vec::new();
     // the plain sweep from the last finite point, where a mixed step leaves f64
     let mut plain: Option<Vec<f64>> = None;
@@ -869,7 +921,13 @@ fn sinkhorn_run(
         (err, last_by_good) = (e, by_good);
         // Stalled within the gap's own rounding (`summation_depth`): no sweep can do better.
         // 1.6e-13 on the full pack with storage on, where one gateway's sums are 858 deep.
-        if err <= tol || (within && since >= ANDERSON_STALL) {
+        window_min = window_min.min(err);
+        let mut plateaued = false;
+        if let Some((bound, _)) = stop.plateau.filter(|&(_, w)| w > 0 && sweep % w == 0) {
+            plateaued = window_min <= bound && window_min >= PLATEAU_FALL * prev_min;
+            (before_min, prev_min, window_min) = (prev_min, window_min, f64::INFINITY);
+        }
+        if err <= stop.tol || (within && since >= ANDERSON_STALL) || plateaued {
             let r = (0..n_g)
                 .map(|g| if inp.traded[g] { r[g] } else { 1.0 })
                 .collect();
@@ -910,7 +968,7 @@ fn sinkhorn_run(
             // Each good still out solves its own F by Newton from the sweep's point. Any failure
             // leaves lw, the mixing histories and the counters untouched, and the sweep resumes.
             let out: Vec<usize> = (0..n_g)
-                .filter(|&g| !cells[g].is_empty() && last_by_good[g] > tol)
+                .filter(|&g| !cells[g].is_empty() && last_by_good[g] > stop.tol)
                 .collect();
             let run = |&g: &usize| newton_good(g, &lw[g * n_p..(g + 1) * n_p]);
             let solves: Vec<NewtonGood> = if rayon::current_num_threads() > 1 {
@@ -937,7 +995,7 @@ fn sinkhorn_run(
                     solved[g * n_p..(g + 1) * n_p].copy_from_slice(x);
                 }
                 let (_, r, final_err, within, _) = step(&solved);
-                if final_err.is_finite() && (final_err <= tol || within) {
+                if final_err.is_finite() && (final_err <= stop.tol || within) {
                     let r = (0..n_g)
                         .map(|g| if inp.traded[g] { r[g] } else { 1.0 })
                         .collect();
@@ -1028,13 +1086,28 @@ fn sinkhorn_run(
         .iter()
         .enumerate()
         .fold((0, 0.0), |m, (g, &w)| if w > m.1 { (g, w) } else { m });
-    Err(format!(
-        "Sinkhorn did not converge in {max_sweeps} sweeps, residual {}, largest in good {} ({})",
+    let flat = before_min.is_finite() && prev_min >= 0.99 * before_min;
+    let message = format!(
+        "Sinkhorn did not converge in {max_sweeps} sweeps, residual {}, largest in good {} ({}); plateau {:?}, last two windows {} {}{}",
         sci(err),
         at.0,
-        sci(at.1)
-    )
-    .into())
+        sci(at.1),
+        stop.plateau,
+        sci(before_min),
+        sci(prev_min),
+        if !before_min.is_finite() {
+            " (fewer than two windows)"
+        } else if flat {
+            " (flat: no balanced scaling at these inputs)"
+        } else {
+            " (still falling: slow, not infeasible)"
+        }
+    );
+    Err(if flat {
+        CalibrationError::Unbalanced(message)
+    } else {
+        CalibrationError::Failed(message)
+    })
 }
 
 /// The longest chain of additions in one of `Model::origin_sums` or `Model::destination_sums`
@@ -1764,6 +1837,20 @@ pub fn data_state_spending_from(
     };
     let mut y_local = setup.local_start()?;
     let mut ras_start: Option<Vec<f64>> = None;
+    let mut history: Vec<(usize, [f64; 3])> = Vec::new();
+    // Anderson mixing of the passes' fixed point, as the calibration has it: plain passes contract
+    // a few percent each on the pack (RFC 0355 D4). Prices are fixed, so q drops out of the mix.
+    let mut state = State {
+        n_p,
+        n_c,
+        traded: traded.clone(),
+        sigma: inp.within_sigma(),
+        rebate_unit: 0.0,
+        scale_unit: block_unit(&weights.scale),
+        level: q.clone(),
+        split: weights.gov.rows > 0,
+    };
+    let (mut zs, mut fs): (Vec<Vec<f64>>, Vec<Vec<f64>>) = (Vec::new(), Vec::new());
     for _ in 0..limits.max_passes {
         let v = setup.settle(&rebate, &q, &weights, &y_local, limits.max_local)?;
         y_local = (0..v.len())
@@ -1785,7 +1872,7 @@ pub fn data_state_spending_from(
         } else {
             INNER_TOL_MAX
         };
-        let scaling = sinkhorn_to(
+        let scaling = sinkhorn_plateau(
             &m,
             &spend,
             &sales,
@@ -1816,11 +1903,12 @@ pub fn data_state_spending_from(
             ras_start = Some(ras.b);
             w
         };
-        change = py_max([
+        let parts = [
             relative(&rebate_new, &rebate),
             relative(&weights_new.scale, &weights.scale),
             relative(&weights_new.omega.data, &weights.omega.data),
-        ]);
+        ];
+        change = py_max(parts);
         if change <= PASS_TOL && tol == SINKHORN_TOL {
             return Ok(DataState {
                 spend,
@@ -1830,10 +1918,43 @@ pub fn data_state_spending_from(
                 sweeps,
             });
         }
-        (rebate, weights) = (rebate_new, weights_new);
+        history.push((scaling.sweeps, parts));
+        if state.rebate_unit == 0.0 {
+            state.rebate_unit = block_unit(&rebate_new);
+        }
+        let z = state.pack(&q, &rebate, &weights);
+        let fz: Vec<f64> = state
+            .pack(&q, &rebate_new, &weights_new)
+            .iter()
+            .zip(&z)
+            .map(|(f, z)| f - z)
+            .collect();
+        if zs.len() > ANDERSON_MEMORY {
+            zs.remove(0);
+            fs.remove(0);
+        }
+        zs.push(z);
+        fs.push(fz.clone());
+        if fs.len() > 1 {
+            let (dz, df) = (diffs(&zs), diffs(&fs));
+            let gamma = lstsq(&df, &fz)?;
+            let f = state.pack(&q, &rebate_new, &weights_new);
+            (_, rebate, weights) = state.unpack(&mix(&f, &dz, &df, &gamma));
+        } else {
+            (rebate, weights) = (rebate_new, weights_new);
+        }
     }
+    // the last passes' sweeps and change of rebates, weights' scale and omega: shrinking or cycling
+    let tail = history
+        .iter()
+        .rev()
+        .take(6)
+        .rev()
+        .map(|(sw, c)| format!("{sw} sweeps [{}, {}, {}]", sci(c[0]), sci(c[1]), sci(c[2])))
+        .collect::<Vec<_>>()
+        .join("; ");
     Err(format!(
-        "the data state's rebates and weights did not settle in {} passes",
+        "the data state's rebates and weights did not settle in {} passes; last passes: {tail}",
         limits.max_passes
     )
     .into())
@@ -1985,7 +2106,7 @@ pub fn calibrate_from(
             &sales_data,
             lw.as_ref(),
             limits.max_sweeps,
-            tol,
+            Stop { tol, plateau: None },
             limits.accel,
             limits.newton,
         )?;
