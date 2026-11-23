@@ -1160,7 +1160,25 @@ fn calibrate(args: impl Iterator<Item = String>) -> Result<ExitCode, String> {
             // epsilon, ln d_0 and nu of a fit written earlier by --fit-epsilon, or a fit now
             let (epsilon, ln_d0, scale, nu, ln_d) = match &epsilon_from {
                 Some(file) => {
-                    let (epsilon, ln_d0, scale, nu) = epsilon::read_fit(file)?;
+                    let fit = epsilon::read_fit(file)?;
+                    // the tables' static digest holds P01 at TradeParams::default(): a fit made
+                    // at another theta_2 belongs to other inputs
+                    if let Some(t) = fit.theta2
+                        && t != inp.theta[epsilon::THETA_GOOD]
+                    {
+                        return Err(format!(
+                            "{}: fitted theta_2 {t} is not the inputs' {}; set GOOD2_THETA to it",
+                            file.display(),
+                            inp.theta[epsilon::THETA_GOOD]
+                        ));
+                    }
+                    let epsilon::FitFile {
+                        epsilon,
+                        ln_d0,
+                        scale,
+                        nu,
+                        ..
+                    } = fit;
                     let data = ceteris_calibrate::epsilon::pack_data(
                         pack,
                         &sources::workspace_root().join(fetch::CACHE_DIR),

@@ -7,8 +7,9 @@ pub const N_CLASSES: usize = 5;
 /// P01 theta of good 2 (coal and other mining), class 3, between machinery-class 7.68 and fuels' 16.91 (class 4; RFC 0355 draft): fitted so its share of
 /// cross-border use at nu 0 meets its ICIO 2000 target; a 3-point estimate (theta 16.91, 13.53 and
 /// 8.0 gave shares 0.2057, 0.2209 and 0.2780 against 0.2583), within two s.e. of the Mining
-/// estimate 13.53 (3.67). A Mac fit refines it.
-pub const GOOD2_THETA: f64 = 9.27;
+/// estimate 13.53 (3.67). The Mac fit d5e2 (epsilon 0.39003) refined 9.27 to this
+/// (`crates/ceteris-calibrate/fits/epsilon-d5e2.json`).
+pub const GOOD2_THETA: f64 = 9.053_074_248_655_555;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TradeParams {

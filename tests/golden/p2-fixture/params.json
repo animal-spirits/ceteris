@@ -1,6 +1,6 @@
 {
   "format": "15",
-  "static_digest": "b6cfc40caa412566248dff9330f653f4e48bd3f550f7864767964a582c26470d",
+  "static_digest": "0e786ca212985837416caf0ab0a61cb72dc7b80f3c8da04894dfc4caee298229",
   "n_goods": 10,
   "minor_per_unit": 10000.0,
   "register": {
@@ -58,7 +58,7 @@
     "transfers": "fixed_shares"
   },
   "trade": {
-    "theta": [7.68, 16.91, 9.27, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0],
+    "theta": [7.68, 16.91, 9.053074248655555, 2.91, 7.68, 2.91, 4.14, 0.0, 0.0, 0.0],
     "theta_class": [2, 4, 3, 0, 2, 0, 1, 0, 0, 0],
     "theta_scale": 1.0,
     "coverage": [3.0, 1.0, 2.0, 2.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0],
