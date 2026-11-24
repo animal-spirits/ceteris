@@ -9,6 +9,11 @@ pub const N_CLASSES: usize = 5;
 /// 8.0 gave shares 0.2057, 0.2209 and 0.2780 against 0.2583), within two s.e. of the Mining
 /// estimate 13.53 (3.67). A Mac fit refines it.
 pub const GOOD2_THETA: f64 = 9.27;
+/// theta of good 2 as the Mac fit d5e2 (epsilon 0.39003) refined it
+/// (`crates/ceteris-calibrate/fits/epsilon-d5e2.json`). The P01 default and the fixture keep
+/// [`GOOD2_THETA`]: the x10 border shock test of the fixture is a knife-edge in theta_2 (#673), so
+/// moving the default would be a coin flip. Runs on the pack take this value ([`TradeParams::fitted`]).
+pub const GOOD2_THETA_FITTED: f64 = 9.053_074_248_655_555;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TradeParams {
@@ -317,6 +322,16 @@ impl TradeParams {
         } else {
             self.c_max
         }
+    }
+}
+
+impl TradeParams {
+    /// The defaults with good 2's theta at the fitted [`GOOD2_THETA_FITTED`].
+    #[must_use]
+    pub fn fitted() -> Self {
+        let mut p = Self::default();
+        p.theta[2] = GOOD2_THETA_FITTED;
+        p
     }
 }
 

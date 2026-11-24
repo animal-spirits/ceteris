@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fit record d5e2 and the fitted theta_2 (#667)
+
+- `crates/ceteris-calibrate/fits/epsilon-d5e2.json` holds the Mac fit (epsilon 0.39003, theta_2 9.0531). `epsilon::read_fit` returns a `FitFile` with `theta2`; `calibrate --epsilon-from` refuses a fit whose theta_2 is not the inputs' (static digest).
+- `GOOD2_THETA_FITTED` and `TradeParams::fitted()` carry 9.0531; the default and the fixture stay at 9.27, so no golden moves. The fixture's x10 border shock outcome is a knife-edge in theta_2 (#673). Pack export and run entry points do not yet take `fitted()`; they need a real pack to verify.
+
 ### BEHAVIOUR: good 2 takes its own theta class (RFC 0355 draft, #595)
 
 - N_CLASSES 4 to 5: coal and other mining is class 3 at theta 9.27 (`GOOD2_THETA`, Mac fit; refit after #619), fuels class 4 at 16.91; classes stay ordered by theta. `friction_groups` is now the
