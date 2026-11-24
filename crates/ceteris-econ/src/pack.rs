@@ -412,6 +412,7 @@ impl EconInputs {
             steady: None,
             border_nu: None,
             storage: false,
+            fitted: false,
             market_elasticity: None,
         };
         inputs.network =

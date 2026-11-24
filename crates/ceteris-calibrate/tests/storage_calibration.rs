@@ -73,3 +73,51 @@ fn default_calibration_runs_with_storage_off() {
     let trade = inputs.trade_params();
     assert!((0..trade.goods.n()).all(|g| !trade.stores(g)));
 }
+
+/// A calibration solved at the fitted good-2 theta (#667) runs at it, with and without storage;
+/// the default one keeps the fixture's.
+#[test]
+fn fitted_calibration_runs_at_fitted_theta() {
+    use ceteris_trade::params::{GOOD2_THETA, GOOD2_THETA_FITTED};
+    for storage in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let base = TradeParams::fitted();
+        let on = if storage {
+            base.with_storage()
+        } else {
+            TradeParams::fitted()
+        };
+        calibrate_under(&on, dir.path());
+        let mut inputs = small_world();
+        inputs.calibrate(dir.path()).unwrap();
+        assert!(inputs.fitted);
+        assert_eq!(inputs.storage, storage);
+        let trade = inputs.trade_params();
+        assert_eq!(trade.theta[2], GOOD2_THETA_FITTED);
+        let inputs = Arc::new(inputs);
+        let mut sim = Sim::new(
+            EconWorld::new(inputs.clone(), EconParams::default(), trade),
+            schedule(),
+            SEED,
+        );
+        sim.run_until(12).unwrap();
+        // the default theta is not the one the steady state was solved at
+        let off = TradeParams {
+            goods: inputs.goods.clone(),
+            border_nu: inputs.border_nu.clone().unwrap(),
+            ..if storage {
+                TradeParams::default().with_storage()
+            } else {
+                TradeParams::default()
+            }
+        };
+        let refused =
+            std::panic::catch_unwind(|| EconWorld::new(inputs.clone(), EconParams::default(), off));
+        assert!(refused.is_err());
+    }
+    let mut inputs: EconInputs = small_world();
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/p2-fixture");
+    inputs.calibrate(&fixture.join("calibration")).unwrap();
+    assert!(!inputs.fitted);
+    assert_eq!(inputs.trade_params().theta[2], GOOD2_THETA);
+}
