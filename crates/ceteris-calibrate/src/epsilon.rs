@@ -1125,11 +1125,20 @@ pub fn pack_data(pack: &Path, cache: &Path) -> Result<PackData, String> {
     })
 }
 
-/// Epsilon, `ln d_0` per class, the scale s_c per class and nu per friction group of an
-/// `epsilon.json` ([`EpsilonFit::json`]); a file without `scale` (written before ADR 0375) has
-/// s_c = 1.
-#[allow(clippy::type_complexity)]
-pub fn read_fit(file: &std::path::Path) -> Result<(f64, Vec<f64>, Vec<f64>, Vec<f64>), String> {
+/// The numbers of an `epsilon.json` ([`EpsilonFit::json`]) a calibration applies.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FitFile {
+    pub epsilon: f64,
+    pub ln_d0: Vec<f64>,
+    /// s_c per class; 1 in a file written before ADR 0375.
+    pub scale: Vec<f64>,
+    pub nu: Vec<f64>,
+    /// theta of [`THETA_GOOD`]; `None` in a file written before RFC 0355.
+    pub theta2: Option<f64>,
+}
+
+/// Reads an `epsilon.json` written by the fit.
+pub fn read_fit(file: &std::path::Path) -> Result<FitFile, String> {
     let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let v: serde_json::Value =
         serde_json::from_str(&text).map_err(|e| format!("{}: {e}", file.display()))?;
@@ -1147,7 +1156,13 @@ pub fn read_fit(file: &std::path::Path) -> Result<(f64, Vec<f64>, Vec<f64>, Vec<
     } else {
         vec![1.0; ln_d0.len()]
     };
-    Ok((epsilon, ln_d0, scale, list("nu")?))
+    Ok(FitFile {
+        epsilon,
+        ln_d0,
+        scale,
+        nu: list("nu")?,
+        theta2: v["theta2"].as_f64(),
+    })
 }
 
 impl EpsilonFit {

@@ -161,10 +161,12 @@ fn fit_recovers_a_known_epsilon() {
     assert!(!fit.at_zero);
     let file = tempfile::tempdir().unwrap().keep().join("epsilon.json");
     std::fs::write(&file, fit.json().pretty()).unwrap();
-    let (e, d0, scale, nu) = epsilon::read_fit(&file).unwrap();
-    assert_eq!((e, nu), (fit.trial.epsilon, fit.trial.fit.nu.clone()));
-    assert_eq!(d0.len(), fit.trial.ln_d0.len());
-    assert_eq!(scale, fit.trial.scale);
+    let read = epsilon::read_fit(&file).unwrap();
+    let e = read.epsilon;
+    assert_eq!((e, read.nu), (fit.trial.epsilon, fit.trial.fit.nu.clone()));
+    assert_eq!(read.ln_d0.len(), fit.trial.ln_d0.len());
+    assert_eq!(read.scale, fit.trial.scale);
+    assert_eq!(read.theta2, Some(fit.trial.theta2));
     assert!((fit.trial.epsilon - e0).abs() <= 2.0 * epsilon::EPSILON_TOL);
     assert!(fit.held_out.iter().all(|c| c.within), "{:?}", fit.held_out);
 }
@@ -859,4 +861,31 @@ fn live_progress_is_emitted_per_line_with_stamp_and_epsilon_and_keeps_the_result
         "{lines:?}"
     );
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The committed d5e2 fit is what a pack calibration applies (#667): its theta_2 is
+/// `GOOD2_THETA_FITTED`, which `TradeParams::fitted` carries while the default keeps the fixture's
+/// 9.27, and its epsilon switches the distance cost on, moving the crossings of the fixture off
+/// the frictionless ones.
+#[test]
+fn committed_fit_theta_2_is_the_fitted_one_and_epsilon_switches_the_cost_on() {
+    let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fits/epsilon-d5e2.json");
+    let fit = epsilon::read_fit(&file).unwrap();
+    assert_eq!(fit.theta2, Some(ceteris_trade::params::GOOD2_THETA_FITTED));
+    assert_eq!(
+        ceteris_trade::TradeParams::fitted().theta[epsilon::THETA_GOOD],
+        ceteris_trade::params::GOOD2_THETA_FITTED
+    );
+    assert_eq!(
+        ceteris_trade::TradeParams::default().theta[epsilon::THETA_GOOD],
+        ceteris_trade::params::GOOD2_THETA
+    );
+    assert_eq!(fit.epsilon, 0.390_032_013_037_640_57);
+    assert_eq!(fit.ln_d0.len(), border::N_CLASSES);
+    let w = world();
+    let at = |epsilon: f64| {
+        epsilon::at_epsilon(&w.inp, &w.class, &w.ln_d, &fit.ln_d0, &fit.scale, epsilon).unwrap()
+    };
+    assert_eq!(at(0.0).crossing.k, w.inp.crossing.k);
+    assert_ne!(at(fit.epsilon).crossing.k, w.inp.crossing.k);
 }
