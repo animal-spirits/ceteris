@@ -245,7 +245,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0225 | [Assimilation policy, backlash and group boundaries](0225-assimilation-policy-backlash-and-group-boundaries.md) | proposed | ADR 0225 |
 | 0226 | [Atrocity risk, onset and consequences](0226-atrocity-risk-onset-and-consequences.md) | proposed | ADR 0226 |
 | 0227 | [The full financial design in 1.0](0227-full-financial-design-in-1.0.md) | proposed | ADR 0227 |
-| 0228 | [Gabaix-Maggiori exchange rates in P5a](0228-gabaix-maggiori-exchange-rates-in-p5a.md) | proposed | ADR 0228 |
+| 0228 | [Gabaix-Maggiori exchange rates in P5a](0228-gabaix-maggiori-exchange-rates-in-p5a.md) | accepted (RFC 0365) | ADR 0228 |
 | 0229 | [Crisis levers as state-triggered rules in 1.0](0229-crisis-levers-as-state-triggered-rules.md) | proposed | ADR 0229 |
 | 0230 | [Latent demand dynamics in the demand system](0230-latent-demand-dynamics.md) | proposed | ADR 0230 |
 | 0231 | [Cost of capital for investment](0231-cost-of-capital-for-investment.md) | proposed | ADR 0231 |
@@ -356,3 +356,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0362 | [Newton scaling: step control as measured, and two criteria the spike could not meet](0362-newton-step-control-as-measured.md) | accepted | ADR 0394 to 0396 |
 | 0363 | [Steel capacity comes from the GEM Global Iron and Steel Tracker](0363-steel-capacity-from-gem-tracker.md) | accepted | ADR 0397 |
 | 0364 | [Derivative-based border friction fit, seeded rounds, and the joint system deferred](0364-derivative-nu-fit.md) | accepted | ADR 0398 to 0402 |
+| 0365 | [Accept ADR 0228 for P5a as the external-balance closure, with the credit limit](0365-accept-adr-0228-external-balance-closure.md) | accepted | none yet |
