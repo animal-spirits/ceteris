@@ -11,6 +11,7 @@ superset of what the study decided.
 
 | Date | Study | Outcome |
 | --- | --- | --- |
+| 2026-11-24 | [RFC 0350 bands at the fitted epsilon and theta_2](rfc0350-bands-fitted.md) | #668; Brexit, US-China welfare and x10 miss; E3 run not scorable |
 | 2026-11-16 | [Non-commercial data audit for any paid build](paid-build-licence-audit-2026-11-16.md) | #231; verdicts in sources.toml |
 | 2026-11-12 | [Electricity generation by country after Ember](electricity-source-after-ember-2026-11-12.md) | RFC 0348 (accepted); ADR 0358 |
 | 2026-11-10 | [P5 E3: island money sink at x10](p5-e3-island-money-sink-2026-11-10.md) | RFC 0341 (accepted, spike no-go) |
