@@ -1,6 +1,6 @@
 # RFC 0365. Accept ADR 0228 for P5a as the external-balance closure, with the credit limit
 
-Status: accepted, spike unrun; not built
+Status: accepted, spike no-go for the proxy tested; not built
 Date: 2026-11-26
 Design sections: 8.2, 8.8, 9.2, 9.9, 12.2, 17; trade SPEC Money-anchored rule; econ SPEC E2, E4; money SPEC 9.9
 Release: 1.0, P5a
@@ -72,7 +72,11 @@ Spike first (development laws, spike before build), one day, with a go/no-go num
 - No-go: nothing is built; the result is recorded here as a negative result and the structure
   goes back to Antonio. No band, tolerance or go number moves.
 
-Spike result: unrun (2026-11-26). Gamma_c's value on the fixture, CL within CL >= 1, and the
+Spike result (2026-11-26): no-go for the proxy tested, ADR 0228 in full unrun. Baseline E3
+package reaches 1.0712 at 1,500 ticks (gate 1.07); an import wedge on cumulative money change
+collapsed the world (index 169 to 13,546) in two attempts. Study:
+[docs/research/p5-bop-price-spike-2026-11-26.md](../docs/research/p5-bop-price-spike-2026-11-26.md).
+Former text: Gamma_c's value on the fixture, CL within CL >= 1, and the
 fixture's currency areas are set by the spike and written here with its number. Anything the
 spike needs beyond ADR 0228's text and this RFC goes to Antonio as a card first.
 
