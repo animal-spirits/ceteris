@@ -357,3 +357,4 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0363 | [Steel capacity comes from the GEM Global Iron and Steel Tracker](0363-steel-capacity-from-gem-tracker.md) | accepted | ADR 0397 |
 | 0364 | [Derivative-based border friction fit, seeded rounds, and the joint system deferred](0364-derivative-nu-fit.md) | accepted | ADR 0398 to 0402 |
 | 0365 | [Accept ADR 0228 for P5a as the external-balance closure, with the credit limit](0365-accept-adr-0228-external-balance-closure.md) | accepted | none yet |
+| 0366 | [Build design for the ADR 0228 external-balance closure in P5a](0366-adr-0228-build-design.md) | proposed | none yet |
