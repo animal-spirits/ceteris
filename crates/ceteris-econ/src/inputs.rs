@@ -208,6 +208,10 @@ pub struct EconInputs {
     /// (`TradeParams::with_storage`, RFC 0286 screen), which its static digest records;
     /// [`EconInputs::trade_params`] then turns storage on. False uncalibrated.
     pub storage: bool,
+    /// Whether the calibration was solved at the fitted good-2 theta (`TradeParams::fitted`,
+    /// #667), which its static digest records; [`EconInputs::trade_params`] then carries it.
+    /// False uncalibrated and for tables exported before the fit.
+    pub fitted: bool,
     /// The calibration's elasticities of each market's price loop (ADR 0263), which cap its
     /// price gain; `None` uncalibrated, where every market runs kappa1.
     pub market_elasticity: Option<MarketElasticity>,
@@ -217,10 +221,15 @@ impl EconInputs {
     /// The default trade parameters with the calibrated border friction, where there is one:
     /// the parameters the calibrated steady state holds under.
     pub fn trade_params(&self) -> TradeParams {
-        let default = if self.storage {
-            TradeParams::default().with_storage()
+        let base = if self.fitted {
+            TradeParams::fitted()
         } else {
             TradeParams::default()
+        };
+        let default = if self.storage {
+            base.with_storage()
+        } else {
+            base
         };
         TradeParams {
             goods: self.goods.clone(),
@@ -815,6 +824,7 @@ impl EconInputs {
             steady: _,
             // the default trade parameters it picks; the world digests the trade parameters
             storage: _,
+            fitted: _,
             border_nu,
             market_elasticity,
         } = self;
