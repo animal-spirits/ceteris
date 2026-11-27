@@ -1073,10 +1073,9 @@ PLAN Tasks 18b to 18d). Values are held fixed and prices solved first:
    Where the build departs from ADR 0089's text, and why, is in the ADR's "As built (Task 18e)"
    section.
 3. Before the stages, `ceteris calibrate --pack` fits the border friction nu of each friction
-   group (P05, ADRs 0092, 0276; `ceteris_calibrate::border`): a group is a theta class, except
-   class 3, each of whose goods (crude oil, gas and refined fuels; coal and other mining) is a
-   group of its own (ADR 0276: one class value set by crude oil took mining below its
-   own share and the calibration failed). It is fitted so that the cross-border share of the
+   group (P05, ADRs 0092, 0276; `ceteris_calibrate::border`): a group is a theta class (ADR 0408: coal and other mining
+   is class 3 with its own theta, fuels class 4, which subsumes ADR 0276's per-good split, where one
+   class value set by crude oil had taken mining below its own share). It is fitted so that the cross-border share of the
    group's goods in the ICIO economies, sum of (1 - home share) absorption over sum of absorption from
    `econ_home_shares.arrow`, is the model's: the value the destinations of those countries buy
    from other countries over all they buy, at origin prices. Each evaluation is stage 2 at the

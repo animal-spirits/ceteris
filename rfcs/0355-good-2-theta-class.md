@@ -1,6 +1,6 @@
 # RFC 0355. Good 2 (coal and other mining) takes its own theta class
 
-Status: proposed
+Status: accepted
 Date: 2026-11-15
 Design sections: 8.3, 17.1 (P01, P05); ADRs 0023, 0274, 0276, 0354
 Release: 1.0 (P4)
@@ -35,7 +35,7 @@ Options:
 Recommendation: A.
 
 Decision: A, Antonio, 2026-11-15 (question card, class 3 good 2 thread).
-Row: to be taken in the spec PR.
+Row: ADR 0408
 
 ### D2. What is theta_2 in this change? (superseded for the epsilon-on case by D3)
 
@@ -45,7 +45,7 @@ Options:
   of the nu-0 share residual, recorded as a dated default.
 - B. The literature 13.53 until the fit runs.
 
-Recommendation: A. Pending Antonio's decision.
+Recommendation: A. Not decided: D3 and D5 replace it for the epsilon-on case, so it takes no row.
 
 ### D3. How is theta_2 fitted once epsilon is on?
 
@@ -65,7 +65,7 @@ Options:
 Recommendation: A.
 
 Decision: A, Antonio, 2026-11-17 (question card, class 3 good 2 thread).
-Row: to be taken in the spec PR.
+Row: ADR 0409
 
 ### D4. How does a fit's scaling stop when good 2's residual plateaus? (decided: option A, Antonio 2026-11-17)
 
@@ -84,6 +84,8 @@ and the scaling runs its 100,000-sweep cap and errors (Mac, 1893 s, 2026-11-17).
 - B. Narrow the theta band to where calibrate settles: no tolerance change, but theta 9.27 sits
   next to the unstable range.
 - C. Stop and treat it as a structure issue.
+
+Row: ADR 0410
 
 ### D5. At which state is theta_2 fitted? (decided: refit inside the scale loop, Antonio 2026-11-18)
 
@@ -107,12 +109,29 @@ probe whose Sinkhorn residual is flat (`CalibrationError::Unbalanced`) is past t
 reads as a large negative residual and the bracket shrinks. The band's lower end must balance, and
 a band that does not bracket the root stays an error.
 
+Row: ADR 0411
+
+### D6. How are d_0 and nu identified? (decided: option 1, Antonio 2026-11-27)
+
 Known gap, found merging main's `d0_is_the_trade_weighted_mean_of_ln_distance`: for a single-good
 class (3) at nu 0, where `(1 + nu) D < 1` at the weighted-mean d_0, d_0 and nu are not separately
-identified. A floored d_0 with nu 0, and the mean with a small nu (0.024 in the fixture), fit the
-targets alike, and the trial takes whichever its floor rule reaches first. The test's truth now
-floors by the trial's own rule (`product_misses`) and gives classes 3 and 4 a nu above the gap;
-whether the trial should prefer the floored solution is a model question for the epsilon refit.
+identified: a floored d_0 with nu 0, and the mean with a small nu (0.024 in the fixture), fit the
+targets alike. reports/d0-nu-identification-2026-11-20.md (#662) shows nu and d_0 reach the
+equilibrium only through the intercept a = ln(1 + nu) - b ln(d_0 / d_min), so the two solutions
+are one point and the gap cannot cause a band miss by itself.
+
+Options:
+
+- 1. d_0 is the smallest linked distance for every class (amends ADR 0272 Decision 2; no effect on bands).
+- 2. Keep the mean normalisation and make the label canonical.
+- 3. Apply the distance cost to domestic legs so nu is a pure border effect (kernel change, after the freeze).
+- 4. Fix a parameter from outside data, or pool classes (rejected: the outside number constrains nothing).
+
+Recommendation: 1.
+
+Decision: 1, Antonio, 2026-11-27 (question card, autodevelop thread). The code change (calibrate and
+the pack's d_0 rule) is a follow-up issue; no kernel code.
+Row: ADR 0412
 
 ## Consequences
 
@@ -126,5 +145,6 @@ whether the trial should prefer the floored solution is a model question for the
 
 ## Spec changes
 
-Written in the spec PR once D2 is decided: 8.3 and 17.1 P01 (class count and theta_2), trade SPEC
-Parameters, econ SPEC Calibration (friction groups are the classes).
+Written in the spec PR (ADRs 0408 to 0412): 17.1 P01, P05 and P179 (five classes, theta_2, friction
+groups are the classes, d_0 at the smallest linked distance), trade SPEC kernels and P05, econ SPEC
+Calibration. The pack build's four-class rule (#669) and the d_0 code change follow.

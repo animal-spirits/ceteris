@@ -347,6 +347,7 @@ The full procedure is in [CLAUDE.md](../CLAUDE.md), "Decisions, specs and resear
 | 0352 | [Banks F1: five archetypes, and the capital gap that feeds the zombie band](0352-banks-f1-capital-gap.md) | accepted | ADR 0367, ADR 0368, ADR 0369 |
 | 0353 | [A small calibrated pack in CI and a per-class fit cache](0353-ci-pack-and-fit-cache.md) | accepted | ADR 0370, ADR 0371, ADR 0372, ADR 0373, ADR 0374 |
 | 0354 | [Per-class epsilon scale for classes whose border friction clamps at zero](0354-class-epsilon-scale.md) | accepted | ADR 0375, ADR 0376 |
+| 0355 | [Good 2 (coal and other mining) takes its own theta class](0355-good-2-theta-class.md) | accepted | ADR 0408, ADR 0409, ADR 0410, ADR 0411, ADR 0412 |
 | 0356 | [Rest of world in the small pack is one pseudo-province with weighted distance](0356-small-pack-row-province.md) | accepted | ADR 0377 |
 | 0357 | [The small pack records rest of world's member countries and GDP weights](0357-small-pack-row-members.md) | accepted | ADR 0378 |
 | 0358 | [Scenario edits may multiply a value instead of setting it](0358-relative-edits.md) | accepted | ADR 0381, 0382 |
