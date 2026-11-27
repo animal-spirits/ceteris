@@ -649,6 +649,7 @@ fn kernel_controlled_tariff_regression_recovers_theta_per_class() {
     }
     let goods = traded_goods(inp);
     let n_classes = goods.iter().map(|&g| inp.theta_class[g]).max().unwrap() + 1;
+    let mut skipped = Vec::new();
     for c in 0..n_classes {
         let rows: Vec<(usize, usize, usize)> = (0..n_c)
             .flat_map(|e| (0..n_c).filter(move |&m| m != e).map(move |m| (e, m)))
@@ -665,6 +666,7 @@ fn kernel_controlled_tariff_regression_recovers_theta_per_class() {
         // of the pooled class 3 (ADR 0276).
         if rows.len() < MIN_CLASS_ROWS {
             println!("class {c}: {} rows, not identified, skipped", rows.len());
+            skipped.push((c, rows.len()));
             continue;
         }
         let at = |&(e, m, g): &(usize, usize, usize)| (e * n_c + m) * n_g + g;
@@ -692,6 +694,11 @@ fn kernel_controlled_tariff_regression_recovers_theta_per_class() {
         );
         assert!((fit.coef("ln_kernel") - 1.0).abs() <= 1e-6);
     }
+    // Pins the skip (#671): fuels alone (class 4) has six crossings, under MIN_CLASS_ROWS, so its
+    // theta is not recovered on the fixture; classes 1 and 3 sit at the minimum of eight. A change
+    // to the fixture that skips another class, or frees fuels, fails here instead of passing
+    // silently. Fuels is gated on the real pack (`p2_gate`, owner Mac run).
+    assert_eq!(skipped, [(4, 6)]);
 }
 
 /// Newton-Krylov that hits its step cap falls back to tatonnement, then
