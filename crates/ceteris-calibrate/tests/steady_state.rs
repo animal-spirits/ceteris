@@ -2024,14 +2024,12 @@ fn r_g_removed_and_residual_reported() {
                 "{}: good {g} column factor {:.14} residual {:.3e}",
                 w.name, factor[g], residual[g]
             );
-            if false {
-                assert!(
-                    residual[g].abs() <= 1e-12,
-                    "{}: good {g} r_g - 1 {}",
-                    w.name,
-                    residual[g]
-                );
-            }
+            assert!(
+                residual[g].abs() <= 1e-13,
+                "{}: good {g} r_g - 1 {}",
+                w.name,
+                residual[g]
+            );
         }
         assert!(
             s.info.balance_mu.abs() <= 1e-12,
