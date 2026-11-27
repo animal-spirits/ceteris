@@ -508,6 +508,8 @@ pub struct Columns {
     pub weight_price: Vec<f64>,
     pub active: Vec<bool>,
     pub spend: Vec<[f64; 2]>,
+    /// The spending in the numeraire, as the kernel reads it; empty without the currency layer.
+    pub spend_num: Vec<[f64; 2]>,
     pub fill: Vec<[f64; 2]>,
     pub index: Vec<f64>,
     pub lead: Vec<f64>,
@@ -521,6 +523,29 @@ impl Columns {
         self.price.extend(cells.clone().map(|c| price[c]));
         self.active.clear();
         self.active.extend(cells.map(|c| active[c]));
+    }
+
+    /// Converts the gathered prices, and the smoothed ones, from each origin's currency to the
+    /// numeraire at the provinces' rates `rate`; nothing for empty `rate`.
+    pub fn prices_to_numeraire(&mut self, rate: &[f64]) {
+        for (p, e) in self.price.iter_mut().zip(rate) {
+            *p *= e;
+        }
+        for (p, e) in self.weight_price.iter_mut().zip(rate) {
+            *p *= e;
+        }
+    }
+
+    /// Sets the spending in the numeraire, from each destination's currency; empty without
+    /// the currency layer (`rate` empty).
+    pub fn spend_to_numeraire(&mut self, rate: &[f64]) {
+        self.spend_num.clear();
+        self.spend_num.extend(
+            self.spend
+                .iter()
+                .zip(rate)
+                .map(|(s, e)| [s[0] * e, s[1] * e]),
+        );
     }
 
     /// The smoothed prices of good `g`, or none for an empty `weight`.

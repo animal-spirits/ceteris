@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Border conversion through the financiers, off by default (RFC 0366 build step 3)
+
+- With the currency layer on, international goods legs, the ADR 0310 foreign dividends and the ADR 0100 transfer cross currencies through the per-currency financier accounts (`Currencies::cross`, rounded half to even, rounding stays on the financier). The trade kernel is untouched: the econ side feeds it origin prices and spending in the numeraire and converts values back to each payer's currency. Per-currency conservation holds every tick (`bop_money_conserved_per_currency`); at unit rates the real allocation and every country account equal the run without the layer (`bop_at_unit_rates_matches_e3`). Layer off: no change, no golden moves.
+
 ### Currency layer, off by default (RFC 0366 build step 2)
 
 - `EconWorld::with_currencies` opens a mint and a financier account per currency after the existing accounts, holds every rate e_c and expectation m_c at 1 (tagged snapshot section after capital), and moves each non-numeraire currency's balances onto its own mint. Real allocation is bit-identical to the layer off; no golden moves. Per-currency conservation holds from the start; it holds every tick once border conversion lands (build step 3).
