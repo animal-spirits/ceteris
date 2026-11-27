@@ -1925,3 +1925,28 @@ sections = "17"
 rows = "0402"
 topic = "[Within one fit_border_nu call, data-state rounds after the first start each interior group at the previous round's root and run cold if the root is not bracketed within the seed's 2% neighbourhood; a seed from inside the call is authoritative, a seed from outside stays non-authoritative (amends ADR 0373's scope; P183)](../rfcs/0364-derivative-nu-fit.md)"
 sections = "17"
+
+[[entry]]
+rows = "0403"
+topic = "[ADR 0228 is built in full in P5a (currency per country, financier account per currency, local-currency wages) under the RFC 0365 freeze exception, with the E3 credit limit (P148) kept unchanged](../rfcs/0366-adr-0228-build-design.md)"
+sections = "9.2, 9.9"
+
+[[entry]]
+rows = "0404"
+topic = "[Money is held per currency: every account belongs to one currency, with one mint and one financier account per currency; cross-currency payments pass only through the financier at e_c, rounded half to even per leg with the residue on the financier, and q_c is the financier's balance in c](../rfcs/0366-adr-0228-build-design.md)"
+sections = "9.1, 9.8, 9.9"
+
+[[entry]]
+rows = "0405"
+topic = "[In P5a the ADR 0228 rule expects E_t[e_c(t+1)] = m_c(t-1), the anchoring heuristic of 12.2 with half-life h (P185); heuristic switching follows when 12.2 is built](../rfcs/0366-adr-0228-build-design.md)"
+sections = "12.2, 9.2"
+
+[[entry]]
+rows = "0406"
+topic = "[The ADR 0228 rule lives in ceteris-econ (fx.rs, beside monetary.rs) until ceteris-finance exists in P5b; amends ADR 0228 Migration](../rfcs/0366-adr-0228-build-design.md)"
+sections = "9.2, 19"
+
+[[entry]]
+rows = "0407"
+topic = "[Gate of the ADR 0228 build: small_world, frictionless, E3 package and closure on, ntb 10 on every pair, 1,500 ticks, world price index in the numeraire at most 1.07 of base at every tick and output at least 0.9 after tick 20, ntb 1 steady state held; Gamma (P184) and h (P185) set from priors before one run; a miss is a recorded no-go](../rfcs/0366-adr-0228-build-design.md)"
+sections = "21.1, 15.7"

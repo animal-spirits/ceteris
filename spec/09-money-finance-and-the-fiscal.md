@@ -18,6 +18,8 @@ Each economy has households, non-financial enterprises, banks, government, centr
 
 Regimes are initialized from the de facto classification of Ilzetzki, Reinhart and Rogoff and change through transition hazards on inflation, reserve cover and recent peg breaks; entering or leaving a monetary union stays at t0 until 2.0 (ADR 0242). Floating exchange rates are cleared in one place, the global demand system of 9.9: current-account and income flows enter it as net currency demand absorbed by financiers with limited risk-bearing capacity (Gabaix and Maggiori 2015 is that special case), and central banks intervene from reserves as one more investor class.
 
+In P5a floating rates follow Gabaix and Maggiori (2015) with one class of financiers (ADR 0228), built per currency with an anchoring expectation (ADRs 0403 to 0407, money SPEC); the demand system of 9.9 replaces it in P5b.
+
 ### 9.3 Banks and asset markets
 
 Banks hold reserves, loans, mortgages, bonds and interbank claims against deposits, wholesale funding and equity. Lending creates deposits up to capital (Basel-style) and liquidity constraints; loan rates are the policy rate plus a risk premium from borrower leverage. Bank runs follow a threshold rule on depositor and wholesale-funder confidence, softened by deposit insurance; contagion runs through interbank exposures (Gai-Kapadia). Housing and equity prices are formed by agents valuing expected rents and earnings with heuristic expectations (Section 12), so leveraged housing booms and busts, the core of 2008, can emerge.

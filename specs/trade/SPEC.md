@@ -317,6 +317,8 @@ left out). The inflation observed is that of the last repricing, as the adaptive
 GE reference is unchanged. Every tick the clip binds on the gap terms at a cell is counted
 (`clip_ticks`, run export).
 
+**Money-anchored rule per currency (ADR 0404).** With the ADR 0228 closure on, each currency anchors on its own money stock and its own index in local currency; the world index is reported in the numeraire at e_c.
+
 **Money-anchored rule (ADR 0338; built as `TradeParams::anchor`, off by default).** P5 Branch E1 replaces the aggregate
 term of ADR 0090 with a money anchor and a good-level term. With l_o = 2 (D_o + b_o - Q_o) / (D_o + b_o + Q_o), 0 where both are 0 (ADR 0340: bounded in [-2, 2] at zero output, first order equal to (D - Q) / Q at the steady state, no Q floor),
 lbar_g the mean of l_o over the active origins of good g weighted by p_o (Q_o + D_o) / 2, lbar the
