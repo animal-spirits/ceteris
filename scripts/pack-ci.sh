@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Small-pack CI job (RFC 0353 D2, ADRs 0371, 0372): calibrate tests/fixtures/pack-ci with the
 # fit cache, then run the benchmark on it. Report-only: the caller decides whether to fail.
+# The epsilon fit is off: hosted runners have no BACI/CEPII cache (#609).
 set -euo pipefail
 
 logs=${1:?usage: scripts/pack-ci.sh LOG_DIR [FIT_CACHE_DIR]}
@@ -11,7 +12,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 cp -R "$root/tests/fixtures/pack-ci" "$work/pack"
-calib_args=(--pack "$work/pack" --out "$work/calib")
+calib_args=(--pack "$work/pack" --out "$work/calib" --no-epsilon-fit)
 [ -n "$cache" ] && calib_args+=(--fit-cache "$cache")
 
 step() {
