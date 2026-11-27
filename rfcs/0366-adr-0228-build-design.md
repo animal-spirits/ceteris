@@ -1,6 +1,6 @@
 # RFC 0366. Build design for the ADR 0228 external-balance closure in P5a
 
-Status: proposed
+Status: accepted; not built
 Date: 2026-11-26
 Design sections: 8.8, 9.2, 9.9, 12.2, 17; money SPEC (P5a rule); econ SPEC E2 to E4; trade SPEC Money-anchored rule
 Release: 1.0, P5a
@@ -35,7 +35,7 @@ Options:
 Recommendation: A, because it is the root-cause fix the calibration rule asks for.
 
 Decision: A, Antonio, 2026-11-26 (card answer, project chat, 19:17Z).
-Row: pending (taken in this PR once D2 to D5 are decided).
+Row: ADR 0403
 
 ### D2. How does the ledger hold money in several currencies?
 
@@ -52,6 +52,9 @@ Recommendation: A, because ADR 0228 names a financier position and local-currenc
 A makes q_c a ledger stock covered by the conservation invariant (V0, 9.8); B leaves the very
 deficit stock this closes outside the books.
 
+Decision: A, Antonio, 2026-11-27 (card answer "Accept all recommended", 01:28Z).
+Row: ADR 0404
+
 ### D3. Which expectations does the rate rule use in P5a?
 
 Options:
@@ -64,6 +67,9 @@ Options:
 Recommendation: A, because 12.2 is not built anywhere and B would add a second kernel inside the
 one freeze exception; trend-following rules are a known source of endogenous cycles (12.2) that
 would confound the gate.
+
+Decision: A, Antonio, 2026-11-27 (card answer "Accept all recommended", 01:28Z).
+Row: ADR 0405
 
 ### D4. Where does the rule live?
 
@@ -79,6 +85,9 @@ Options:
 Recommendation: A, because the rule needs the ledger, layout and monetary state that live in
 `ceteris-econ`, and a crate holding one module is premature (KISS; ADR 0353 counts kernels, not
 crates).
+
+Decision: A, Antonio, 2026-11-27 (card answer "Accept all recommended", 01:28Z).
+Row: ADR 0406
 
 ### D5. What is the gate, fixed before any run?
 
@@ -97,6 +106,9 @@ Options:
 Recommendation: A, because it is the number Antonio fixed on the structure card and the spike
 baseline (1.0712) was measured the same way, so the comparison is like for like; local indices
 are reported as a diagnostic.
+
+Decision: A, Antonio, 2026-11-27 (card answer "Accept all recommended", 01:28Z).
+Row: ADR 0407
 
 ## Design (applies the recommended options)
 
@@ -133,9 +145,9 @@ Gamma_c = Gamma / Y_c(0)                                    currency-size scalin
   fallback (ADR 0210). Unions run one q for the area.
 - Financier valuation gains stay on its account in P5a (reported, not distributed); distribution
   to owners comes with the 9.9 demand system in P5b. Shortcut, tracked by an issue.
-- New register entries (Section 17, codes from `next-code P` in this PR): Gamma (prior from
+- New register entries (Section 17, codes from `next-code P` in this PR): Gamma (P184, prior from
   Gabaix and Maggiori 2015, the value and source written in the row) and the anchoring half-life
-  h (prior from the anchoring estimates of Anufriev and Hommes 2012). Neither is fitted in P5a.
+  h (P185, prior from the anchoring estimates of Anufriev and Hommes 2012). Neither is fitted in P5a.
 
 ### Conversion at the border
 
@@ -198,7 +210,8 @@ Gamma_c = Gamma / Y_c(0)                                    currency-size scalin
 
 ## Spec changes
 
-Pending D2 to D5. Then, in this PR: money SPEC Equations (P5a rule of ADR 0228 until 9.9),
-spec/09 9.2 (rule location and expectations), econ SPEC E2 to E4 (currency of payments, border
-conversion), trade SPEC Money-anchored rule (per currency), Section 17 (Gamma, h), rows for D1 to
-D5, ADR 0228 index row noting the crate amendment (D4).
+- money SPEC Equations: P5a exchange rates (ADRs 0403 to 0407).
+- spec/09 9.2: P5a rule and its replacement in P5b (ADRs 0403 to 0407).
+- econ SPEC E2 to E4: currencies of payments and border conversion (ADRs 0403, 0404).
+- trade SPEC: money anchor per currency (ADR 0404).
+- Section 17: P184 Gamma, P185 h (ADRs 0403, 0405, 0407).

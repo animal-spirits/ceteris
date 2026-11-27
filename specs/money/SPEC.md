@@ -96,6 +96,18 @@ a residual counter per market records every tick the fixed count leaves error ab
 Exchange rates clear here jointly (Gabaix and Maggiori 2015 as the special case, ADR 0228).
 Housing is cleared per province outside the system against a slowly adjusting stock (9.10).
 
+**P5a exchange rates (ADR 0228; ADRs 0403 to 0407, RFC 0366; off by default).** Until the
+demand system clears rates in P5b, each floating currency follows ADR 0228: q_c is the financier
+account's balance in c after the tick's payments, Q_c = q_c e_c(t-1),
+`e_c(t) = m_c(t-1) (1 + i*_t) / (1 + i_c,t + Gamma_c Q_c(t))`, Gamma_c = P184 / Y_c(0), and
+`m_c(t) = m_c(t-1) + (1 - 2^(-1/h)) (e_c(t) - m_c(t-1))` with h = P185; e_c(0) = m_c(0) = 1. The
+numeraire is the currency of the largest base nominal GDP. Money is held per currency (ADR 0404):
+one mint and one financier account per currency, cross-currency payments only through the
+financier, conserved exactly per currency (test `bop_money_conserved_per_currency`). Pegs trade
+with the financier at parity from reserves until they break (ADR 0210); unions share one q.
+Financier valuation gains stay on its account until P5b (shortcut, tracked by issue). Module
+`crates/ceteris-econ/src/fx.rs` (ADR 0406); gate ADR 0407.
+
 **Banks and contagion (9.11).** Up to five archetypes per state with risk-weighted capital,
 leverage and liquidity ratios; lending tightens as buffers shrink and eligibility terms push
 risky sales. Four channels resolved inside the monthly fixed-point loop: direct exposures, fire
