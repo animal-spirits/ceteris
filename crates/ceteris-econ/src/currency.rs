@@ -3,7 +3,7 @@
 //! and the exchange rate e_c and its anchoring expectation m_c. Off by default
 //! (`EconWorld::with_currencies`); this layer holds every e_c at 1 and moves no real quantity.
 
-use ceteris_core::ledger::{AccountId, Ledger};
+use ceteris_core::ledger::{AccountId, Flow, Ledger};
 use ceteris_core::snapshot::{DecodeError, Decoder, Encoder};
 
 use crate::world::{Accounts, MINT};
@@ -122,6 +122,48 @@ impl Currencies {
             sums[c as usize] += ledger.money_wide(AccountId(a as u32));
         }
         sums
+    }
+
+    /// `amount` of currency `from` in currency `to`, rounded half to even; exact when the
+    /// rates are equal.
+    pub fn convert(&self, from: u32, to: u32, amount: i64) -> i64 {
+        let (ef, et) = (self.e[from as usize], self.e[to as usize]);
+        if ef == et {
+            return amount;
+        }
+        (amount as f64 * ef / et).round_ties_even() as i64
+    }
+
+    /// Pays `amount` of `from`'s currency to `to`. Across currencies it goes through the
+    /// financiers (RFC 0366, Conversion at the border): `from` pays its currency's financier,
+    /// the financier of `to`'s currency pays `to` the converted amount, rounding staying with
+    /// the financiers. Returns the amount `to` received, in its currency.
+    pub fn cross(
+        &self,
+        ledger: &mut Ledger,
+        flow: Flow,
+        from: AccountId,
+        to: AccountId,
+        amount: i64,
+    ) -> i64 {
+        let (cf, ct) = (
+            self.of_account[from.0 as usize],
+            self.of_account[to.0 as usize],
+        );
+        if cf == ct {
+            if amount != 0 {
+                ledger.transfer(flow, from, to, amount);
+            }
+            return amount;
+        }
+        let got = self.convert(cf, ct, amount);
+        if amount != 0 {
+            ledger.transfer(flow, from, self.financier[cf as usize], amount);
+        }
+        if got != 0 {
+            ledger.transfer(flow, self.financier[ct as usize], to, got);
+        }
+        got
     }
 
     pub fn encode(&self, e: &mut Encoder) {

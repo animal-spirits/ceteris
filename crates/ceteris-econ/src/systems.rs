@@ -158,6 +158,25 @@ fn pay(ledger: &mut Ledger, flow: Flow, from: AccountId, to: AccountId, amount: 
     }
 }
 
+/// [`pay`] through the financiers where the accounts' currencies differ (RFC 0366); returns
+/// what `to` received.
+fn pay_across(
+    ledger: &mut Ledger,
+    cur: Option<&crate::currency::Currencies>,
+    flow: Flow,
+    from: AccountId,
+    to: AccountId,
+    amount: i64,
+) -> i64 {
+    match cur {
+        Some(c) => c.cross(ledger, flow, from, to, amount),
+        None => {
+            pay(ledger, flow, from, to, amount);
+            amount
+        }
+    }
+}
+
 /// Splits `total` minor units in proportion to `weights`, rounding the cumulative shares
 /// half to even, so the parts add up to `total` exactly. Without a positive weight the last
 /// part takes everything. The total may be a wide (`i128`) balance; each part is one payment
@@ -914,10 +933,24 @@ pub(crate) fn source_kernel(w: &mut EconWorld) {
                 wp,
                 &col.active,
                 &lay.gamma[g],
-                &col.spend,
+                if col.spend_num.is_empty() {
+                    &col.spend
+                } else {
+                    &col.spend_num
+                },
                 sourced,
             );
         });
+}
+
+/// Rate of each province's currency under the currency layer; empty without it, which leaves
+/// the kernel's inputs as they are.
+fn province_rates(cur: &Option<crate::currency::Currencies>, inp: &EconInputs) -> Vec<f64> {
+    cur.as_ref().map_or_else(Vec::new, |c| {
+        (0..inp.n_provinces())
+            .map(|i| c.e[c.of_country[inp.country_of(i)] as usize])
+            .collect()
+    })
 }
 
 /// The per-good columns [`source`] reads: spending by class, posted prices, active origins and
@@ -929,6 +962,8 @@ pub(crate) fn source_inputs(w: &mut EconWorld) {
     let sc = &mut w.scratch;
     let (ent_spend, pop_spend) = (&sc.ent_spend, &sc.pop_spend);
     let (markets, weight_price) = (&w.markets, &w.weight_price);
+    let rate = province_rates(&w.currencies, inp);
+    let rate = &rate[..];
     sc.columns.par_iter_mut().enumerate().for_each(|(g, col)| {
         col.spend.clear();
         col.spend.extend((0..np).map(|d| {
@@ -943,6 +978,8 @@ pub(crate) fn source_inputs(w: &mut EconWorld) {
         }));
         col.gather(&markets.price, &markets.active, g, ng);
         col.gather_weight(weight_price, g, ng);
+        col.prices_to_numeraire(rate);
+        col.spend_to_numeraire(rate);
     });
 }
 
@@ -1150,7 +1187,7 @@ fn buyer_orders(
     g: usize,
     r: &Sourced,
     p: &mut Payments,
-    detail: bool,
+    (detail, e): (bool, &[f64]),
 ) {
     let acc = &lay.accounts;
     p.orders.clear();
@@ -1174,7 +1211,8 @@ fn buyer_orders(
                 home_shipped: r.home[d][b.class] * share,
                 slots,
             });
-            let amount = to_minor(r.paid_by_class[d][b.class] * share);
+            let amount =
+                to_minor(r.paid_by_class[d][b.class] * share / e.get(d).copied().unwrap_or(1.0));
             if detail {
                 if amount != 0 {
                     p.entries.push(Entry {
@@ -1224,8 +1262,11 @@ pub(crate) fn dispatch_gather(w: &mut EconWorld) {
     transpose_spend(&sc.pop_spend, ng, &mut sc.pop_spend_t);
     transpose_spend(&sc.ent_spend, ng, &mut sc.ent_spend_t);
     let (fill, markets) = (&sc.fill, &w.markets);
+    let rate = province_rates(&w.currencies, &w.inputs);
+    let rate = &rate[..];
     sc.columns.par_iter_mut().enumerate().for_each(|(g, col)| {
         col.gather(&markets.price, &markets.active, g, ng);
+        col.prices_to_numeraire(rate);
         col.fill.clear();
         col.fill.extend((0..np).map(|o| fill[o * ng + g]));
     });
@@ -1254,6 +1295,9 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
     let acc = &lay.accounts;
     let np = kernel.n_provinces();
     let detail = w.scratch.detail;
+    let border_rates = w.currencies.as_ref().map(|c| Border::new(c, &inp.network));
+    let border = border_rates.as_ref();
+    let e_prov: &[f64] = border.map_or(&[], |b| &b.prov);
     let sc = &mut w.scratch;
     let (markets, net) = (&w.markets, &inp.network);
     let spending = Spending {
@@ -1293,8 +1337,8 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
                 // the buyers' entries come before the legs' in one list
                 rayon::join(record, || {
                     let _span = timing::span("t2b.legs", gi);
-                    buyer_orders(lay, spending, g, r, legs, detail);
-                    trade_legs(inp, acc, kernel, g, r, legs, (detail, g == 0));
+                    buyer_orders(lay, spending, g, r, legs, (detail, e_prov));
+                    trade_legs(inp, acc, kernel, g, r, legs, (detail, g == 0, border));
                 });
             } else {
                 // netted: the buyers' and the legs' amounts are separate vectors, so the legs
@@ -1311,11 +1355,19 @@ pub(crate) fn dispatch_finish(w: &mut EconWorld) {
                     rayon::join(
                         || {
                             let _span = timing::span("t2b.buyers", gi);
-                            buyer_orders(lay, spending, g, r, legs, detail);
+                            buyer_orders(lay, spending, g, r, legs, (detail, e_prov));
                         },
                         || {
                             let _span = timing::span("t2b.legs", gi);
-                            trade_legs(inp, acc, kernel, g, r, &mut apart, (detail, g == 0));
+                            trade_legs(
+                                inp,
+                                acc,
+                                kernel,
+                                g,
+                                r,
+                                &mut apart,
+                                (detail, g == 0, border),
+                            );
                         },
                     )
                 });
@@ -1514,6 +1566,32 @@ fn goods_moves(
     legs.made = made;
 }
 
+/// The exchange rates of the dispatch under the currency layer (RFC 0366): the kernel works in
+/// the numeraire, so each leg's value is divided by the rate of the currency it is paid in.
+struct Border<'a> {
+    cur: &'a crate::currency::Currencies,
+    /// Rate of each province's currency.
+    prov: Vec<f64>,
+    /// Currency of each gateway.
+    gate_cur: Vec<u32>,
+}
+
+impl<'a> Border<'a> {
+    fn new(cur: &'a crate::currency::Currencies, net: &ceteris_trade::Network) -> Self {
+        let cur_of = |c: u16| cur.of_country[usize::from(c)];
+        let gate_cur: Vec<u32> = net.gateway_country.iter().map(|&c| cur_of(c)).collect();
+        Self {
+            cur,
+            prov: net
+                .province_country
+                .iter()
+                .map(|&c| cur.e[cur_of(c) as usize])
+                .collect(),
+            gate_cur,
+        }
+    }
+}
+
 /// The money legs of good `g`'s dispatch `r` in minor units, rounded half to even per leg,
 /// as ledger entries in payment order, after the buyers' ([`buyer_orders`]): destinations
 /// pay origins and their gateways, each gateway splits what it takes in over the legs that
@@ -1528,9 +1606,10 @@ fn trade_legs(
     g: usize,
     r: &Sourced,
     p: &mut Payments,
-    (detail, topo): (bool, bool),
+    (detail, topo, border): (bool, bool, Option<&Border>),
 ) {
     let (np, ng) = (kernel.n_provinces(), kernel.n_gateways());
+    let e_prov = |d: usize| border.map_or(1.0, |b| b.prov[d]);
     let gk = kernel.good(g);
     let (entries, edge_amt, legs_of) = (&mut p.entries, &mut p.edge_amt, &mut p.topo);
     edge_amt.clear();
@@ -1555,7 +1634,7 @@ fn trade_legs(
     for o in 0..np {
         let lo = gk.domestic.offsets[o] as usize;
         for (j, e) in gk.domestic.row(o).iter().enumerate() {
-            let value = to_minor(r.domestic_value[lo + j]);
+            let value = to_minor(r.domestic_value[lo + j] / e_prov(o));
             leg(TRADE, acc.market[e.col as usize], acc.market[o], value);
         }
     }
@@ -1564,7 +1643,10 @@ fn trade_legs(
     for d in 0..np {
         let lo = gk.access.offsets[d] as usize;
         for (j, e) in gk.access.row(d).iter().enumerate() {
-            let (b, value) = (e.col as usize, to_minor(r.access_in_value[lo + j]));
+            let (b, value) = (
+                e.col as usize,
+                to_minor(r.access_in_value[lo + j] / e_prov(d)),
+            );
             leg(TRADE, acc.market[d], acc.gateway[b], value);
             p.at_gateway[b] += value;
         }
@@ -1576,8 +1658,31 @@ fn trade_legs(
         let weights = legs.iter().map(|&(_, j)| r.crossing_value[j as usize]);
         split(p.at_gateway[b], weights, &mut p.parts);
         for (&(a, _), &part) in legs.iter().zip(p.parts.iter()) {
-            leg(TRADE, acc.gateway[b], acc.gateway[a as usize], part);
-            p.from_gateway[a as usize] += part;
+            let a = a as usize;
+            match border {
+                Some(bd) if bd.gate_cur[b] != bd.gate_cur[a] => {
+                    // the destination gateway pays its financier, the origin's pays the origin
+                    // gateway the converted amount
+                    let got = bd.cur.convert(bd.gate_cur[b], bd.gate_cur[a], part);
+                    leg(
+                        TRADE,
+                        acc.gateway[b],
+                        bd.cur.financier[bd.gate_cur[b] as usize],
+                        part,
+                    );
+                    leg(
+                        TRADE,
+                        bd.cur.financier[bd.gate_cur[a] as usize],
+                        acc.gateway[a],
+                        got,
+                    );
+                    p.from_gateway[a] += got;
+                }
+                _ => {
+                    leg(TRADE, acc.gateway[b], acc.gateway[a], part);
+                    p.from_gateway[a] += part;
+                }
+            }
         }
     }
     for a in 0..ng {
@@ -1590,7 +1695,12 @@ fn trade_legs(
     }
     for d in 0..np {
         let rebate = acc.rebate[inp.country_of(d)];
-        leg(TARIFF, acc.market[d], rebate, to_minor(r.tariff[d]));
+        leg(
+            TARIFF,
+            acc.market[d],
+            rebate,
+            to_minor(r.tariff[d] / e_prov(d)),
+        );
     }
 }
 
@@ -1701,14 +1811,15 @@ pub fn distribute(w: &mut EconWorld, tick: u32) {
                 Some(account) if paid > 0 && f > 0.0 => {
                     split(paid, [1.0 - f, f].into_iter(), &mut parts);
                     pay(&mut w.ledger, DIVIDEND, acc.enterprise[e], pool, parts[0]);
-                    pay(
+                    let received = pay_across(
                         &mut w.ledger,
+                        w.currencies.as_ref(),
                         FOREIGN_DIVIDEND,
                         acc.enterprise[e],
                         account,
                         parts[1],
                     );
-                    abroad[c] += i128::from(parts[1]);
+                    abroad[c] += i128::from(received);
                 }
                 _ => pay(&mut w.ledger, DIVIDEND, acc.enterprise[e], pool, paid),
             }
@@ -1722,8 +1833,9 @@ pub fn distribute(w: &mut EconWorld, tick: u32) {
             let owners = &inp.countries.owners[h];
             split(total, owners.iter().copied(), &mut parts);
             for (o, &part) in parts.iter().enumerate() {
-                pay(
+                pay_across(
                     &mut w.ledger,
+                    w.currencies.as_ref(),
                     FOREIGN_DIVIDEND,
                     account,
                     acc.dividend[o],
@@ -1830,16 +1942,24 @@ pub fn transfer(w: &mut EconWorld, tick: u32) {
             .collect();
         &paid
     };
+    let rate = |c: usize| {
+        w.currencies
+            .as_ref()
+            .map_or(1.0, |cur| cur.e[cur.of_country[c] as usize])
+    };
+    // in the numeraire: the incomes are in each country's currency
     let national: Vec<f64> = lay
         .country_pops
         .iter()
-        .map(|pops| {
-            fixed_sum(
-                &pops
-                    .iter()
-                    .map(|&k| income_k[k as usize])
-                    .collect::<Vec<_>>(),
-            )
+        .enumerate()
+        .map(|(c, pops)| {
+            rate(c)
+                * fixed_sum(
+                    &pops
+                        .iter()
+                        .map(|&k| income_k[k as usize])
+                        .collect::<Vec<_>>(),
+                )
         })
         .collect();
     let world = fixed_sum(&national);
@@ -1870,10 +1990,23 @@ pub fn transfer(w: &mut EconWorld, tick: u32) {
         }
         let amount = to_minor(-share[c] * world);
         split(amount, pops.iter().map(|&k| income(k)), &mut parts);
+        let e_c = rate(c);
         for (&k, &part) in pops.iter().zip(parts.iter()) {
-            pay(&mut w.ledger, TRANSFER, acc.pop[k as usize], account, part);
+            // the parts are numeraire; the pop pays its own currency
+            let local = if e_c == 1.0 {
+                part
+            } else {
+                (part as f64 / e_c).round_ties_even() as i64
+            };
+            paid += i128::from(pay_across(
+                &mut w.ledger,
+                w.currencies.as_ref(),
+                TRANSFER,
+                acc.pop[k as usize],
+                account,
+                local,
+            ));
         }
-        paid += i128::from(amount);
     }
     let receivers: Vec<usize> = (0..inp.n_countries())
         .filter(|&c| share[c] > 0.0 && !lay.country_pops[c].is_empty())
@@ -1884,7 +2017,14 @@ pub fn transfer(w: &mut EconWorld, tick: u32) {
         let pops = &lay.country_pops[c];
         split(amount, pops.iter().map(|&k| income(k)), &mut parts);
         for (&k, &part) in pops.iter().zip(parts.iter()) {
-            pay(&mut w.ledger, TRANSFER, account, acc.pop[k as usize], part);
+            pay_across(
+                &mut w.ledger,
+                w.currencies.as_ref(),
+                TRANSFER,
+                account,
+                acc.pop[k as usize],
+                part,
+            );
         }
     }
 }
