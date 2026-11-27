@@ -737,6 +737,9 @@ pub struct EconWorld {
     /// Capital pipelines of system 234; `None` is off. Its section is tagged and after the state
     /// cells one.
     pub capital: Option<crate::investment::Capital>,
+    /// Currencies of the external-balance closure (ADR 0228, RFC 0366); `None` is off. Its
+    /// section is tagged and after the capital one.
+    pub currencies: Option<crate::currency::Currencies>,
     /// Endemic disease and its coverage levers per province (P4 B2); needs `pop`. Prevalence adds
     /// excess deaths in the demography step. `None` is off and adds nothing to the snapshot.
     pub disease: Option<(Disease, Coverage)>,
@@ -1483,6 +1486,36 @@ impl EconWorld {
         self
     }
 
+    /// Switches the currency layer on (ADR 0228, RFC 0366): `of_country` is each country's
+    /// currency index, dense from 0, shared by union members. Every rate stays 1 and nothing
+    /// real changes; the currency accounts open after every existing one.
+    pub fn with_currencies(mut self, of_country: Vec<u32>) -> EconWorld {
+        let inp = Arc::clone(&self.inputs);
+        assert_eq!(of_country.len(), inp.n_countries());
+        let mut gdp = vec![0.0; inp.n_countries()];
+        for e in 0..inp.n_enterprises() {
+            gdp[inp.country_of(inp.enterprises.province[e] as usize)] += inp.enterprises.va0[e];
+        }
+        let countries = crate::currency::CountryOf {
+            pop: (0..inp.n_pops())
+                .map(|k| inp.country_of(inp.pops.province[k] as usize))
+                .collect(),
+            enterprise: (0..inp.n_enterprises())
+                .map(|e| inp.country_of(inp.enterprises.province[e] as usize))
+                .collect(),
+            province: (0..inp.n_provinces()).map(|i| inp.country_of(i)).collect(),
+        };
+        self.currencies = Some(crate::currency::Currencies::open(
+            &mut self.ledger,
+            &self.layout.accounts,
+            of_country,
+            &gdp,
+            &inp.network.gateway_country,
+            &countries,
+        ));
+        self
+    }
+
     /// [`EconWorld::new`] on a kernel built from these inputs and trade parameters, which
     /// worlds of equal trade parameters share (ADR 0024).
     pub fn with_kernel(
@@ -1568,6 +1601,7 @@ impl EconWorld {
             energy: None,
             state_cells: None,
             capital: None,
+            currencies: None,
             disease: None,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -2515,6 +2549,9 @@ impl Encode for EconWorld {
         if let Some(c) = &self.capital {
             c.encode(e);
         }
+        if let Some(c) = &self.currencies {
+            c.encode(e);
+        }
     }
 }
 
@@ -2530,6 +2567,11 @@ fn tagged_next(d: &Decoder) -> bool {
         || energy_next(d)
         || state_cells_next(d)
         || capital_next(d)
+        || currencies_next(d)
+}
+
+fn currencies_next(d: &Decoder) -> bool {
+    d.peek_count() == Ok(crate::currency::SNAPSHOT_TAG as usize)
 }
 
 fn fiscal_next(d: &Decoder) -> bool {
@@ -2963,6 +3005,18 @@ impl State for EconWorld {
             None
         };
 
+        let currencies = if currencies_next(d) {
+            let c = crate::currency::Currencies::decode(d)?;
+            expect_len(
+                "currency countries",
+                c.of_country.len(),
+                self.inputs.n_countries(),
+            )?;
+            Some(c)
+        } else {
+            None
+        };
+
         let inp = &*self.inputs;
         let (nc, np) = (inp.n_countries(), inp.n_provinces());
         let (n_pops, n_ent) = (inp.n_pops(), inp.n_enterprises());
@@ -3031,6 +3085,7 @@ impl State for EconWorld {
             energy,
             state_cells,
             capital,
+            currencies,
             disease,
             pop_drift: 0,
             scratch: Scratch::new(nc, np, n_pops, n_ent, &inp.goods),
@@ -4146,6 +4201,54 @@ mod tests {
         let mut w = world();
         w.capital = None;
         assert_eq!(canonical(12, &w), a);
+    }
+
+    #[test]
+    fn currencies_off_adds_nothing_to_the_snapshot() {
+        let a = canonical(12, &world());
+        let mut w = world();
+        w.currencies = None;
+        assert_eq!(canonical(12, &w), a);
+    }
+
+    /// Switched on with every rate at 1 (RFC 0366 build step 2): each currency's accounts sum
+    /// to zero at the start, the world accounts are numeraire, the real economy equals the
+    /// world without the layer, and the section survives a snapshot.
+    #[test]
+    fn currency_layer_at_unit_rates_changes_nothing_real() {
+        // countries 0 and 1 share a currency; 2 and 3 float alone
+        let on = || world().with_currencies(vec![0, 0, 1, 2]);
+        let w = on();
+        let c = w.currencies.as_ref().expect("on");
+        assert_eq!(c.mint.len(), 3);
+        assert_eq!(c.mint[c.numeraire as usize], w.layout.accounts.mint);
+        assert!(c.balances(&w.ledger).iter().all(|&b| b == 0));
+        assert!(c.e.iter().chain(&c.m).all(|&x| x == 1.0));
+        let acc = &w.layout.accounts;
+        assert_eq!(c.of_account[acc.pop[0].0 as usize], 0);
+        let last_pop = *acc.pop.last().expect("pops");
+        let last = w
+            .inputs()
+            .country_of(w.inputs().pops.province[w.inputs().n_pops() - 1] as usize);
+        assert_eq!(c.of_account[last_pop.0 as usize], c.of_country[last]);
+        assert_ne!(c.of_account[last_pop.0 as usize], c.numeraire);
+
+        let run = |w: EconWorld| {
+            let mut sim = Sim::new(w, crate::systems::schedule(), crate::systems::SEED);
+            sim.run_until(14).unwrap_or_else(|v| panic!("{v}"));
+            sim
+        };
+        let (off, on_sim) = (run(world()), run(on()));
+        let (a, b) = (off.world(), on_sim.world());
+        assert_eq!(a.output, b.output);
+        assert_eq!(a.sales, b.sales);
+        assert_eq!(a.price_index, b.price_index);
+        assert_eq!(a.wage, b.wage);
+        let again = run(on());
+        assert_eq!(canonical(12, again.world()), canonical(12, b));
+        let (bytes, back) = round_trip(b);
+        assert_eq!(canonical(12, &back), bytes);
+        assert_eq!(back.currencies, b.currencies);
     }
 
     #[test]

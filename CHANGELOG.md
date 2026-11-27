@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Currency layer, off by default (RFC 0366 build step 2)
+
+- `EconWorld::with_currencies` opens a mint and a financier account per currency after the existing accounts, holds every rate e_c and expectation m_c at 1 (tagged snapshot section after capital), and moves each non-numeraire currency's balances onto its own mint. Real allocation is bit-identical to the layer off; no golden moves. Per-currency conservation holds from the start; it holds every tick once border conversion lands (build step 3).
+
 ### Fit record d5e2 and the fitted theta_2 (#667)
 
 - `crates/ceteris-calibrate/fits/epsilon-d5e2.json` holds the Mac fit (epsilon 0.39003, theta_2 9.0531). `epsilon::read_fit` returns a `FitFile` with `theta2`; `calibrate --epsilon-from` refuses a fit whose theta_2 is not the inputs' (static digest).
