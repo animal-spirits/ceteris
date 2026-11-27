@@ -4,6 +4,7 @@
 pub mod admission;
 pub mod calibration;
 pub mod channels;
+pub mod currency;
 pub mod demand;
 pub mod disease;
 pub mod distance;
